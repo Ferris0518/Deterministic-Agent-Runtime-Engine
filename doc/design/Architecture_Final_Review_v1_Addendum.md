@@ -1,10 +1,267 @@
 # 架构终稿评审 v1 - 补充说明
 
-> 补充两个遗漏的关键设计点，并优化 Milestone Loop 的实现
+> 补充架构终稿遗漏的关键设计点，整合 Loop Model v2.2 的核心概念
 
 ---
 
-## 遗漏点 1：Remediate（反思）机制
+## 一、核心概念（一句话版）
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  宏观 Validate = 制定契约（这件事允许做什么、需要什么证据、风险怎么控）          │
+│  ToolRuntime Gate = 执行契约（每一步都检查你有没有作弊）                         │
+│  Done Predicate = 结束条件（什么时候算完成）                                     │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 二、Step 类型详解
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  Step 分类                                                                       │
+│  ═════════                                                                       │
+│                                                                                 │
+│  ┌─────────────────────────────────┐  ┌─────────────────────────────────────┐  │
+│  │ ATOMIC STEP                     │  │ WORKUNIT STEP (ITERATIVE)           │  │
+│  │ ─────────────                   │  │ ──────────────                      │  │
+│  │                                 │  │                                     │  │
+│  │ 定义：一次调用完成              │  │ 定义：需要多次迭代                  │  │
+│  │                                 │  │                                     │  │
+│  │ 例子：                          │  │ 例子：                              │  │
+│  │ • read_file(path)              │  │ • FixFailingTest(suite)            │  │
+│  │ • grep(pattern)                │  │ • ImplementFeature(spec)           │  │
+│  │ • run_tests(suite)             │  │ • RefactorModule(path)             │  │
+│  │ • apply_patch(patch)           │  │                                     │  │
+│  │                                 │  │                                     │  │
+│  │ 结束：工具返回                  │  │ 结束：DonePredicate 满足            │  │
+│  │                                 │  │                                     │  │
+│  │ Tool Loop：不需要               │  │ Tool Loop：需要                     │  │
+│  │                                 │  │                                     │  │
+│  └─────────────────────────────────┘  └─────────────────────────────────────┘  │
+│                                                                                 │
+│  谁决定？                                                                        │
+│  ─────────                                                                       │
+│  LLM 在 Plan 时选择：                                                            │
+│  • 用具体 tool → Atomic Step                                                    │
+│  • 用 registered skill → WorkUnit Step                                          │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 三、Envelope（执行边界）
+
+由 Validate 阶段生成，传递给 Tool Loop 使用：
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  Envelope = WorkUnit 的执行边界（由 Validate 生成）                              │
+│  ═══════════════════════════════════════════════════                            │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                                                                         │   │
+│  │  allowed_tools: [read_file, grep, write_file, apply_patch, run_tests]  │   │
+│  │  ─────────────                                                          │   │
+│  │  这个 WorkUnit 只能调用这些工具，越界 = Policy Deny                     │   │
+│  │                                                                         │   │
+│  │  required_evidence: [test_pass(suite=X), file_modified(path=Y)]        │   │
+│  │  ─────────────────                                                      │   │
+│  │  必须产出这些证据才算完成                                               │   │
+│  │                                                                         │   │
+│  │  budget:                                                                │   │
+│  │  ───────                                                                │   │
+│  │    max_tool_calls: 30                                                   │   │
+│  │    max_tokens: 50000                                                    │   │
+│  │    max_wall_time: 180s                                                  │   │
+│  │    max_stagnant_iterations: 3                                           │   │
+│  │                                                                         │   │
+│  │  risk_level: IDEMPOTENT_WRITE  (从 allowed_tools 最高风险派生)         │   │
+│  │  ──────────                                                             │   │
+│  │                                                                         │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Python 数据结构
+
+```python
+@dataclass
+class Envelope:
+    """WorkUnit 的执行边界"""
+
+    # 允许调用的工具列表
+    allowed_tools: list[str]
+
+    # 必须产出的证据
+    required_evidence: list[EvidenceCondition]
+
+    # 预算限制
+    budget: EnvelopeBudget
+
+    # 风险级别（从 allowed_tools 派生）
+    risk_level: RiskLevel
+
+
+@dataclass
+class EnvelopeBudget:
+    """Envelope 的预算限制"""
+    max_tool_calls: int = 30
+    max_tokens: int = 50000
+    max_wall_time_seconds: int = 180
+    max_stagnant_iterations: int = 3
+
+
+class RiskLevel(Enum):
+    """风险级别"""
+    READ_ONLY = "read_only"           # 只读操作
+    IDEMPOTENT_WRITE = "idempotent"   # 幂等写入
+    DESTRUCTIVE = "destructive"       # 破坏性操作
+```
+
+---
+
+## 四、DonePredicate（完成条件）
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  DonePredicate = 三部分组成                                                      │
+│  ══════════════════════════                                                      │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │ Part 1: Evidence Conditions（证据条件）                                 │   │
+│  │ ────────────────────────────────────────                                │   │
+│  │ 必须收集到的证据：                                                      │   │
+│  │ • test_pass(suite=UserServiceTest)                                      │   │
+│  │ • file_modified(path=src/UserService.java)                             │   │
+│  │ • diff_applied(patch_id=...)                                           │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │ Part 2: Invariant Conditions（不变量条件，防半成品）                    │   │
+│  │ ───────────────────────────────────────────────────                     │   │
+│  │ • workspace_clean（没有未 commit 的脏状态）                             │   │
+│  │ • lint_pass（代码格式正确）                                             │   │
+│  │ • compile_pass（能编译通过）                                            │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │ Part 3: 停滞检测（由 Budget 隐式提供）                                  │   │
+│  │ ─────────────────────────────────────                                   │   │
+│  │ • 连续 K 次迭代没有新增 evidence                                        │   │
+│  │ • 连续 K 次迭代失败测试数不下降                                         │   │
+│  │ • 连续 K 次迭代 diff 不变化                                             │   │
+│  │ → 判定停滞，step 失败                                                   │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  Tool Loop 结束 = Evidence✓ + Invariant✓                                       │
+│               OR Budget 耗尽 → Fail                                            │
+│               OR 停滞检测 → Fail                                               │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Python 数据结构
+
+```python
+@dataclass
+class DonePredicate:
+    """完成条件"""
+
+    # Part 1: 证据条件
+    evidence_conditions: list[EvidenceCondition]
+
+    # Part 2: 不变量条件
+    invariant_conditions: list[InvariantCondition]
+
+    def is_satisfied(self, evidence: list[Evidence]) -> bool:
+        """检查是否满足完成条件"""
+        # 检查所有证据条件
+        for condition in self.evidence_conditions:
+            if not condition.check(evidence):
+                return False
+
+        # 检查所有不变量条件
+        for invariant in self.invariant_conditions:
+            if not invariant.check():
+                return False
+
+        return True
+
+
+@dataclass
+class EvidenceCondition:
+    """证据条件"""
+    condition_type: str  # "test_pass" | "file_modified" | "diff_applied"
+    params: dict
+
+
+@dataclass
+class InvariantCondition:
+    """不变量条件"""
+    condition_type: str  # "workspace_clean" | "lint_pass" | "compile_pass"
+```
+
+---
+
+## 五、预定义 Skills（WorkUnit 模板）
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  SkillRegistry: 预定义的 WorkUnit 模板                                          │
+│  ══════════════════════════════════════                                          │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │ Skill: FixFailingTest                                                   │   │
+│  │ ────────────────────────                                                │   │
+│  │ description: "修复一个失败的测试"                                       │   │
+│  │ allowed_tools: [read_file, grep, write_file, apply_patch, run_tests]   │   │
+│  │ budget: {calls: 30, time: 180s, stagnant: 3}                           │   │
+│  │ evidence: [test_pass(suite={input.suite})]                             │   │
+│  │ invariants: [lint_pass]                                                 │   │
+│  │ input_schema: {suite: string}                                           │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │ Skill: ImplementFeature                                                 │   │
+│  │ ────────────────────────                                                │   │
+│  │ description: "实现一个新功能"                                           │   │
+│  │ allowed_tools: [read_file, grep, write_file, apply_patch,              │   │
+│  │                 run_tests, run_lint]                                    │   │
+│  │ budget: {calls: 50, time: 300s, stagnant: 5}                           │   │
+│  │ evidence: [test_pass(suite={input.suite}),                             │   │
+│  │            file_modified(pattern={input.pattern})]                     │   │
+│  │ invariants: [lint_pass, compile_pass]                                   │   │
+│  │ input_schema: {suite: string, pattern: string}                          │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │ Skill: RefactorModule                                                   │   │
+│  │ ────────────────────────                                                │   │
+│  │ description: "重构一个模块"                                             │   │
+│  │ allowed_tools: [read_file, grep, write_file, apply_patch,              │   │
+│  │                 run_tests, run_lint]                                    │   │
+│  │ budget: {calls: 40, time: 240s, stagnant: 4}                           │   │
+│  │ evidence: [test_pass(suite=all)]                                       │   │
+│  │ invariants: [lint_pass, compile_pass, no_regression]                    │   │
+│  │ input_schema: {module_path: string}                                     │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 六、Remediate（反思）机制
 
 ### 完整的 Milestone Loop
 
@@ -52,7 +309,7 @@
 
 ---
 
-## 数据结构定义
+## 七、数据结构定义
 
 ### MilestoneContext（累积上下文）
 
@@ -152,7 +409,7 @@ class Budget:
 
 ---
 
-## 更新后的 _milestone_loop 伪代码
+## 八、更新后的 _milestone_loop 伪代码
 
 ```python
 async def _milestone_loop(
@@ -281,7 +538,7 @@ async def _milestone_loop(
 
 ---
 
-## Execute 阶段：用户中断处理
+## 九、Execute 阶段：用户中断处理
 
 ```python
 async def _execute_with_error_handling(
@@ -362,7 +619,7 @@ async def _execute_with_error_handling(
 
 ---
 
-## Remediate 阶段：分析失败原因
+## 十、Remediate 阶段：分析失败原因
 
 ```python
 async def _remediate(
@@ -448,7 +705,7 @@ Please provide:
 
 ---
 
-## 遗漏点 2：Validate → Tool Loop 的数据传递
+## 十一、Validate → Tool Loop 的数据传递
 
 ### Envelope 和 DonePredicate 的来源
 
@@ -517,7 +774,7 @@ Please provide:
 
 ---
 
-## 更新后的完整循环图
+## 十二、完整循环图
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════════╗
@@ -574,7 +831,47 @@ Please provide:
 
 ---
 
-## 总结
+## 十三、关键问答
+
+### Q1: 什么时候进入 Tool Loop？
+
+```
+只有 WorkUnit Step 才进入 Tool Loop。
+Atomic Step 直接调用一次 ToolRuntime。
+```
+
+### Q2: Tool Loop 什么时候结束？
+
+```
+三选一：
+1. DonePredicate 满足（Evidence✓ + Invariant✓）→ 成功
+2. Budget 耗尽 → 失败
+3. 停滞检测 → 失败
+```
+
+### Q3: Execute 什么时候结束？
+
+```
+所有 ValidatedSteps 都达到 Done/Fail 状态。
+```
+
+### Q4: Validate 和 ToolRuntime Gate 的区别？
+
+```
+Validate = 制定契约（一次性，在 Milestone 开始时）
+ToolRuntime Gate = 执行契约（每次调用都检查）
+```
+
+### Q5: allowed_tools 从哪来？
+
+```
+从 SkillRegistry 的 SkillDefinition。
+每个 Skill 预定义了它能用哪些工具。
+```
+
+---
+
+## 十四、总结
 
 ### 关键设计改进
 
@@ -611,4 +908,4 @@ Remediate 阶段分析用户意图
 
 ---
 
-*文档状态：补充说明 v2 - 包含用户中断处理和预算控制*
+*文档状态：补充说明 v3 - 整合 Loop Model v2.2 核心概念*
