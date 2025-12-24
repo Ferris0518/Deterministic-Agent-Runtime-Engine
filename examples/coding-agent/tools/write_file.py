@@ -9,6 +9,9 @@ Write File Tool
 from typing import Any
 from pathlib import Path
 
+from agent_framework.errors import ToolError
+from agent_framework.models import RunContext, ToolResult, ToolRiskLevel
+
 
 class WriteFileTool:
     """
@@ -78,12 +81,16 @@ Parent directories will be created automatically.
         }
 
     @property
-    def risk_level(self) -> str:
-        return "IDEMPOTENT_WRITE"
+    def risk_level(self) -> ToolRiskLevel:
+        return ToolRiskLevel.IDEMPOTENT_WRITE
 
     @property
     def requires_approval(self) -> bool:
         return False  # 幂等操作，不需要审批
+
+    @property
+    def timeout_seconds(self) -> int:
+        return 10
 
     @property
     def produces_assertions(self) -> list:
@@ -91,7 +98,11 @@ Parent directories will be created automatically.
             {"type": "file_modified", "produces": {"path": "*"}}
         ]
 
-    async def execute(self, input: dict[str, Any], context: Any) -> dict[str, Any]:
+    @property
+    def is_work_unit(self) -> bool:
+        return False
+
+    async def execute(self, input: dict[str, Any], context: RunContext) -> ToolResult:
         """执行写入"""
         path = input["path"]
         content = input["content"]
@@ -105,20 +116,27 @@ Parent directories will be created automatically.
             abs_path.parent.mkdir(parents=True, exist_ok=True)
 
         write_mode = "w" if mode == "overwrite" else "a"
-        with open(abs_path, write_mode) as f:
-            bytes_written = f.write(content)
+        try:
+            with open(abs_path, write_mode, encoding="utf-8") as handle:
+                bytes_written = handle.write(content)
+        except OSError as exc:
+            raise ToolError(code="WRITE_FAILED", message=str(exc), retryable=False) from exc
 
-        return {
-            "path": str(abs_path),
-            "bytes_written": bytes_written,
-            "created": created,
-        }
+        return ToolResult(
+            success=True,
+            output={
+                "path": str(abs_path),
+                "bytes_written": bytes_written,
+                "created": created,
+            },
+            evidence={"file": str(abs_path)},
+        )
 
     async def compensate(
         self,
         input: dict[str, Any],
         output: dict[str, Any],
-        context: Any,
+        context: RunContext,
     ) -> None:
         """
         补偿操作：恢复原始文件
@@ -138,5 +156,5 @@ Parent directories will be created automatically.
     def _resolve_path(self, path: str) -> Path:
         resolved = (self._workspace / path).resolve()
         if not resolved.is_relative_to(self._workspace):
-            raise ValueError(f"Path traversal attempt: {path}")
+            raise ToolError(code="PATH_TRAVERSAL", message=f"Path traversal attempt: {path}")
         return resolved

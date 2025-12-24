@@ -8,7 +8,9 @@ Run Tests Tool
 
 from typing import Any
 import asyncio
-import subprocess
+
+from agent_framework.errors import ToolError
+from agent_framework.models import RunContext, ToolResult, ToolRiskLevel
 
 
 class RunTestsTool:
@@ -40,18 +42,18 @@ Use this tool when you need to:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Test file or directory to run"
+                    "description": "Test file or directory to run",
                 },
                 "pattern": {
                     "type": "string",
-                    "description": "Test name pattern to match"
+                    "description": "Test name pattern to match",
                 },
                 "verbose": {
                     "type": "boolean",
                     "description": "Enable verbose output",
-                    "default": False
-                }
-            }
+                    "default": False,
+                },
+            },
         }
 
     @property
@@ -70,35 +72,37 @@ Use this tool when you need to:
                         "type": "object",
                         "properties": {
                             "test": {"type": "string"},
-                            "error": {"type": "string"}
-                        }
-                    }
-                }
-            }
+                            "error": {"type": "string"},
+                        },
+                    },
+                },
+            },
         }
 
     @property
-    def risk_level(self) -> str:
-        return "READ_ONLY"
+    def risk_level(self) -> ToolRiskLevel:
+        return ToolRiskLevel.READ_ONLY
+
+    @property
+    def requires_approval(self) -> bool:
+        return False
 
     @property
     def timeout_seconds(self) -> int:
-        return 300  # 5 分钟超时
+        return 300
 
     @property
     def produces_assertions(self) -> list:
-        """
-        这个工具产出测试证据
-
-        验证：这正是 Coverage 确定性计算需要的
-        """
         return [
             {"type": "test_pass", "produces": {"suite": "unit"}},
-            {"type": "evidence_type", "produces": {"types": ["TEST_REPORT"]}}
+            {"type": "evidence_type", "produces": {"types": ["TEST_REPORT"]}},
         ]
 
-    async def execute(self, input: dict[str, Any], context: Any) -> dict[str, Any]:
-        """执行测试"""
+    @property
+    def is_work_unit(self) -> bool:
+        return True
+
+    async def execute(self, input: dict[str, Any], context: RunContext) -> ToolResult:
         cmd = ["pytest", "--tb=short", "-q"]
 
         if input.get("path"):
@@ -109,42 +113,49 @@ Use this tool when you need to:
             cmd.append("-v")
 
         try:
-            result = await asyncio.wait_for(
+            process = await asyncio.wait_for(
                 asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                 ),
-                timeout=self.timeout_seconds
+                timeout=self.timeout_seconds,
             )
-            stdout, _ = await result.communicate()
-            output = stdout.decode()
+            stdout, _ = await process.communicate()
+            output = stdout.decode("utf-8", errors="replace")
 
-            # 解析 pytest 输出
             parsed = self._parse_pytest_output(output)
-
-            return {
-                "success": result.returncode == 0,
-                "passed": parsed["passed"],
-                "failed": parsed["failed"],
-                "skipped": parsed["skipped"],
-                "output": output,
-                "failures": parsed["failures"],
-            }
-
+            success = process.returncode == 0
+            return ToolResult(
+                success=success,
+                output={
+                    "success": success,
+                    "passed": parsed["passed"],
+                    "failed": parsed["failed"],
+                    "skipped": parsed["skipped"],
+                    "output": output,
+                    "failures": parsed["failures"],
+                },
+                evidence={"test_report": True},
+            )
         except asyncio.TimeoutError:
-            return {
-                "success": False,
-                "passed": 0,
-                "failed": 0,
-                "skipped": 0,
-                "output": "Test execution timed out",
-                "failures": [],
-            }
+            return ToolResult(
+                success=False,
+                output={
+                    "success": False,
+                    "passed": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "output": "Test execution timed out",
+                    "failures": [],
+                },
+                error="timeout",
+                evidence={},
+            )
+        except OSError as exc:
+            raise ToolError(code="TEST_RUN_FAILED", message=str(exc)) from exc
 
     def _parse_pytest_output(self, output: str) -> dict:
-        """解析 pytest 输出"""
-        # 简化实现
         return {
             "passed": output.count(" passed"),
             "failed": output.count(" failed"),
