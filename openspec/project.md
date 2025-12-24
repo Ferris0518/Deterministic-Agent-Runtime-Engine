@@ -33,8 +33,8 @@
 
 ### Local Environment
 
-- **python3**: 3.14.0 (current local default)
-- **python**: not configured; pyenv has 3.12.12 available
+- **python (pyenv)**: 3.12.12 (project default, use for venv/test)
+- **python3 (system)**: 3.14.0 (installed via Homebrew; avoid for this repo)
 
 ### Optional/Future
 - **Event Storage**: PostgreSQL / S3 (for WORM storage)
