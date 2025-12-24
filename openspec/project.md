@@ -99,17 +99,28 @@ async def invoke(
 
 ```
 agent_framework/
-├── builder.py           # AgentBuilder + Agent
-├── checkpoint.py        # FileCheckpoint
-├── defaults.py          # 默认组件
-├── errors.py            # 错误定义
-├── event_log.py         # LocalEventLog
-├── interfaces.py        # 接口协议
-├── mcp.py               # MCP 集成占位
-├── models.py            # 核心数据结构
-├── registries.py        # ToolRegistry / SkillRegistry
-├── runtime.py           # AgentRuntime 五层循环
-└── tool_runtime.py      # ToolRuntime
+├── builder.py                 # AgentBuilder + Agent
+├── core/                      # 核心状态与协议
+│   ├── runtime.py             # AgentRuntime 五层循环
+│   ├── models.py              # 核心数据结构
+│   ├── interfaces.py          # 接口协议
+│   └── errors.py              # 错误定义
+├── components/                # 默认实现组件
+│   ├── event_log.py           # LocalEventLog
+│   ├── checkpoint.py          # FileCheckpoint
+│   ├── tool_runtime.py        # ToolRuntime
+│   ├── registries.py          # ToolRegistry / SkillRegistry
+│   ├── policy_engine.py       # AllowAllPolicyEngine
+│   ├── plan_generator.py      # DeterministicPlanGenerator
+│   ├── validator.py           # SimpleValidator
+│   ├── remediator.py          # NoOpRemediator
+│   ├── context_assembler.py   # BasicContextAssembler
+│   ├── model_adapter.py       # MockModelAdapter
+│   ├── memory.py              # InMemoryMemory
+│   ├── hooks.py               # NoOpHook
+│   ├── mcp_client.py          # MCP SDK client adapters
+│   └── mcp_toolkit.py         # MCPToolkit
+└── validators/                # 预留：信任边界/覆盖验证
 ```
 
 #### 核心接口（v1.3 UML A.1 + v1.1 Interface）
@@ -117,6 +128,8 @@ agent_framework/
 - Runtime/Orchestration: `IRuntime`, `IEventLog`, `ICheckpoint`, `IPolicyEngine`, `IPlanGenerator`, `IValidator`, `IRemediator`, `IContextAssembler`
 - Tools/Skills: `IToolRuntime`, `IToolkit`, `ITool`, `ISkillRegistry`, `ISkill`
 - Models/Composition: `IModelAdapter`, `IMemory`, `IHook`, `IMCPClient`
+
+> MCP 客户端需要异步初始化；使用 `AgentBuilder.build_async()` 以加载 MCP 工具清单。
 
 ### Testing Strategy
 
@@ -249,6 +262,10 @@ test(coverage): add deterministic coverage validator tests
 - Anthropic Claude (primary)
 - OpenAI GPT (fallback)
 - 其他兼容 OpenAI API 的模型
+
+### MCP SDK
+
+- `mcp` Python SDK (https://github.com/modelcontextprotocol/python-sdk)
 
 ### 存储
 

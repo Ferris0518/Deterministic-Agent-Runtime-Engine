@@ -20,6 +20,14 @@
 - [x] 4.1 Unit tests for runtime state transitions and event log hash-chain verification.
 - [x] 4.2 Integration test for end-to-end flow using the example agent in deterministic mode.
 
+## 5. Architecture refactor + MCP SDK integration (v1.3 alignment)
+- [x] 5.1 Restructure `agent_framework/` into layered packages (core/components/validators/plugins) aligned to v1.3.
+- [x] 5.2 Split default components into dedicated modules and update imports/builders.
+- [x] 5.3 Update IMCPClient per v1.1 and implement MCP SDK-based clients (stdio/streamable-http).
+- [x] 5.4 Add async MCP initialization path in AgentBuilder and document usage.
+- [x] 5.5 Update `openspec/project.md` to reflect new structure and MCP SDK integration notes.
+- [x] 5.6 Re-run tests under pyenv 3.12 and record results.
+
 ## Dependencies / Parallelism
 - 1.x must complete before 2.x and 3.x.
 - 2.4 can run in parallel with 2.1-2.3 once interfaces are defined.
