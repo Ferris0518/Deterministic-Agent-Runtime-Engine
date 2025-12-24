@@ -8,8 +8,10 @@ Fix Bug Skill
 4. Skill 如何调用多个 Tool？
 """
 
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
+
+from dare_framework.core.models import DonePredicate, Envelope, EnvelopeBudget, EvidenceCondition, RiskLevel
 
 
 @dataclass
@@ -55,6 +57,33 @@ This skill will:
 5. Verify the fix passes tests
 """
 
+    def get_input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string"},
+                "context": {"type": "object"},
+            },
+            "required": ["description"],
+        }
+
+    def get_envelope(self, input: dict[str, Any]) -> Envelope:
+        return Envelope(
+            allowed_tools=self.required_tools,
+            required_evidence=[],
+            budget=EnvelopeBudget(),
+            risk_level=RiskLevel.READ_ONLY,
+        )
+
+    def get_done_predicate(self, input: dict[str, Any]) -> DonePredicate:
+        return DonePredicate(
+            evidence_conditions=[
+                EvidenceCondition(condition_type="evidence_kind", params={"kind": "file_modified"}),
+                EvidenceCondition(condition_type="evidence_kind", params={"kind": "test_report"}),
+            ],
+            invariant_conditions=[],
+        )
+
     @property
     def required_tools(self) -> list[str]:
         """
@@ -76,20 +105,7 @@ This skill will:
 
         验证：如何表达复杂的完成条件？
         """
-        # return DonePredicate(
-        #     conditions=[
-        #         {"type": "test_pass", "config": {"suite": "unit"}},
-        #         {"type": "file_modified", "config": {"path": "*"}},
-        #     ],
-        #     require_all=True,
-        # )
-        return {
-            "conditions": [
-                {"type": "test_pass"},
-                {"type": "file_modified"},
-            ],
-            "require_all": True,
-        }
+        return self.get_done_predicate({"description": "", "context": {}})
 
     async def execute(
         self,

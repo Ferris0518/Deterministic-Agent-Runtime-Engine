@@ -6,11 +6,15 @@ Run Tests Tool
 2. 长时间运行的工具如何处理超时？
 """
 
+from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 import asyncio
-import subprocess
 
+from dare_framework.core.errors import ToolExecutionError
+from dare_framework.core.models import Evidence, RiskLevel, RunContext, ToolResult, ToolType
 
+@dataclass
 class RunTestsTool:
     """
     运行测试工具
@@ -54,6 +58,9 @@ Use this tool when you need to:
             }
         }
 
+    def get_input_schema(self) -> dict:
+        return self.input_schema
+
     @property
     def output_schema(self) -> dict:
         return {
@@ -78,8 +85,12 @@ Use this tool when you need to:
         }
 
     @property
-    def risk_level(self) -> str:
-        return "READ_ONLY"
+    def tool_type(self) -> ToolType:
+        return ToolType.WORKUNIT
+
+    @property
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.READ_ONLY
 
     @property
     def timeout_seconds(self) -> int:
@@ -97,7 +108,7 @@ Use this tool when you need to:
             {"type": "evidence_type", "produces": {"types": ["TEST_REPORT"]}}
         ]
 
-    async def execute(self, input: dict[str, Any], context: Any) -> dict[str, Any]:
+    async def execute(self, input: dict[str, Any], context: RunContext) -> ToolResult:
         """执行测试"""
         cmd = ["pytest", "--tb=short", "-q"]
 
@@ -109,7 +120,7 @@ Use this tool when you need to:
             cmd.append("-v")
 
         try:
-            result = await asyncio.wait_for(
+            process = await asyncio.wait_for(
                 asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
@@ -117,30 +128,46 @@ Use this tool when you need to:
                 ),
                 timeout=self.timeout_seconds
             )
-            stdout, _ = await result.communicate()
+            stdout, _ = await process.communicate()
             output = stdout.decode()
 
             # 解析 pytest 输出
             parsed = self._parse_pytest_output(output)
 
-            return {
-                "success": result.returncode == 0,
-                "passed": parsed["passed"],
-                "failed": parsed["failed"],
-                "skipped": parsed["skipped"],
-                "output": output,
-                "failures": parsed["failures"],
-            }
+            success = process.returncode == 0
+            evidence = Evidence(
+                evidence_id=f"evidence_{uuid4().hex}",
+                kind="test_report",
+                payload={"passed": parsed["passed"], "failed": parsed["failed"]},
+            )
+            return ToolResult(
+                success=success,
+                output={
+                    "success": success,
+                    "passed": parsed["passed"],
+                    "failed": parsed["failed"],
+                    "skipped": parsed["skipped"],
+                    "output": output,
+                    "failures": parsed["failures"],
+                },
+                evidence_ref=evidence,
+            )
 
         except asyncio.TimeoutError:
-            return {
-                "success": False,
-                "passed": 0,
-                "failed": 0,
-                "skipped": 0,
-                "output": "Test execution timed out",
-                "failures": [],
-            }
+            return ToolResult(
+                success=False,
+                output={
+                    "success": False,
+                    "passed": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "output": "Test execution timed out",
+                    "failures": [],
+                },
+                error="timeout",
+            )
+        except OSError as exc:
+            raise ToolExecutionError(str(exc)) from exc
 
     def _parse_pytest_output(self, output: str) -> dict:
         """解析 pytest 输出"""

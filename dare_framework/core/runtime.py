@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Generic, Iterable, Protocol, TypeVar
+from typing import Any, Generic, Iterable, Protocol, TypeVar
 
 from dare_framework.components.interfaces import (
     IContextAssembler,
@@ -426,6 +426,7 @@ class AgentRuntime(Generic[DepsT, OutputT], IRuntime[DepsT, OutputT]):
             successful_tool_calls=[],
             execution_trace=[],
         )
+        step_cursor = 0
 
         execution_messages = [
             Message(
@@ -469,13 +470,24 @@ class AgentRuntime(Generic[DepsT, OutputT], IRuntime[DepsT, OutputT]):
                     execute_result.termination_reason = "plan_tool_encountered"
                     return execute_result
 
+                step = None
+                for index in range(step_cursor, len(validated_plan.steps)):
+                    candidate = validated_plan.steps[index]
+                    if candidate.tool_name == tool_call.name:
+                        step = candidate
+                        step_cursor = index + 1
+                        break
+
                 try:
                     result = await self.tool_runtime.invoke(
                         name=tool_call.name,
                         input=tool_call.input,
                         ctx=ctx,
+                        envelope=step.envelope if step else None,
+                        done_predicate=step.done_predicate if step else None,
                     )
                     budget.record_tool_call()
+                    await self._notify_hooks_tool_call(tool_call.name, tool_call.input, result)
 
                     execute_result.successful_tool_calls.append(
                         {
@@ -544,8 +556,11 @@ class AgentRuntime(Generic[DepsT, OutputT], IRuntime[DepsT, OutputT]):
         tool_budget: EnvelopeBudget = envelope.budget
         while not tool_budget.exceeded():
             tool_budget.record_attempt()
-            action_result = await self.tool_runtime.invoke(tool_name, tool_input, ctx)
+            action_result = await self.tool_runtime.invoke(
+                tool_name, tool_input, ctx, envelope=envelope, done_predicate=done_predicate
+            )
             tool_budget.record_tool_call()
+            await self._notify_hooks_tool_call(tool_name, tool_input, action_result)
 
             if action_result.evidence_ref:
                 tool_loop_ctx.add_evidence(action_result.evidence_ref)
@@ -653,6 +668,15 @@ class AgentRuntime(Generic[DepsT, OutputT], IRuntime[DepsT, OutputT]):
     async def _notify_hooks_session_end(self, result: RunResult[OutputT]) -> None:
         for hook in self.hooks:
             await hook.on_session_end(result)
+
+    async def _notify_hooks_tool_call(
+        self,
+        tool_name: str,
+        input: dict[str, Any],
+        result: ToolResult,
+    ) -> None:
+        for hook in self.hooks:
+            await hook.on_tool_call(tool_name, input, result)
 
     async def _persist_milestone_summary(self, milestone_id: str, summary: MilestoneSummary) -> None:
         await self.checkpoint.save_milestone_summary(milestone_id, summary)

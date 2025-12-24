@@ -1,3 +1,4 @@
+from dare_framework.builder import Agent, AgentBuilder
 from dare_framework.components import (
     AllowAllPolicy,
     BasicToolkit,
@@ -6,8 +7,18 @@ from dare_framework.components import (
     DefaultRemediator,
     DefaultToolRuntime,
     DenyAllPolicy,
+    FileCheckpoint,
+    FileEventLog,
     InMemoryCheckpoint,
     InMemoryEventLog,
+    MCPToolkit,
+    SkillRegistry,
+    ToolRegistry,
+    MCPUnavailableError,
+    StdioMCPClient,
+    StdioMCPConfig,
+    StreamableHTTPMCPClient,
+    StreamableHTTPConfig,
 )
 from dare_framework.core.runtime import AgentRuntime, IRuntime
 from dare_framework.core.state import RuntimeState
@@ -22,17 +33,30 @@ from dare_framework.core.models import (
     ToolType,
 )
 from dare_framework.models import NoopModelAdapter
+from dare_framework.memory import InMemoryMemory
 from dare_framework.tools import NoopTool
 from dare_framework.validators import DefaultValidator
 
 __all__ = [
+    "Agent",
+    "AgentBuilder",
     "AgentRuntime",
     "IRuntime",
     "InMemoryEventLog",
+    "FileEventLog",
     "InMemoryCheckpoint",
+    "FileCheckpoint",
     "AllowAllPolicy",
     "DenyAllPolicy",
     "BasicToolkit",
+    "ToolRegistry",
+    "SkillRegistry",
+    "MCPToolkit",
+    "MCPUnavailableError",
+    "StdioMCPClient",
+    "StdioMCPConfig",
+    "StreamableHTTPMCPClient",
+    "StreamableHTTPConfig",
     "DefaultToolRuntime",
     "DefaultPlanGenerator",
     "DefaultValidator",
@@ -49,4 +73,5 @@ __all__ = [
     "Task",
     "RiskLevel",
     "ToolType",
+    "InMemoryMemory",
 ]

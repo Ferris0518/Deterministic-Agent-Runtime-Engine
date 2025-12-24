@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Iterable
 
 from dare_framework.components.interfaces import ITool, IToolkit
 
@@ -11,6 +12,10 @@ class BasicToolkit(IToolkit):
 
     def register_tool(self, tool: ITool) -> None:
         self._tools[tool.name] = tool
+
+    def register_many(self, tools: Iterable[ITool]) -> None:
+        for tool in tools:
+            self.register_tool(tool)
 
     def get_tool(self, name: str) -> ITool | None:
         return self._tools.get(name)

@@ -6,11 +6,16 @@ Search Code Tool
 2. 搜索类工具的 produces_assertions 应该是什么？
 """
 
-from typing import Any
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 import re
 
+from dare_framework.core.models import Evidence, RiskLevel, RunContext, ToolResult, ToolType
 
+
+@dataclass
 class SearchCodeTool:
     """
     代码搜索工具
@@ -67,6 +72,9 @@ Use this tool when you need to:
             "required": ["pattern"]
         }
 
+    def get_input_schema(self) -> dict:
+        return self.input_schema
+
     @property
     def output_schema(self) -> dict:
         return {
@@ -91,10 +99,14 @@ Use this tool when you need to:
         }
 
     @property
-    def risk_level(self) -> str:
-        return "READ_ONLY"
+    def tool_type(self) -> ToolType:
+        return ToolType.ATOMIC
 
-    async def execute(self, input: dict[str, Any], context: Any) -> dict[str, Any]:
+    @property
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.READ_ONLY
+
+    async def execute(self, input: dict[str, Any], context: RunContext) -> ToolResult:
         """执行搜索"""
         pattern = input["pattern"]
         search_path = input.get("path", ".")
@@ -130,11 +142,20 @@ Use this tool when you need to:
             if len(matches) >= max_results:
                 break
 
-        return {
-            "matches": matches,
-            "total_matches": len(matches),
-            "truncated": len(matches) >= max_results,
-        }
+        evidence = Evidence(
+            evidence_id=f"evidence_{uuid4().hex}",
+            kind="code_search",
+            payload={"pattern": pattern, "matches": len(matches)},
+        )
+        return ToolResult(
+            success=True,
+            output={
+                "matches": matches,
+                "total_matches": len(matches),
+                "truncated": len(matches) >= max_results,
+            },
+            evidence_ref=evidence,
+        )
 
     def _should_ignore(self, path: Path) -> bool:
         """检查是否应该忽略此文件"""

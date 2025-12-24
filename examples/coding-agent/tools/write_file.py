@@ -6,10 +6,16 @@ Write File Tool
 2. 补偿操作（compensate）如何实现？
 """
 
-from typing import Any
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from dare_framework.core.errors import ToolExecutionError
+from dare_framework.core.models import Evidence, RiskLevel, RunContext, ToolResult, ToolType
 
 
+@dataclass
 class WriteFileTool:
     """
     写入文件工具
@@ -66,6 +72,9 @@ Parent directories will be created automatically.
             "required": ["path", "content"]
         }
 
+    def get_input_schema(self) -> dict:
+        return self.input_schema
+
     @property
     def output_schema(self) -> dict:
         return {
@@ -78,8 +87,12 @@ Parent directories will be created automatically.
         }
 
     @property
-    def risk_level(self) -> str:
-        return "IDEMPOTENT_WRITE"
+    def tool_type(self) -> ToolType:
+        return ToolType.ATOMIC
+
+    @property
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.IDEMPOTENT_WRITE
 
     @property
     def requires_approval(self) -> bool:
@@ -91,7 +104,7 @@ Parent directories will be created automatically.
             {"type": "file_modified", "produces": {"path": "*"}}
         ]
 
-    async def execute(self, input: dict[str, Any], context: Any) -> dict[str, Any]:
+    async def execute(self, input: dict[str, Any], context: RunContext) -> ToolResult:
         """执行写入"""
         path = input["path"]
         content = input["content"]
@@ -108,11 +121,20 @@ Parent directories will be created automatically.
         with open(abs_path, write_mode) as f:
             bytes_written = f.write(content)
 
-        return {
-            "path": str(abs_path),
-            "bytes_written": bytes_written,
-            "created": created,
-        }
+        evidence = Evidence(
+            evidence_id=f"evidence_{uuid4().hex}",
+            kind="file_modified",
+            payload={"path": str(abs_path)},
+        )
+        return ToolResult(
+            success=True,
+            output={
+                "path": str(abs_path),
+                "bytes_written": bytes_written,
+                "created": created,
+            },
+            evidence_ref=evidence,
+        )
 
     async def compensate(
         self,
@@ -138,5 +160,5 @@ Parent directories will be created automatically.
     def _resolve_path(self, path: str) -> Path:
         resolved = (self._workspace / path).resolve()
         if not resolved.is_relative_to(self._workspace):
-            raise ValueError(f"Path traversal attempt: {path}")
+            raise ToolExecutionError(f"Path traversal attempt: {path}")
         return resolved

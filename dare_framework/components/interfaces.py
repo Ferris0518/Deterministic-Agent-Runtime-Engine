@@ -70,6 +70,7 @@ class IToolRuntime(Protocol):
         input: dict[str, Any],
         ctx: RunContext,
         envelope: Envelope | None = None,
+        done_predicate: DonePredicate | None = None,
     ) -> ToolResult:
         ...
 
