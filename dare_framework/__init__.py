@@ -20,7 +20,8 @@ from dare_framework.components import (
     StreamableHTTPMCPClient,
     StreamableHTTPConfig,
 )
-from dare_framework.core.runtime import AgentRuntime, IRuntime
+from dare_framework.core.interfaces import IRuntime
+from dare_framework.core.runtime import AgentRuntime
 from dare_framework.core.state import RuntimeState
 from dare_framework.core.models import (
     RunContext,

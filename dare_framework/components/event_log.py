@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 import json
 
-from dare_framework.components.interfaces import IEventLog
+from dare_framework.core.interfaces import IEventLog
 from dare_framework.core.events import Event, EventFilter
 
 

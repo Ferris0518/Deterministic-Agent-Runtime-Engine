@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from dare_framework.components.interfaces import IMemory
+from dare_framework.components.layer2 import IMemory
 from dare_framework.core.models import MemoryItem
 
 

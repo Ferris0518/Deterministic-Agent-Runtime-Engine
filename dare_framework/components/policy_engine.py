@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from dare_framework.components.interfaces import IPolicyEngine, ITool, PolicyDecision
+from dare_framework.components.layer2 import ITool
+from dare_framework.core.interfaces import IPolicyEngine, PolicyDecision
 from dare_framework.core.errors import PolicyDeniedError
 from dare_framework.core.models import Milestone, RunContext, RiskLevel, ValidatedPlan
 

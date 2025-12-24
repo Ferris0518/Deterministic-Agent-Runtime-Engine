@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from dare_framework.components.interfaces import IRemediator
+from dare_framework.core.interfaces import IRemediator
 from dare_framework.core.models import MilestoneContext, RunContext, ToolError, VerifyResult
 
 

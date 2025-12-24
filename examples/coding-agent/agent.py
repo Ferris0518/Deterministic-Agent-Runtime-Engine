@@ -19,7 +19,7 @@ from typing import Iterable
 from uuid import uuid4
 
 from dare_framework import AgentBuilder
-from dare_framework.components.interfaces import IModelAdapter
+from dare_framework.components.layer2 import IModelAdapter
 from dare_framework.core.models import GenerateOptions, Message, ModelResponse, Task, ToolCall, ToolDefinition
 
 from tools import ReadFileTool, WriteFileTool, SearchCodeTool, RunTestsTool

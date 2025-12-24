@@ -3,20 +3,19 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Generic, Iterable, Protocol, TypeVar
+from typing import Any, Generic, Iterable, TypeVar
 
-from dare_framework.components.interfaces import (
+from dare_framework.core.interfaces import (
     IContextAssembler,
     IEventLog,
-    IHook,
-    IModelAdapter,
     IPlanGenerator,
     IPolicyEngine,
     IRemediator,
-    ICheckpoint,
+    IRuntime,
     IToolRuntime,
     IValidator,
 )
+from dare_framework.components.layer2 import ICheckpoint, IHook, IModelAdapter
 from dare_framework.core.errors import PlanGenerationFailedError, StateError, ToolExecutionError, UserInterruptedError
 from dare_framework.core.events import PlanValidationFailedEvent, RemediateEvent, SessionStartedEvent
 from dare_framework.core.models import (
@@ -46,29 +45,6 @@ from dare_framework.core.state import RuntimeState
 
 DepsT = TypeVar("DepsT")
 OutputT = TypeVar("OutputT")
-
-
-class IRuntime(Protocol, Generic[DepsT, OutputT]):
-    async def init(self, task: Task) -> None:
-        ...
-
-    async def run(self, task: Task, deps: DepsT) -> RunResult[OutputT]:
-        ...
-
-    async def pause(self) -> None:
-        ...
-
-    async def resume(self) -> None:
-        ...
-
-    async def stop(self) -> None:
-        ...
-
-    async def cancel(self) -> None:
-        ...
-
-    def get_state(self) -> RuntimeState:
-        ...
 
 
 @dataclass

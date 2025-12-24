@@ -20,7 +20,7 @@ from dare_framework import (
     InMemoryCheckpoint,
     InMemoryEventLog,
 )
-from dare_framework.components.interfaces import IModelAdapter
+from dare_framework.components.layer2 import IModelAdapter
 from dare_framework.core.models import GenerateOptions, Message, ModelResponse, Task, ToolCall, ToolDefinition
 from dare_framework.tools import NoopTool
 from dare_framework.validators import DefaultValidator

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from dare_framework.components.interfaces import IMCPClient
+from dare_framework.components.layer2 import IMCPClient
 
 try:  # pragma: no cover - optional dependency
     from mcp import ClientSession, StdioServerParameters

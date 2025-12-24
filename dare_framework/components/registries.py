@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from dare_framework.components.interfaces import ISkill, ISkillRegistry, ITool
+from dare_framework.components.layer2 import ISkill, ITool
+from dare_framework.core.interfaces import ISkillRegistry
 from dare_framework.components.toolkit import BasicToolkit
 
 

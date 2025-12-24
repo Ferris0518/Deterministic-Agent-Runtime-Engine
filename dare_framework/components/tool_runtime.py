@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from dare_framework.components.interfaces import IPolicyEngine, ISkillRegistry, IToolRuntime, IValidator, PolicyDecision
+from dare_framework.core.interfaces import (
+    IPolicyEngine,
+    ISkillRegistry,
+    IToolRuntime,
+    IValidator,
+    PolicyDecision,
+)
 from dare_framework.components.toolkit import BasicToolkit
 from dare_framework.core.errors import PolicyDeniedError, ToolExecutionError
 from dare_framework.core.models import DonePredicate, Envelope, Evidence, RunContext, ToolDefinition, ToolResult, ToolType, RiskLevel

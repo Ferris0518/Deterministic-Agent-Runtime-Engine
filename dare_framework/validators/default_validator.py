@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from dare_framework.components.interfaces import IValidator
+from dare_framework.core.interfaces import IValidator
 from dare_framework.components.toolkit import BasicToolkit
 from dare_framework.core.models import (
     DonePredicate,

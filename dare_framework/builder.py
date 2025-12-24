@@ -12,24 +12,28 @@ from dare_framework.components.registries import SkillRegistry
 from dare_framework.components.remediator import DefaultRemediator
 from dare_framework.components.tool_runtime import DefaultToolRuntime
 from dare_framework.components.toolkit import BasicToolkit
-from dare_framework.core.models import RunResult, Task
-from dare_framework.core.runtime import AgentRuntime, IRuntime
-from dare_framework.models import NoopModelAdapter
-from dare_framework.tools import NoopTool
-from dare_framework.validators import DefaultValidator
-from dare_framework.components.interfaces import (
-    ICheckpoint,
+from dare_framework.core.interfaces import (
     IContextAssembler,
     IEventLog,
-    IHook,
-    IMCPClient,
-    IModelAdapter,
     IPlanGenerator,
     IPolicyEngine,
     IRemediator,
+    IRuntime,
     IValidator,
 )
-from dare_framework.components.interfaces import ITool, ISkill
+from dare_framework.core.models import RunResult, Task
+from dare_framework.core.runtime import AgentRuntime
+from dare_framework.models import NoopModelAdapter
+from dare_framework.tools import NoopTool
+from dare_framework.validators import DefaultValidator
+from dare_framework.components.layer2 import (
+    ICheckpoint,
+    IHook,
+    IMCPClient,
+    IModelAdapter,
+    ISkill,
+    ITool,
+)
 from dare_framework.memory import InMemoryMemory
 
 DepsT = TypeVar("DepsT")

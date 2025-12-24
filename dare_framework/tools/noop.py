@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from dare_framework.components.interfaces import ITool
+from dare_framework.components.layer2 import ITool
 from dare_framework.core.models import RiskLevel, RunContext, ToolResult, ToolType
 
 

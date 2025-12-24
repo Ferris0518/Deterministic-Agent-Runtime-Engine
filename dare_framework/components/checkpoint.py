@@ -5,7 +5,7 @@ from pathlib import Path
 import json
 import time
 
-from dare_framework.components.interfaces import ICheckpoint
+from dare_framework.components.layer2 import ICheckpoint
 from dare_framework.core.models import MilestoneSummary, SessionSummary
 from dare_framework.core.state import RuntimeState
 
