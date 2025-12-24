@@ -19,14 +19,20 @@
 │  这些是框架的骨架，提供安全性和可审计性保证。                             │
 │                                                                         │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ IRuntime    │  │ IEventLog   │  │IToolRuntime │  │ IPolicy     │    │
+│  │ IRuntime    │  │ IEventLog   │  │IToolRuntime │  │IPolicyEngine│    │
 │  │ 执行引擎    │  │ 事件日志    │  │ 工具门禁    │  │ 策略引擎    │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
 │                                                                         │
-│  ┌─────────────┐  ┌─────────────┐                                      │
-│  │TrustBoundary│  │ IContext    │                                      │
-│  │ 信任边界    │  │ 上下文装配  │                                      │
-│  └─────────────┘  └─────────────┘                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                    │
+│  │TrustBoundary│  │ IContextAsse│  │ IValidator  │                    │
+│  │             │  │ mbler       │  │ 统一验证    │                    │
+│  │ 信任边界    │  │ 上下文装配  │  │             │                    │
+│  └─────────────┘  └─────────────┘  └─────────────┘                    │
+│                                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                    │
+│  │IPlanGenerator│  │ IRemediator │  │ISkillRegistry│                   │
+│  │  Plan 生成  │  │  反思分析   │  │  Skill 管理 │                   │
+│  └─────────────┘  └─────────────┘  └─────────────┘                    │
 │                                                                         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
@@ -51,7 +57,7 @@
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  ITool / IToolkit                                                │   │
+│  │  ITool / IToolkit（Execute Tools）                               │   │
 │  │  ├── 文件操作工具       ✅ 内置                                  │   │
 │  │  │   ├── ReadFileTool                                            │   │
 │  │  │   ├── WriteFileTool                                           │   │
@@ -65,7 +71,7 @@
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  ISkill                                                          │   │
+│  │  ISkill（Plan Tools）                                             │   │
 │  │  ├── （框架可能提供一些通用技能）                                 │   │
 │  │  └── 主要由开发者定义业务相关技能                                 │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
@@ -86,6 +92,7 @@
 │  agent = AgentBuilder("my-agent")                                       │
 │      .with_model(ClaudeAdapter())      # 用内置的                       │
 │      .with_tools(ReadFileTool(), ...)  # 用内置的                       │
+│      .with_skills(FixFailingTest())    # Plan Tools / Skills            │
 │      .with_mcp("filesystem", "github") # MCP 服务器                     │
 │      .with_memory(VectorMemory())      # 用内置的                       │
 │      .build()                                                           │
@@ -338,8 +345,11 @@ agent = (
 | `FormatterBase` | `IPromptFormatter` | Prompt 格式化 |
 | `TokenCounterBase` | `ITokenCounter` | Token 计数 |
 | - | `IEventLog` | **DARE 特有**：审计日志 |
-| - | `ITrustBoundary` | **DARE 特有**：信任边界 |
+| - | `TrustBoundary` | **DARE 特有**：信任边界 |
 | - | `IPolicyEngine` | **DARE 特有**：策略引擎 |
+| - | `IPlanGenerator` | **DARE 特有**：计划生成 |
+| - | `IRemediator` | **DARE 特有**：反思生成 |
+| - | `ISkillRegistry` | **DARE 特有**：Skill 注册 |
 
 ### 3.2 我们应该学习的
 
