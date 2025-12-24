@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from ..core.models import RunContext, ToolResult, ToolRiskLevel
+
+
+class NoOpTool:
+    @property
+    def name(self) -> str:
+        return "noop"
+
+    @property
+    def description(self) -> str:
+        return "No-op tool for default runtime wiring."
+
+    @property
+    def input_schema(self) -> dict:
+        return {"type": "object", "properties": {}}
+
+    @property
+    def output_schema(self) -> dict:
+        return {"type": "object", "properties": {"status": {"type": "string"}}}
+
+    @property
+    def risk_level(self):
+        return ToolRiskLevel.READ_ONLY
+
+    @property
+    def requires_approval(self) -> bool:
+        return False
+
+    @property
+    def timeout_seconds(self) -> int:
+        return 5
+
+    @property
+    def produces_assertions(self) -> list[dict]:
+        return []
+
+    @property
+    def is_work_unit(self) -> bool:
+        return False
+
+    async def execute(self, input: dict, context: RunContext) -> ToolResult:
+        return ToolResult(success=True, output={"status": "ok"}, evidence={})

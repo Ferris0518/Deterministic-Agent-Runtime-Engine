@@ -1,17 +1,20 @@
 from .builder import AgentBuilder, Agent
-from .defaults import (
+from .components import (
     AllowAllPolicyEngine,
     BasicContextAssembler,
     DeterministicPlanGenerator,
+    FileCheckpoint,
     InMemoryMemory,
+    LocalEventLog,
+    MCPToolkit,
     MockModelAdapter,
     NoOpHook,
     NoOpRemediator,
     NoOpTool,
     SimpleValidator,
+    StdioMCPClient,
+    StreamableHTTPMCPClient,
 )
-from .event_log import LocalEventLog
-from .checkpoint import FileCheckpoint
 from .interfaces import *
 from .models import *
 from .runtime import AgentRuntime
@@ -26,9 +29,12 @@ __all__ = [
     "FileCheckpoint",
     "InMemoryMemory",
     "LocalEventLog",
+    "MCPToolkit",
     "MockModelAdapter",
     "NoOpHook",
     "NoOpRemediator",
     "NoOpTool",
     "SimpleValidator",
+    "StdioMCPClient",
+    "StreamableHTTPMCPClient",
 ]

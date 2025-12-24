@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar
 
-from .defaults import (
+from .components.context_assembler import BasicContextAssembler
+from .components.defaults import (
     AllowAllPolicyEngine,
-    BasicContextAssembler,
     DeterministicPlanGenerator,
     InMemoryMemory,
     MockModelAdapter,
@@ -13,7 +13,10 @@ from .defaults import (
     NoOpTool,
     SimpleValidator,
 )
-from .interfaces import (
+from .components.mcp_toolkit import MCPToolkit
+from .components.registries import SkillRegistry, ToolRegistry
+from .components.tool_runtime import ToolRuntime
+from .core.interfaces import (
     IAgent,
     ICheckpoint,
     IContextAssembler,
@@ -25,11 +28,8 @@ from .interfaces import (
     IRuntime,
     IValidator,
 )
-from .mcp import MCPToolkit
-from .models import PlanStep, RunResult, Task
-from .registries import SkillRegistry, ToolRegistry
-from .runtime import AgentRuntime
-from .tool_runtime import ToolRuntime
+from .core.models import PlanStep, RunResult, Task
+from .core.runtime import AgentRuntime
 
 DepsT = TypeVar("DepsT")
 OutputT = TypeVar("OutputT")
@@ -133,14 +133,23 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         return self
 
     def build(self) -> Agent[DepsT, OutputT]:
+        if self._mcp_clients:
+            raise RuntimeError("MCP clients require build_async() for initialization")
+        return self._build()
+
+    async def build_async(self) -> Agent[DepsT, OutputT]:
         if self._runtime is not None:
             return Agent(self._runtime)
-
         if self._mcp_clients:
             mcp_toolkit = MCPToolkit(self._mcp_clients)
+            await mcp_toolkit.initialize()
             for tool in mcp_toolkit.export_tools():
                 self._tool_registry.register_tool(tool)
+        return self._build()
 
+    def _build(self) -> Agent[DepsT, OutputT]:
+        if self._runtime is not None:
+            return Agent(self._runtime)
         validator = self._validator or SimpleValidator()
         policy_engine = self._policy_engine or AllowAllPolicyEngine()
         remediator = self._remediator or NoOpRemediator()
