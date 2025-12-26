@@ -16,6 +16,7 @@ from .components.defaults import (
     SimpleValidator,
     StaticConfigProvider,
 )
+from .components.config_provider import LayeredConfigProvider
 from .components.mcp_toolkit import MCPToolkit
 from .components.registries import SkillRegistry, ToolRegistry
 from .components.tool_runtime import ToolRuntime
@@ -70,6 +71,7 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         self._memory_set = False
         self._config_provider: IConfigProvider | None = None
         self._config_provider_set = False
+        self._config_layers: dict[str, dict] | None = None
         self._prompt_store: IPromptStore | None = None
         self._prompt_store_set = False
         self._hooks = [NoOpHook()]
@@ -117,6 +119,22 @@ class AgentBuilder(Generic[DepsT, OutputT]):
     def with_config_provider(self, provider: IConfigProvider) -> "AgentBuilder":
         self._config_provider = provider
         self._config_provider_set = True
+        return self
+
+    def with_config_layers(
+        self,
+        *,
+        system: dict | None = None,
+        project: dict | None = None,
+        user: dict | None = None,
+        session: dict | None = None,
+    ) -> "AgentBuilder":
+        self._config_layers = {
+            "system": system or {},
+            "project": project or {},
+            "user": user or {},
+            "session": session or {},
+        }
         return self
 
     def with_prompt_store(self, store: IPromptStore) -> "AgentBuilder":
@@ -181,9 +199,20 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         return self._build()
 
     async def _load_components(self) -> None:
-        config_manager = ConfigProviderManager()
-        config_providers = await config_manager.load(None)
-        config_provider = self._select_config_provider(config_providers)
+        config_provider = None
+        if self._config_layers is not None:
+            config_provider = LayeredConfigProvider(
+                system=self._config_layers.get("system"),
+                project=self._config_layers.get("project"),
+                user=self._config_layers.get("user"),
+                session=self._config_layers.get("session"),
+            )
+            self._config_provider = config_provider
+            self._config_provider_set = True
+        else:
+            config_manager = ConfigProviderManager()
+            config_providers = await config_manager.load(None)
+            config_provider = self._select_config_provider(config_providers)
 
         prompt_manager = PromptStoreManager()
         prompt_stores = await prompt_manager.load(config_provider)
@@ -270,5 +299,6 @@ class AgentBuilder(Generic[DepsT, OutputT]):
             context_assembler=context_assembler,
             event_log=self._event_log,
             checkpoint=self._checkpoint,
+            config_provider=self._config_provider,
         )
         return Agent(runtime)

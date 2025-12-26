@@ -109,6 +109,9 @@ class SessionContext:
     user_input: str
     previous_session_summary: "SessionSummary | None"
     milestone_summaries: list["MilestoneSummary"] = field(default_factory=list)
+    effective_config: dict[str, Any] = field(default_factory=dict)
+    config_hash: str | None = None
+    config_sources: list[str] = field(default_factory=list)
     start_time: float = field(default_factory=time.time)
 
 

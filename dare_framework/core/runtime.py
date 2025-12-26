@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any, Generic, TypeVar
 from uuid import uuid4
 
@@ -11,6 +13,7 @@ from ..components.policy_engine import AllowAllPolicyEngine
 from ..components.remediator import NoOpRemediator
 from ..components.validator import SimpleValidator
 from .interfaces import (
+    IConfigProvider,
     ICheckpoint,
     IContextAssembler,
     IEventLog,
@@ -69,6 +72,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         context_assembler: IContextAssembler | None = None,
         event_log: IEventLog | None = None,
         checkpoint: ICheckpoint | None = None,
+        config_provider: IConfigProvider | None = None,
     ) -> None:
         self._tool_runtime = tool_runtime
         self._plan_generator = plan_generator
@@ -78,6 +82,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         self._context_assembler = context_assembler or BasicContextAssembler()
         self._event_log = event_log or LocalEventLog()
         self._checkpoint = checkpoint or FileCheckpoint()
+        self._config_provider = config_provider
         self._state = RuntimeState.READY
         self._active_task: Task | None = None
         self._run_id: str | None = None
@@ -103,7 +108,20 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         session_ctx = SessionContext(
             user_input=task.description,
             previous_session_summary=previous_summary,
+            effective_config=self._resolve_effective_config(),
+            config_hash=self._config_hash(),
+            config_sources=self._config_sources(),
         )
+        if session_ctx.config_hash:
+            await self._log_event(
+                "session.config",
+                {
+                    "task_id": task.task_id,
+                    "run_id": self._run_id,
+                    "config_hash": session_ctx.config_hash,
+                    "config_sources": session_ctx.config_sources,
+                },
+            )
 
         milestone_results: list[MilestoneResult] = []
         errors: list[str] = []
@@ -378,3 +396,26 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
 
     async def _log_event(self, event_type: str, payload: dict[str, Any]) -> None:
         await self._event_log.append(Event(event_type=event_type, payload=payload))
+
+    def _resolve_effective_config(self) -> dict[str, Any]:
+        if self._config_provider is None:
+            return {}
+        try:
+            return self._config_provider.get_namespace("")
+        except Exception:
+            return {}
+
+    def _config_hash(self) -> str | None:
+        config = self._resolve_effective_config()
+        if not config:
+            return None
+        payload = json.dumps(config, sort_keys=True)
+        return sha256(payload.encode("utf-8")).hexdigest()
+
+    def _config_sources(self) -> list[str]:
+        if self._config_provider is None:
+            return []
+        sources = getattr(self._config_provider, "sources", None)
+        if isinstance(sources, list):
+            return sources
+        return []

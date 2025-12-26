@@ -10,12 +10,14 @@ from dare_framework.component_manager import (
 )
 from dare_framework.components.base_component import BaseComponent
 from dare_framework.components.registries import ToolRegistry
+from dare_framework.components.config_provider import LayeredConfigProvider
 from dare_framework.core.interfaces import IModelAdapter, ITool, IValidator
 from dare_framework.core.models import (
     Milestone,
     ModelResponse,
     ProposedStep,
     RunContext,
+    ToolResult,
     ToolRiskLevel,
     ToolType,
     ValidationResult,
@@ -112,12 +114,74 @@ class DummyTool(BaseComponent, ITool):
         raise RuntimeError("Not implemented")
 
 
+class AnotherTool(BaseComponent, ITool):
+    @property
+    def name(self) -> str:
+        return "another"
+
+    @property
+    def description(self) -> str:
+        return "another tool"
+
+    @property
+    def input_schema(self) -> dict:
+        return {"type": "object", "properties": {}}
+
+    @property
+    def output_schema(self) -> dict:
+        return {"type": "object", "properties": {}}
+
+    @property
+    def tool_type(self):
+        return ToolType.ATOMIC
+
+    @property
+    def risk_level(self):
+        return ToolRiskLevel.READ_ONLY
+
+    @property
+    def requires_approval(self) -> bool:
+        return False
+
+    @property
+    def timeout_seconds(self) -> int:
+        return 1
+
+    @property
+    def produces_assertions(self) -> list[dict]:
+        return []
+
+    @property
+    def is_work_unit(self) -> bool:
+        return False
+
+    async def execute(self, input: dict, context: RunContext):
+        return ToolResult(success=True, output={"ok": True}, error=None, evidence=[])
+
+
 class DummyModelAdapter(BaseComponent, IModelAdapter):
     async def generate(self, messages, tools=None, options=None) -> ModelResponse:
         return ModelResponse(content="ok", tool_calls=[])
 
     async def generate_structured(self, messages, output_schema):
         return output_schema()
+
+
+class LifecycleComponent(BaseComponent, IValidator):
+    def __init__(self):
+        self.closed = False
+
+    async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
+        return ValidationResult(success=True, errors=[])
+
+    async def validate_milestone(self, milestone: Milestone, result, ctx: RunContext) -> VerifyResult:
+        return VerifyResult(success=True, errors=[], evidence=[])
+
+    async def validate_evidence(self, evidence, predicate) -> bool:
+        return True
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 @pytest.mark.asyncio
@@ -157,6 +221,35 @@ async def test_tool_manager_registers_tools():
 
 
 @pytest.mark.asyncio
+async def test_tool_manager_respects_enable_disable():
+    registry = ToolRegistry()
+    entry_points = FakeEntryPoints(
+        {ENTRYPOINT_TOOLS: [FakeEntryPoint("dummy", DummyTool), FakeEntryPoint("another", AnotherTool)]}
+    )
+    manager = ToolManager(registry, entry_points_loader=lambda: entry_points)
+
+    provider = LayeredConfigProvider(session={"tools": {"enable": ["another"], "disable": ["dummy"]}})
+    await manager.load(provider)
+
+    assert registry.get_tool("dummy") is None
+    assert registry.get_tool("another") is not None
+
+
+@pytest.mark.asyncio
+async def test_tool_manager_registers_composite_tools():
+    registry = ToolRegistry()
+    entry_points = FakeEntryPoints({ENTRYPOINT_TOOLS: [FakeEntryPoint("dummy", DummyTool)]})
+    manager = ToolManager(registry, entry_points_loader=lambda: entry_points)
+    provider = LayeredConfigProvider(
+        session={"composite_tools": [{"name": "combo", "steps": [{"tool": "dummy", "input": {}}]}]}
+    )
+
+    await manager.load(provider)
+
+    assert registry.get_tool("combo") is not None
+
+
+@pytest.mark.asyncio
 async def test_model_adapter_manager_returns_ordered_list():
     entry_points = FakeEntryPoints({ENTRYPOINT_MODEL_ADAPTERS: [FakeEntryPoint("adapter", DummyModelAdapter)]})
     manager = ModelAdapterManager(entry_points_loader=lambda: entry_points)
@@ -165,3 +258,13 @@ async def test_model_adapter_manager_returns_ordered_list():
 
     assert len(adapters) == 1
     assert isinstance(adapters[0], DummyModelAdapter)
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_boundary_no_close_on_injected():
+    component = LifecycleComponent()
+    manager = ValidatorManager(entry_points_loader=lambda: FakeEntryPoints({}))
+
+    manager.register_component(component)
+    # No close() called implicitly; component stays open.
+    assert component.closed is False

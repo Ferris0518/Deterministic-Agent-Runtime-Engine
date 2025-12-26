@@ -1,5 +1,5 @@
 from .base_component import BaseComponent
-from .config_provider import StaticConfigProvider
+from .config_provider import LayeredConfigProvider, StaticConfigProvider
 from .checkpoint import FileCheckpoint
 from .context_assembler import BasicContextAssembler
 from .defaults import *
@@ -10,6 +10,7 @@ from .mcp_toolkit import MCPToolkit
 from .memory import InMemoryMemory
 from .model_adapter import MockModelAdapter
 from .noop_tool import NoOpTool
+from .composite_tool import CompositeTool
 from .plan_generator import DeterministicPlanGenerator
 from .policy_engine import AllowAllPolicyEngine
 from .prompt_store import InMemoryPromptStore
@@ -28,6 +29,7 @@ __all__ = [
     "FileCheckpoint",
     "InMemoryMemory",
     "InMemoryPromptStore",
+    "LayeredConfigProvider",
     "LocalEventLog",
     "MCPToolkit",
     "MCPUnavailableError",
@@ -35,6 +37,7 @@ __all__ = [
     "NoOpHook",
     "NoOpRemediator",
     "NoOpTool",
+    "CompositeTool",
     "SimpleValidator",
     "StaticConfigProvider",
     "SkillRegistry",
