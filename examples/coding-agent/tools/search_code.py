@@ -10,8 +10,12 @@ from typing import Any
 from pathlib import Path
 import re
 
+from dare_framework.components import BaseComponent
+from dare_framework.errors import ToolError
+from dare_framework.models import Evidence, RunContext, ToolResult, ToolRiskLevel, ToolType, new_id
 
-class SearchCodeTool:
+
+class SearchCodeTool(BaseComponent):
     """
     代码搜索工具
 
@@ -91,10 +95,30 @@ Use this tool when you need to:
         }
 
     @property
-    def risk_level(self) -> str:
-        return "READ_ONLY"
+    def risk_level(self) -> ToolRiskLevel:
+        return ToolRiskLevel.READ_ONLY
 
-    async def execute(self, input: dict[str, Any], context: Any) -> dict[str, Any]:
+    @property
+    def tool_type(self) -> ToolType:
+        return ToolType.ATOMIC
+
+    @property
+    def requires_approval(self) -> bool:
+        return False
+
+    @property
+    def timeout_seconds(self) -> int:
+        return 20
+
+    @property
+    def produces_assertions(self) -> list:
+        return [{"type": "search_results", "produces": {"pattern": "*"}}]
+
+    @property
+    def is_work_unit(self) -> bool:
+        return False
+
+    async def execute(self, input: dict[str, Any], context: RunContext) -> ToolResult:
         """执行搜索"""
         pattern = input["pattern"]
         search_path = input.get("path", ".")
@@ -109,7 +133,7 @@ Use this tool when you need to:
         for file_path in search_dir.rglob(file_pattern):
             if file_path.is_file() and not self._should_ignore(file_path):
                 try:
-                    content = file_path.read_text()
+                    content = file_path.read_text(encoding="utf-8")
                     lines = content.splitlines()
 
                     for i, line in enumerate(lines):
@@ -124,17 +148,27 @@ Use this tool when you need to:
 
                             if len(matches) >= max_results:
                                 break
-                except Exception:
-                    continue  # Skip files that can't be read
+                except OSError as exc:
+                    raise ToolError(code="READ_FAILED", message=str(exc)) from exc
 
             if len(matches) >= max_results:
                 break
 
-        return {
-            "matches": matches,
-            "total_matches": len(matches),
-            "truncated": len(matches) >= max_results,
-        }
+        return ToolResult(
+            success=True,
+            output={
+                "matches": matches,
+                "total_matches": len(matches),
+                "truncated": len(matches) >= max_results,
+            },
+            evidence=[
+                Evidence(
+                    evidence_id=new_id("evidence"),
+                    kind="search_matches",
+                    payload={"match_count": len(matches)},
+                )
+            ],
+        )
 
     def _should_ignore(self, path: Path) -> bool:
         """检查是否应该忽略此文件"""

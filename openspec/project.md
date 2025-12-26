@@ -22,7 +22,7 @@
 
 ## Tech Stack
 
-- **Primary Language**: Python 3.11+
+- **Primary Language**: Python 3.12+
 - **Type Checking**: mypy (strict mode)
 - **Testing**: pytest + pytest-asyncio
 - **Async Runtime**: asyncio
@@ -30,6 +30,11 @@
 - **Configuration**: YAML + pydantic-settings
 - **Logging**: structlog (structured logging)
 - **Container Runtime**: Docker (for sandbox execution)
+
+### Local Environment
+
+- **python (pyenv)**: 3.12.12 (project default, use for venv/test)
+- **python3 (system)**: 3.14.0 (installed via Homebrew; avoid for this repo)
 
 ### Optional/Future
 - **Event Storage**: PostgreSQL / S3 (for WORM storage)
@@ -72,72 +77,59 @@ async def invoke(
 
 ### Architecture Patterns
 
-#### 三层循环架构
+#### 五层循环架构
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Session Loop (跨 Context Window)                                │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Milestone Loop                                          │    │
-│  │  Observe → Plan → Validate → Execute → Verify            │    │
-│  │                      ↓                   ↑               │    │
-│  │  ┌─────────────────────────────────────────┐            │    │
-│  │  │  Tool Loop (in WorkUnit)                 │            │    │
-│  │  │  Gather → Act → Check → Update           │            │    │
-│  │  └─────────────────────────────────────────┘            │    │
-│  └─────────────────────────────────────────────────────────┘    │
+│  └─ Milestone Loop (Observe → Plan → Approve → Execute → Verify) │
+│     ├─ Plan Loop (生成有效计划，失败不外泄)                        │
+│     ├─ Execute Loop (LLM 驱动执行)                               │
+│     └─ Tool Loop (WorkUnit 内部闭环)                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Session Loop**: 跨 context window 保持状态，通过 EventLog 和 Checkpoint 实现长任务持久化
-
-**Milestone Loop**: 六步编排
-- Observe: 收集任务输入 + 当前状态快照
-- Plan: LLM 生成计划（不可信）
-- Validate: TrustBoundary + Coverage + Policy 验证
-- Execute: 按步骤执行（所有工具调用走 ToolRuntime）
-- Verify: 按 Expectation.verification_spec 执行验收
-- Remediate: 验证失败则触发补救循环
-
-**Tool Loop**: WorkUnit 内部高效迭代，Envelope 持有 DonePredicate
+**Session Loop**: 跨 context window 保持状态，通过 EventLog 和 Checkpoint 实现长任务持久化  
+**Milestone Loop**: 负责任务阶段性目标，串联 Plan/Approve/Execute/Verify  
+**Plan Loop**: 生成并验证计划，不通过的计划不污染外层状态  
+**Execute Loop**: LLM 驱动执行，遇到 Plan Tool 回到 Milestone Loop  
+**Tool Loop**: WorkUnit 内部迭代，受 Envelope + DonePredicate 约束
 
 #### 核心组件
 
 ```
-agent_framework/
-├── core/                  # 核心框架代码
-│   ├── runtime.py         # AgentRuntime 主循环
-│   ├── state.py           # RunState 状态模型
-│   ├── events.py          # 事件类型定义
-│   └── errors.py          # 错误分类
-├── components/            # 核心组件
-│   ├── model_adapter.py   # 模型适配器
-│   ├── tool_registry.py   # 工具注册表
-│   ├── tool_runtime.py    # 工具执行运行时
-│   ├── policy_engine.py   # 策略引擎
-│   ├── context_assembler.py
-│   ├── event_log.py       # 事件日志
-│   └── evidence_factory.py
-├── validators/            # 验证器
-│   ├── trust_boundary.py
-│   ├── coverage_validator.py
-│   ├── input_sanitizer.py
-│   └── done_validator.py
-└── plugins/               # 可插拔扩展
-    ├── tools/
-    ├── skills/
-    └── models/
+dare_framework/
+├── builder.py                 # AgentBuilder + Agent
+├── core/                      # 核心状态与协议
+│   ├── runtime.py             # AgentRuntime 五层循环
+│   ├── models.py              # 核心数据结构
+│   ├── interfaces.py          # 接口协议
+│   └── errors.py              # 错误定义
+├── components/                # 默认实现组件
+│   ├── event_log.py           # LocalEventLog
+│   ├── checkpoint.py          # FileCheckpoint
+│   ├── tool_runtime.py        # ToolRuntime
+│   ├── registries.py          # ToolRegistry / SkillRegistry
+│   ├── policy_engine.py       # AllowAllPolicyEngine
+│   ├── plan_generator.py      # DeterministicPlanGenerator
+│   ├── validator.py           # SimpleValidator
+│   ├── remediator.py          # NoOpRemediator
+│   ├── context_assembler.py   # BasicContextAssembler
+│   ├── model_adapter.py       # MockModelAdapter
+│   ├── memory.py              # InMemoryMemory
+│   ├── hooks.py               # NoOpHook
+│   ├── mcp_client.py          # MCP SDK client adapters
+│   └── mcp_toolkit.py         # MCPToolkit
+└── validators/                # 预留：信任边界/覆盖验证
 ```
 
-#### 七个不可变接口
+#### 核心接口（v1.3 UML A.1 + v1.1 Interface）
 
-1. `IModelAdapter` - 模型适配器
-2. `IToolRegistry` - 工具注册表
-3. `IToolRuntime` - 工具执行运行时（唯一的工具调用入口）
-4. `IPolicyEngine` - 策略引擎
-5. `IEventLog` - 事件日志（append-only）
-6. `IContextAssembler` - 上下文装配器
-7. `IVerifier` - 验证器
+- Runtime/Orchestration: `IRuntime`, `IEventLog`, `ICheckpoint`, `IPolicyEngine`, `IPlanGenerator`, `IValidator`, `IRemediator`, `IContextAssembler`
+- Tools/Skills: `IToolRuntime`, `IToolkit`, `ITool`, `ISkillRegistry`, `ISkill`
+- Models/Composition: `IModelAdapter`, `IMemory`, `IHook`, `IMCPClient`
+
+> MCP 客户端需要异步初始化；使用 `AgentBuilder.build_async()` 以加载 MCP 工具清单。
 
 ### Testing Strategy
 
@@ -271,6 +263,10 @@ test(coverage): add deterministic coverage validator tests
 - OpenAI GPT (fallback)
 - 其他兼容 OpenAI API 的模型
 
+### MCP SDK
+
+- `mcp` Python SDK (https://github.com/modelcontextprotocol/python-sdk)
+
 ### 存储
 
 - 本地文件系统 (MVP)
@@ -284,7 +280,6 @@ test(coverage): add deterministic coverage validator tests
 
 ## References
 
-- [设计文档 v2.0-v2.4](/doc/design/)
-- [框架骨架 v1](/doc/design/Agent_Framework_Skeleton_v1.md)
-- [循环模型 v2.2](/doc/design/Agent_Framework_Loop_Model_v2.2_Final.md)
+- [架构终稿评审 v1.3](/doc/design/Architecture_Final_Review_v1.3.md)
+- [接口层设计 v1.1](/doc/design/Interface_Layer_Design_v1.1_MCP_and_Builtin.md)
 - [Anthropic Engineering 博客](/doc/design/anthropic-engineering.md)

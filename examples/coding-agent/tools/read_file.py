@@ -11,10 +11,12 @@ Read File Tool
 from typing import Any
 from pathlib import Path
 
-# from dare_framework import ITool, ToolRiskLevel, ExecutionContext, Assertion
+from dare_framework.components import BaseComponent
+from dare_framework.errors import ToolError
+from dare_framework.models import Evidence, RunContext, ToolResult, ToolRiskLevel, ToolType, new_id
 
 
-class ReadFileTool:  # (ITool)
+class ReadFileTool(BaseComponent):  # (ITool)
     """
     读取文件工具
 
@@ -109,8 +111,11 @@ The file path should be relative to the workspace root.
 
     @property
     def risk_level(self):  # -> ToolRiskLevel
-        # return ToolRiskLevel.READ_ONLY
-        return "READ_ONLY"
+        return ToolRiskLevel.READ_ONLY
+
+    @property
+    def tool_type(self) -> ToolType:
+        return ToolType.ATOMIC
 
     @property
     def requires_approval(self) -> bool:
@@ -130,13 +135,17 @@ The file path should be relative to the workspace root.
             {"type": "file_content", "produces": {"path": "*"}}
         ]
 
+    @property
+    def is_work_unit(self) -> bool:
+        return False
+
     # === 执行逻辑 ===
 
     async def execute(
         self,
         input: dict[str, Any],
-        context: Any,  # ExecutionContext
-    ) -> dict[str, Any]:
+        context: RunContext,
+    ) -> ToolResult:
         """
         执行读取文件
 
@@ -184,13 +193,23 @@ The file path should be relative to the workspace root.
         if truncated:
             content = content[:max_chars] + "\n... [truncated]"
 
-        return {
-            "content": content,
-            "path": str(abs_path),
-            "size_bytes": abs_path.stat().st_size,
-            "line_count": len(lines),
-            "truncated": truncated,
-        }
+        return ToolResult(
+            success=True,
+            output={
+                "content": content,
+                "path": str(abs_path),
+                "size_bytes": abs_path.stat().st_size,
+                "line_count": len(lines),
+                "truncated": truncated,
+            },
+            evidence=[
+                Evidence(
+                    evidence_id=new_id("evidence"),
+                    kind="file_read",
+                    payload={"path": str(abs_path)},
+                )
+            ],
+        )
 
     def _resolve_path(self, path: str) -> Path:
         """解析并验证路径"""
@@ -203,23 +222,3 @@ The file path should be relative to the workspace root.
                 retryable=False,
             )
         return resolved
-
-
-# === 错误定义 ===
-# 验证：错误应该如何定义？框架提供还是工具定义？
-
-class ToolError(Exception):
-    """工具执行错误"""
-
-    def __init__(
-        self,
-        code: str,
-        message: str,
-        retryable: bool = False,
-        context: dict = None,
-    ):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.retryable = retryable
-        self.context = context or {}
