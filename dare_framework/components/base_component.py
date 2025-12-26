@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from ..core.interfaces import IComponentRegistrar, IConfigProvider, IPromptStore
+from ..core.interfaces import IComponentRegistrar, IPromptStore
+from ..core.models import ComponentType, Config
 
 
 class BaseComponent:
     order = 100
 
+    @property
+    def component_name(self) -> str:
+        name = getattr(self, "name", None)
+        if isinstance(name, str):
+            return name
+        return self.__class__.__name__
+
     async def init(
         self,
-        config: IConfigProvider | None = None,
+        config: Config | None = None,
         prompts: IPromptStore | None = None,
     ) -> None:
         return None
@@ -18,3 +26,13 @@ class BaseComponent:
 
     async def close(self) -> None:
         return None
+
+
+class ConfigurableComponent(BaseComponent):
+    component_type: ComponentType | None = None
+
+    @property
+    def component_type(self) -> ComponentType:
+        if self.__class__.component_type is None:
+            raise ValueError("component_type must be set for configurable components")
+        return self.__class__.component_type

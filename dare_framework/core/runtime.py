@@ -22,6 +22,7 @@ from .interfaces import (
     IValidator,
 )
 from .models import (
+    Config,
     Event,
     ExecuteResult,
     Milestone,
@@ -69,6 +70,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         context_assembler: IContextAssembler | None = None,
         event_log: IEventLog | None = None,
         checkpoint: ICheckpoint | None = None,
+        config: Config | None = None,
     ) -> None:
         self._tool_runtime = tool_runtime
         self._plan_generator = plan_generator
@@ -78,6 +80,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         self._context_assembler = context_assembler or BasicContextAssembler()
         self._event_log = event_log or LocalEventLog()
         self._checkpoint = checkpoint or FileCheckpoint()
+        self._config = config or Config()
         self._state = RuntimeState.READY
         self._active_task: Task | None = None
         self._run_id: str | None = None
@@ -103,6 +106,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         session_ctx = SessionContext(
             user_input=task.description,
             previous_session_summary=previous_summary,
+            config=self._config,
         )
 
         milestone_results: list[MilestoneResult] = []

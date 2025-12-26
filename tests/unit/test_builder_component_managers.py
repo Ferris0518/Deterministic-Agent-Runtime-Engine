@@ -3,9 +3,10 @@ import pytest
 from dare_framework.builder import AgentBuilder
 from dare_framework.component_manager import ENTRYPOINT_MODEL_ADAPTERS, ENTRYPOINT_VALIDATORS
 from dare_framework.components.validator import CompositeValidator
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.components.base_component import ConfigurableComponent
 from dare_framework.core.interfaces import IModelAdapter, IValidator
 from dare_framework.core.models import (
+    ComponentType,
     Milestone,
     ModelResponse,
     ProposedStep,
@@ -34,7 +35,8 @@ class FakeEntryPoints:
         return list(self._mapping.get(group, []))
 
 
-class FailingValidator(BaseComponent, IValidator):
+class FailingValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         return ValidationResult(success=False, errors=["fail"])
 
@@ -45,7 +47,8 @@ class FailingValidator(BaseComponent, IValidator):
         return False
 
 
-class StubAdapter(BaseComponent, IModelAdapter):
+class StubAdapter(ConfigurableComponent, IModelAdapter):
+    component_type = ComponentType.MODEL_ADAPTER
     async def generate(self, messages, tools=None, options=None) -> ModelResponse:
         return ModelResponse(content="ok", tool_calls=[])
 

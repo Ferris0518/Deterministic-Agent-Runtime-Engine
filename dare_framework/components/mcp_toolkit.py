@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Iterable
 
 from ..core.interfaces import IMCPClient, ITool
-from ..core.models import RunContext, ToolDefinition, ToolResult, ToolRiskLevel
-from .base_component import BaseComponent
+from ..core.models import ComponentType, RunContext, ToolDefinition, ToolResult, ToolRiskLevel
+from .base_component import ConfigurableComponent
 
 
-class MCPTool(BaseComponent):
+class MCPTool(ConfigurableComponent):
+    component_type = ComponentType.TOOL
     def __init__(self, client: IMCPClient, definition: ToolDefinition) -> None:
         self._client = client
         self._definition = definition

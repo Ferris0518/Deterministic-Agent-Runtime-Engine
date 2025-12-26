@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from ..core.interfaces import IPromptStore
-from .base_component import BaseComponent
+from ..core.models import ComponentType
+from .base_component import ConfigurableComponent
 
 
-class InMemoryPromptStore(BaseComponent, IPromptStore):
+class InMemoryPromptStore(ConfigurableComponent, IPromptStore):
+    component_type = ComponentType.PROMPT
     def __init__(self, prompts: dict[tuple[str, str | None], str] | None = None) -> None:
         self._prompts = prompts or {}
 

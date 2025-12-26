@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from ..core.interfaces import IValidator
 from ..core.models import DonePredicate, Evidence, Milestone, ProposedStep, RunContext, ValidationResult, VerifyResult
-from .base_component import BaseComponent
+from .base_component import ConfigurableComponent
+from ..core.models import ComponentType
 
 
-class SimpleValidator(BaseComponent, IValidator):
+class SimpleValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         if not proposed_steps:
             return ValidationResult(success=False, errors=["Plan has no steps"])
@@ -32,7 +34,8 @@ class SimpleValidator(BaseComponent, IValidator):
         return True
 
 
-class CompositeValidator(BaseComponent, IValidator):
+class CompositeValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
     def __init__(self, validators: list[IValidator]):
         self._validators = list(validators)
 

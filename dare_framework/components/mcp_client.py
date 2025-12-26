@@ -5,6 +5,7 @@ from typing import Any
 
 from ..core.interfaces import IMCPClient
 from ..core.models import (
+    ComponentType,
     Evidence,
     Resource,
     ResourceContent,
@@ -15,7 +16,7 @@ from ..core.models import (
     ToolType,
     new_id,
 )
-from .base_component import BaseComponent
+from .base_component import ConfigurableComponent
 
 try:
     from mcp import ClientSession, StdioServerParameters
@@ -44,7 +45,8 @@ class StreamableHTTPConfig:
     url: str
 
 
-class BaseMCPClient(BaseComponent, IMCPClient):
+class BaseMCPClient(ConfigurableComponent, IMCPClient):
+    component_type = ComponentType.MCP
     def __init__(self, name: str) -> None:
         self._name = name
         self._session: ClientSession | None = None

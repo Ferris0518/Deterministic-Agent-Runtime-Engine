@@ -8,6 +8,7 @@ from .core.interfaces import (
     IComponent,
     IComponentRegistrar,
     IConfigProvider,
+    IConfigurableComponent,
     IHook,
     IMCPClient,
     IMemory,
@@ -17,6 +18,7 @@ from .core.interfaces import (
     ITool,
     IValidator,
 )
+from .core.models import Config
 
 EntryPointLoader = Callable[[], Any]
 TComponent = TypeVar("TComponent", bound=IComponent)
@@ -47,15 +49,22 @@ class BaseComponentManager(IComponentRegistrar, Generic[TComponent]):
 
     async def load(
         self,
-        config_provider: IConfigProvider | None,
+        config: Config | None,
         prompt_store: IPromptStore | None = None,
     ) -> list[TComponent]:
         discovered = self._discover_components()
         ordered = sorted(discovered, key=lambda comp: getattr(comp, "order", 100))
         for component in ordered:
-            await component.init(config_provider, prompt_store)
+            if not self._is_enabled(component, config):
+                continue
+            await component.init(config, prompt_store)
             component.register(self)
         return list(self._components)
+
+    def _is_enabled(self, component: TComponent, config: Config | None) -> bool:
+        if config is None or not isinstance(component, IConfigurableComponent):
+            return True
+        return config.is_component_enabled(component.component_type, component.component_name)
 
     def register_component(self, component: IComponent) -> None:
         if not isinstance(component, self._expected_type):

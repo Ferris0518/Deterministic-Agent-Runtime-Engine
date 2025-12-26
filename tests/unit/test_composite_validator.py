@@ -1,9 +1,10 @@
 import pytest
 
 from dare_framework.components.validator import CompositeValidator
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.components.base_component import ConfigurableComponent
 from dare_framework.core.interfaces import IValidator
 from dare_framework.core.models import (
+    ComponentType,
     Milestone,
     ProposedStep,
     RunContext,
@@ -13,7 +14,8 @@ from dare_framework.core.models import (
 )
 
 
-class FailingValidator(BaseComponent, IValidator):
+class FailingValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
     def __init__(self, order: int, errors: list[str]):
         self._order = order
         self._errors = errors

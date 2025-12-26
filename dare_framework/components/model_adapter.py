@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Iterable
 
 from ..core.interfaces import IModelAdapter
-from .base_component import BaseComponent
-from ..core.models import Message, ModelResponse
+from ..core.models import ComponentType, Message, ModelResponse
+from .base_component import ConfigurableComponent
 
 
-class MockModelAdapter(BaseComponent, IModelAdapter):
+class MockModelAdapter(ConfigurableComponent, IModelAdapter):
+    component_type = ComponentType.MODEL_ADAPTER
     def __init__(self, responses: Iterable[str] | None = None):
         self._responses = list(responses or ["ok"])
         self._index = 0

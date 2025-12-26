@@ -44,7 +44,7 @@ from .core.interfaces import (
     IRuntime,
     IValidator,
 )
-from .core.models import PlanStep, RunResult, Task, new_id
+from .core.models import Config, PlanStep, RunResult, Task, new_id
 from .core.runtime import AgentRuntime
 
 DepsT = TypeVar("DepsT")
@@ -72,6 +72,7 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         self._config_provider_set = False
         self._prompt_store: IPromptStore | None = None
         self._prompt_store_set = False
+        self._config = Config()
         self._hooks = [NoOpHook()]
         self._plan_generator: IPlanGenerator | None = None
         self._validator: IValidator | None = None
@@ -184,40 +185,41 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         config_manager = ConfigProviderManager()
         config_providers = await config_manager.load(None)
         config_provider = self._select_config_provider(config_providers)
+        self._config = config_provider.current()
 
         prompt_manager = PromptStoreManager()
-        prompt_stores = await prompt_manager.load(config_provider)
+        prompt_stores = await prompt_manager.load(self._config)
         prompt_store = self._select_prompt_store(prompt_stores)
 
         validator_manager = ValidatorManager()
-        validators = await validator_manager.load(config_provider, prompt_store)
+        validators = await validator_manager.load(self._config, prompt_store)
         if self._validator is None and validators:
             self._validator = CompositeValidator(validators)
 
         model_adapter_manager = ModelAdapterManager()
-        model_adapters = await model_adapter_manager.load(config_provider, prompt_store)
+        model_adapters = await model_adapter_manager.load(self._config, prompt_store)
         if self._model_adapter is None and model_adapters:
             self._model_adapter = model_adapters[0]
 
         memory_manager = MemoryManager()
-        memories = await memory_manager.load(config_provider, prompt_store)
+        memories = await memory_manager.load(self._config, prompt_store)
         if not self._memory_set and memories:
             self._memory = memories[0]
 
         mcp_manager = MCPClientManager()
-        mcp_clients = await mcp_manager.load(config_provider, prompt_store)
+        mcp_clients = await mcp_manager.load(self._config, prompt_store)
         if not self._mcp_clients and mcp_clients:
             self._mcp_clients = list(mcp_clients)
 
         hook_manager = HookManager()
-        hooks = await hook_manager.load(config_provider, prompt_store)
+        hooks = await hook_manager.load(self._config, prompt_store)
         self._hooks.extend(hooks)
 
         tool_manager = ToolManager(self._tool_registry)
-        await tool_manager.load(config_provider, prompt_store)
+        await tool_manager.load(self._config, prompt_store)
 
         skill_manager = SkillManager(self._skill_registry)
-        await skill_manager.load(config_provider, prompt_store)
+        await skill_manager.load(self._config, prompt_store)
 
     def _select_config_provider(self, discovered: list[IConfigProvider]) -> IConfigProvider:
         if self._config_provider_set and self._config_provider is not None:
@@ -270,5 +272,6 @@ class AgentBuilder(Generic[DepsT, OutputT]):
             context_assembler=context_assembler,
             event_log=self._event_log,
             checkpoint=self._checkpoint,
+            config=self._config,
         )
         return Agent(runtime)

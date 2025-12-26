@@ -4,6 +4,8 @@ from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 from .models import (
     AssembledContext,
+    ComponentType,
+    Config,
     DonePredicate,
     Envelope,
     Evidence,
@@ -49,13 +51,26 @@ class IComponent(Protocol):
     def order(self) -> int:
         ...
 
-    async def init(self, config: "IConfigProvider | None" = None, prompts: "IPromptStore | None" = None) -> None:
+    async def init(self, config: Config | None = None, prompts: "IPromptStore | None" = None) -> None:
         ...
 
     def register(self, registrar: IComponentRegistrar) -> None:
         ...
 
     async def close(self) -> None:
+        ...
+
+
+@runtime_checkable
+class IConfigurableComponent(IComponent, Protocol):
+    """Entry point component with stable type/name identity for config lookup."""
+
+    @property
+    def component_type(self) -> ComponentType:
+        ...
+
+    @property
+    def component_name(self) -> str:
         ...
 
 
@@ -105,7 +120,7 @@ class ICheckpoint(Protocol):
 
 
 @runtime_checkable
-class ITool(IComponent, Protocol):
+class ITool(IConfigurableComponent, Protocol):
     @property
     def name(self) -> str:
         ...
@@ -162,7 +177,7 @@ class IToolkit(Protocol):
 
 
 @runtime_checkable
-class ISkill(IComponent, Protocol):
+class ISkill(IConfigurableComponent, Protocol):
     @property
     def name(self) -> str:
         ...
@@ -225,7 +240,7 @@ class IPlanGenerator(Protocol):
 
 
 @runtime_checkable
-class IValidator(IComponent, Protocol):
+class IValidator(IConfigurableComponent, Protocol):
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         ...
 
@@ -266,7 +281,7 @@ class IContextAssembler(Protocol):
 
 
 @runtime_checkable
-class IModelAdapter(IComponent, Protocol):
+class IModelAdapter(IConfigurableComponent, Protocol):
     async def generate(
         self,
         messages: list[Message],
@@ -280,7 +295,7 @@ class IModelAdapter(IComponent, Protocol):
 
 
 @runtime_checkable
-class IMemory(IComponent, Protocol):
+class IMemory(IConfigurableComponent, Protocol):
     async def store(self, key: str, value: str, metadata: dict | None = None) -> None:
         ...
 
@@ -292,13 +307,13 @@ class IMemory(IComponent, Protocol):
 
 
 @runtime_checkable
-class IHook(IComponent, Protocol):
+class IHook(IConfigurableComponent, Protocol):
     async def on_event(self, event: Event) -> None:
         ...
 
 
 @runtime_checkable
-class IMCPClient(IComponent, Protocol):
+class IMCPClient(IConfigurableComponent, Protocol):
     @property
     def name(self) -> str:
         ...
@@ -333,15 +348,17 @@ class IAgent(Protocol, Generic[DepsT, OutputT]):
 
 @runtime_checkable
 class IConfigProvider(IComponent, Protocol):
-    def get(self, key: str, default: Any | None = None) -> Any:
+    """Provides the effective Config and supports reload."""
+
+    def current(self) -> Config:
         ...
 
-    def get_namespace(self, namespace: str) -> dict[str, Any]:
+    def reload(self) -> Config:
         ...
 
 
 @runtime_checkable
-class IPromptStore(IComponent, Protocol):
+class IPromptStore(IConfigurableComponent, Protocol):
     def get_prompt(self, name: str, version: str | None = None) -> str:
         ...
 

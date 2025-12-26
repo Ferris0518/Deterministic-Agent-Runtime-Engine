@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from ..core.models import Evidence, RunContext, ToolResult, ToolRiskLevel, ToolType, new_id
-from .base_component import BaseComponent
+from ..core.models import ComponentType, Evidence, RunContext, ToolResult, ToolRiskLevel, ToolType, new_id
+from .base_component import ConfigurableComponent
 
 
-class NoOpTool(BaseComponent):
+class NoOpTool(ConfigurableComponent):
+    component_type = ComponentType.TOOL
     @property
     def name(self) -> str:
         return "noop"

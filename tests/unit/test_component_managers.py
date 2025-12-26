@@ -8,10 +8,12 @@ from dare_framework.component_manager import (
     ToolManager,
     ValidatorManager,
 )
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.components.base_component import ConfigurableComponent
 from dare_framework.components.registries import ToolRegistry
 from dare_framework.core.interfaces import IModelAdapter, ITool, IValidator
 from dare_framework.core.models import (
+    ComponentType,
+    Config,
     Milestone,
     ModelResponse,
     ProposedStep,
@@ -40,7 +42,9 @@ class FakeEntryPoints:
         return list(self._mapping.get(group, []))
 
 
-class RecordingValidator(BaseComponent, IValidator):
+class RecordingValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
+
     def __init__(self, name: str, order: int, log: list[str]):
         self._name = name
         self._order = order
@@ -67,7 +71,9 @@ class RecordingValidator(BaseComponent, IValidator):
         return True
 
 
-class DummyTool(BaseComponent, ITool):
+class DummyTool(ConfigurableComponent, ITool):
+    component_type = ComponentType.TOOL
+
     @property
     def name(self) -> str:
         return "dummy"
@@ -112,7 +118,9 @@ class DummyTool(BaseComponent, ITool):
         raise RuntimeError("Not implemented")
 
 
-class DummyModelAdapter(BaseComponent, IModelAdapter):
+class DummyModelAdapter(ConfigurableComponent, IModelAdapter):
+    component_type = ComponentType.MODEL_ADAPTER
+
     async def generate(self, messages, tools=None, options=None) -> ModelResponse:
         return ModelResponse(content="ok", tool_calls=[])
 
@@ -165,3 +173,15 @@ async def test_model_adapter_manager_returns_ordered_list():
 
     assert len(adapters) == 1
     assert isinstance(adapters[0], DummyModelAdapter)
+
+
+@pytest.mark.asyncio
+async def test_component_manager_skips_disabled_components():
+    registry = ToolRegistry()
+    entry_points = FakeEntryPoints({ENTRYPOINT_TOOLS: [FakeEntryPoint("dummy", DummyTool)]})
+    manager = ToolManager(registry, entry_points_loader=lambda: entry_points)
+    config = Config.from_dict({"components": {"tool": {"disabled": ["dummy"]}}})
+
+    await manager.load(config)
+
+    assert registry.get_tool("dummy") is None
