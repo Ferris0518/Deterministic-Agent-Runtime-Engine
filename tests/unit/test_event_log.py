@@ -1,7 +1,7 @@
 import pytest
 
-from dare_framework.event_log import LocalEventLog
-from dare_framework.models import Event, EventFilter
+from dare_framework.components.event_log import LocalEventLog
+from dare_framework.core.models.event import Event, EventFilter
 
 
 @pytest.mark.asyncio

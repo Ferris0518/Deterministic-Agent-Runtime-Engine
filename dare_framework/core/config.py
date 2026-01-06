@@ -1,8 +1,31 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Protocol, runtime_checkable
 
-from .models import Config
+from .models.config import Config
+from .composition import IComponent, IConfigurableComponent
+
+
+@runtime_checkable
+class IConfigProvider(IComponent, Protocol):
+    """Provides resolved configuration and supports reload (Interface_Layer_Design_v1.1)."""
+
+    def current(self) -> Config:
+        """Return the current effective configuration."""
+        ...
+
+    def reload(self) -> Config:
+        """Reload configuration and return the effective result."""
+        ...
+
+
+@runtime_checkable
+class IPromptStore(IConfigurableComponent, Protocol):
+    """Stores prompts by name/version (Interface_Layer_Design_v1.1)."""
+
+    def get_prompt(self, name: str, version: str | None = None) -> str:
+        """Retrieve a prompt string by name and optional version."""
+        ...
 
 
 def merge_config_layers(layers: Iterable[dict[str, Any]]) -> dict[str, Any]:

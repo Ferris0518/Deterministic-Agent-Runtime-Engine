@@ -7,12 +7,17 @@ Simple Coding Agent Example
 
 from typing import Iterable
 
-from dare_framework import AgentBuilder
-from dare_framework.defaults import DeterministicPlanGenerator, MockModelAdapter
-from dare_framework.models import PlanStep, Task, new_id
+from dare_framework.composition.builder import AgentBuilder
+from dare_framework.components.model_adapters.mock import MockModelAdapter
+from dare_framework.components.plan_generator import DeterministicPlanGenerator
+from dare_framework.core.models.plan import ProposedStep, Task
+from dare_framework.core.models.runtime import new_id
 
-from tools import ReadFileTool, WriteFileTool, SearchCodeTool, RunTestsTool
-from skills import FixBugSkill
+from tools.read_file import ReadFileTool
+from tools.write_file import WriteFileTool
+from tools.search_code import SearchCodeTool
+from tools.run_tests import RunTestsTool
+from skills.fix_bug import FixBugSkill
 
 
 class CodingAgent:
@@ -30,7 +35,7 @@ class CodingAgent:
         self,
         workspace: str = ".",
         mock_mode: bool = True,
-        plan_steps: Iterable[PlanStep] | None = None,
+        plan_steps: Iterable[ProposedStep] | None = None,
         model_adapter=None,
         plan_generator=None,
     ) -> None:
@@ -43,7 +48,7 @@ class CodingAgent:
 
         if mock_mode:
             steps = list(plan_steps) if plan_steps else [
-                PlanStep(step_id=new_id("step"), tool_name="read_file", tool_input={"path": "README.md"})
+                ProposedStep(step_id=new_id("step"), tool_name="read_file", tool_input={"path": "README.md"})
             ]
             builder.with_plan_generator(DeterministicPlanGenerator([steps]))
             builder.with_model(MockModelAdapter(["mock"]))

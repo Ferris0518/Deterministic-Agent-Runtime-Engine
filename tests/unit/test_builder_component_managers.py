@@ -1,21 +1,17 @@
 import pytest
 
-from dare_framework.builder import AgentBuilder
-from dare_framework.component_manager import ENTRYPOINT_MODEL_ADAPTERS, ENTRYPOINT_VALIDATORS
-from dare_framework.components.validator import CompositeValidator
+from dare_framework.composition.builder import AgentBuilder
+from dare_framework.composition.component_manager import ENTRYPOINT_MODEL_ADAPTERS, ENTRYPOINT_VALIDATORS
+from dare_framework.components.validators.composite import CompositeValidator
 from dare_framework.components.base_component import ConfigurableComponent
-from dare_framework.core.interfaces import IModelAdapter, IValidator
-from dare_framework.core.models import (
-    ComponentType,
-    Milestone,
-    ModelResponse,
-    ProposedStep,
-    RunContext,
-    ValidationResult,
-    VerifyResult,
-    new_id,
-)
-from dare_framework import component_manager
+from dare_framework.core.context import IModelAdapter
+from dare_framework.core.validation import IValidator
+from dare_framework.core.models.config import ComponentType
+from dare_framework.core.models.context import ModelResponse
+from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.models.results import ExecuteResult
+from dare_framework.core.models.runtime import RunContext, new_id
+from dare_framework.composition import component_manager
 
 
 class FakeEntryPoint:
@@ -40,7 +36,7 @@ class FailingValidator(ConfigurableComponent, IValidator):
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         return ValidationResult(success=False, errors=["fail"])
 
-    async def validate_milestone(self, milestone: Milestone, result, ctx: RunContext) -> VerifyResult:
+    async def validate_milestone(self, milestone: Milestone, result: ExecuteResult, ctx: RunContext) -> VerifyResult:
         return VerifyResult(success=False, errors=["fail"], evidence=[])
 
     async def validate_evidence(self, evidence, predicate) -> bool:

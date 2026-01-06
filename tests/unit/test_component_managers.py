@@ -1,6 +1,6 @@
 import pytest
 
-from dare_framework.component_manager import (
+from dare_framework.composition.component_manager import (
     ENTRYPOINT_MODEL_ADAPTERS,
     ENTRYPOINT_TOOLS,
     ENTRYPOINT_VALIDATORS,
@@ -10,19 +10,15 @@ from dare_framework.component_manager import (
 )
 from dare_framework.components.base_component import ConfigurableComponent
 from dare_framework.components.registries import ToolRegistry
-from dare_framework.core.interfaces import IModelAdapter, ITool, IValidator
-from dare_framework.core.models import (
-    ComponentType,
-    Config,
-    Milestone,
-    ModelResponse,
-    ProposedStep,
-    RunContext,
-    ToolRiskLevel,
-    ToolType,
-    ValidationResult,
-    VerifyResult,
-)
+from dare_framework.core.context import IModelAdapter
+from dare_framework.core.tooling import ITool
+from dare_framework.core.validation import IValidator
+from dare_framework.core.models.config import ComponentType, Config
+from dare_framework.core.models.context import ModelResponse
+from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.models.results import ExecuteResult
+from dare_framework.core.models.runtime import RunContext
+from dare_framework.core.models.tool import ToolRiskLevel, ToolType
 
 
 class FakeEntryPoint:
@@ -64,7 +60,12 @@ class RecordingValidator(ConfigurableComponent, IValidator):
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         return ValidationResult(success=True, errors=[])
 
-    async def validate_milestone(self, milestone: Milestone, result, ctx: RunContext) -> VerifyResult:
+    async def validate_milestone(
+        self,
+        milestone: Milestone,
+        result: ExecuteResult,
+        ctx: RunContext,
+    ) -> VerifyResult:
         return VerifyResult(success=True, errors=[], evidence=[])
 
     async def validate_evidence(self, evidence, predicate) -> bool:

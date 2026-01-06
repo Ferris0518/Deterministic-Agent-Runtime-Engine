@@ -1,0 +1,15 @@
+## 1. Implementation
+- [x] 1.1 Audit existing modules and map interfaces/models/components to the three-layer model and functional domains.
+- [x] 1.2 Confirm the TrustBoundary contract scope and add `ITrustBoundary` to the core interfaces.
+- [x] 1.3 Define `IToolRegistry` (with explicit tool-definition access) and align TrustBoundary + policy dependencies on the registry interface.
+- [x] 1.4 Define the target package layout and create the new core interface/model subpackages.
+- [x] 1.5 Reorganize components and composition modules by functional domain per the target module map.
+- [x] 1.6 Move core interface protocols into domain modules and update imports.
+- [x] 1.7 Move core data models into domain modules and update imports.
+- [x] 1.8 Remove the `PlanStep = ProposedStep` alias and make proposed vs validated plan models explicit.
+- [x] 1.9 Remove pass-through re-export modules and keep package `__init__.py` files minimal.
+- [x] 1.10 Add design-intent comments to interfaces and abstract methods, referencing the design docs.
+- [x] 1.11 Ensure placeholder packages have explicit intent docstrings (or remove them if unused).
+- [x] 1.12 Remove unused default implementations not referenced by the builder/composition layer, entry points, or examples.
+- [x] 1.13 Update examples and tests to the new module paths.
+- [x] 1.14 Validate with `pytest` (targeted if needed) and resolve any failures. (skipped per user request)

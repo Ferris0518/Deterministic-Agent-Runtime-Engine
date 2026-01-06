@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..core.interfaces import IToolkit, ISkillRegistry, ITool, ISkill
-from ..core.models import ToolDefinition, ToolRiskLevel, ToolType
+from ..core.registries import ISkillRegistry, IToolRegistry
+from ..core.tooling import ISkill, ITool, IToolkit
+from ..core.models.tool import ToolDefinition, ToolRiskLevel, ToolType
 
 
-class ToolRegistry(IToolkit):
+class ToolRegistry(IToolkit, IToolRegistry):
     def __init__(self) -> None:
         self._tools: dict[str, ITool] = {}
 
@@ -32,6 +33,26 @@ class ToolRegistry(IToolkit):
             )
             for tool in self._tools.values()
         ]
+
+    def get_tool_definition(self, name: str) -> ToolDefinition | None:
+        tool = self.get_tool(name)
+        if tool is None:
+            return None
+        return ToolDefinition(
+            name=tool.name,
+            description=tool.description,
+            input_schema=tool.input_schema,
+            output_schema=tool.output_schema,
+            tool_type=getattr(tool, "tool_type", ToolType.WORKUNIT if tool.is_work_unit else ToolType.ATOMIC),
+            risk_level=_normalize_risk(tool.risk_level),
+            requires_approval=tool.requires_approval,
+            timeout_seconds=tool.timeout_seconds,
+            produces_assertions=tool.produces_assertions,
+            is_work_unit=tool.is_work_unit,
+        )
+
+    def list_tool_definitions(self) -> list[ToolDefinition]:
+        return self.list_tools()
 
     def register_many(self, tools: Iterable[ITool]) -> None:
         for tool in tools:

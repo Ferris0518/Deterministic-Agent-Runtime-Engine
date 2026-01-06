@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from ..core.interfaces import IComponentRegistrar, IPromptStore
-from ..core.models import ComponentType, Config
+from ..core.composition import IComponentRegistrar
+from ..core.config import IPromptStore
+from ..core.models.config import ComponentType, Config
 
 
 class BaseComponent:

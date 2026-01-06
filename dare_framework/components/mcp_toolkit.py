@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..core.interfaces import IMCPClient, ITool
-from ..core.models import ComponentType, RunContext, ToolDefinition, ToolResult, ToolRiskLevel
+from ..core.mcp import IMCPClient
+from ..core.tooling import ITool
+from ..core.models.config import ComponentType
+from ..core.models.runtime import RunContext
+from ..core.models.tool import ToolDefinition, ToolResult, ToolRiskLevel
 from .base_component import ConfigurableComponent
 
 

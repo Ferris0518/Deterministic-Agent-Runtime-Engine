@@ -103,14 +103,14 @@ flowchart TB
 
 ```python
 # ❌ 错误：信任 LLM 填写的字段
-def execute_step(step: PlanStep):
+def execute_step(step: ProposedStep):
     if step.tool_name == "read_file":  # LLM 填的，不可信！
         # ...
 
-# ✅ 正确：从可信源派生
-def execute_step(step: PlanStep, registry: ToolRegistry):
-    tool = registry.get_tool(step.tool_name)
-    if tool and tool.risk_level == ToolRiskLevel.READ_ONLY:  # 从 Registry 读，可信
+# ✅ 正确：通过信任边界派生可信字段
+def execute_step(step: ProposedStep, trust_boundary: ITrustBoundary, registry: IToolRegistry):
+    validated = trust_boundary.derive_step(step, registry)
+    if validated.risk_level == RiskLevel.READ_ONLY:  # 从可信源派生
         # ...
 ```
 

@@ -1,4 +1,4 @@
-from dare_framework.components.config_provider import StaticConfigProvider
+from dare_framework.components.config_providers.static import StaticConfigProvider
 
 
 def test_static_config_provider_reload_returns_new_config():

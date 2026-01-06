@@ -14,7 +14,7 @@ The current static configuration system only supports flat configuration diction
 ## Impact
 - Affected specs: configuration-management
 - Affected code:
-  - dare_framework/core/models.py (add Config model)
-  - dare_framework/core/interfaces.py (update IConfigProvider)
-  - dare_framework/core/models.py (update SessionContext)
-  - dare_framework/component_manager.py (update load method)
+  - dare_framework/core/models/config.py (add Config model)
+  - dare_framework/core/config.py (update IConfigProvider)
+  - dare_framework/core/models/context.py (update SessionContext)
+  - dare_framework/composition/component_manager.py (update load method)

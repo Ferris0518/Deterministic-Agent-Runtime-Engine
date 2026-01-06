@@ -1,5 +1,5 @@
 from dare_framework.core.config import build_config_from_layers, merge_config_layers
-from dare_framework.core.models import ComponentType
+from dare_framework.core.models.config import ComponentType
 
 
 def test_merge_config_layers_applies_overrides():

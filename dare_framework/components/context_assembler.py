@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from ..core.interfaces import IContextAssembler
-from ..core.models import AssembledContext, Message, Milestone, MilestoneContext, RunContext
+from ..core.context import IContextAssembler
+from ..core.models.context import AssembledContext, Message, MilestoneContext
+from ..core.models.plan import Milestone
+from ..core.models.runtime import RunContext
 
 
 class BasicContextAssembler(IContextAssembler):
