@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any, Generic, TypeVar
 from uuid import uuid4
 
@@ -10,14 +11,14 @@ from ..components.event_log import LocalEventLog
 from ..components.policy_engine import AllowAllPolicyEngine
 from ..components.remediator import NoOpRemediator
 from ..components.validators.simple import SimpleValidator
-from .context import IContextAssembler
+from .context import IContextAssembler, IModelAdapter
 from .planning import IPlanGenerator, IRemediator
 from .policy import IPolicyEngine
 from .runtime import ICheckpoint, IEventLog, IRuntime
 from .tooling import IToolRuntime
 from .validation import IValidator
 from .models.config import Config
-from .models.context import MilestoneContext, SessionContext
+from .models.context import Message, MilestoneContext, SessionContext
 from .models.event import Event
 from .models.plan import (
     Milestone,
@@ -30,7 +31,7 @@ from .models.plan import (
 )
 from .models.results import ExecuteResult, MilestoneResult, MilestoneSummary, RunResult, SessionSummary
 from .models.runtime import RunContext, RuntimeSnapshot, RuntimeState
-from .models.tool import RiskLevel, StepType, ToolErrorRecord
+from .models.tool import RiskLevel, StepType, ToolErrorRecord, ToolResult
 
 DepsT = TypeVar("DepsT")
 OutputT = TypeVar("OutputT")
@@ -48,6 +49,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         self,
         tool_runtime: IToolRuntime,
         plan_generator: IPlanGenerator,
+        model_adapter: IModelAdapter | None = None,
         validator: IValidator | None = None,
         policy_engine: IPolicyEngine | None = None,
         remediator: IRemediator | None = None,
@@ -58,6 +60,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
     ) -> None:
         self._tool_runtime = tool_runtime
         self._plan_generator = plan_generator
+        self._model_adapter = model_adapter
         self._validator = validator or SimpleValidator()
         self._policy_engine = policy_engine or AllowAllPolicyEngine()
         self._remediator = remediator or NoOpRemediator()
@@ -101,6 +104,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
                 run_id=self._run_id,
                 task_id=task.task_id,
                 milestone_id=milestone.milestone_id,
+                config=session_ctx.config,
             )
             milestone_ctx = MilestoneContext(
                 user_input=milestone.user_input,
@@ -185,7 +189,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
                 await self.pause()
                 await self.resume()
 
-            execute_result = await self._execute_loop(plan_outcome.validated_plan, milestone_ctx, ctx)
+            execute_result = await self._execute_loop(milestone, plan_outcome.validated_plan, milestone_ctx, ctx)
             if execute_result.encountered_plan_tool:
                 milestone_ctx.add_reflection(f"plan tool encountered: {execute_result.plan_tool_name}")
                 continue
@@ -307,6 +311,17 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
 
     async def _execute_loop(
         self,
+        milestone: Milestone,
+        plan: ValidatedPlan,
+        milestone_ctx: MilestoneContext,
+        ctx: RunContext,
+    ) -> ExecuteResult:
+        if self._model_adapter is None:
+            return await self._execute_plan_loop(plan, milestone_ctx, ctx)
+        return await self._execute_model_loop(milestone, milestone_ctx, ctx)
+
+    async def _execute_plan_loop(
+        self,
         plan: ValidatedPlan,
         milestone_ctx: MilestoneContext,
         ctx: RunContext,
@@ -363,6 +378,118 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
                     )
                 )
         return ExecuteResult(success=not errors, outputs=outputs, errors=errors)
+
+    async def _execute_model_loop(
+        self,
+        milestone: Milestone,
+        milestone_ctx: MilestoneContext,
+        ctx: RunContext,
+    ) -> ExecuteResult:
+        outputs: list = []
+        errors: list[str] = []
+        assembled = await self._context_assembler.assemble(milestone, milestone_ctx, ctx)
+        ctx.metadata["context_messages"] = assembled.messages
+        messages = list(assembled.messages)
+        tools = self._tool_runtime.list_tools()
+
+        max_iterations = 20
+        for _ in range(max_iterations):
+            await self._log_event("model.invoke", {"run_id": ctx.run_id})
+            response = await self._model_adapter.generate(messages, tools)
+            if not response.tool_calls:
+                outputs.append(
+                    ToolResult(
+                        success=True,
+                        output={"content": response.content},
+                        error=None,
+                        evidence=[],
+                    )
+                )
+                return ExecuteResult(success=True, outputs=outputs, errors=errors)
+
+            messages.append(
+                Message(
+                    role="assistant",
+                    content=response.content or "",
+                    tool_calls=response.tool_calls,
+                )
+            )
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.get("name")
+                if not tool_name:
+                    errors.append("model returned tool call without name")
+                    return ExecuteResult(success=False, outputs=outputs, errors=errors)
+                if self._tool_runtime.is_plan_tool(tool_name):
+                    await self._log_event(
+                        "plan.tool_encountered",
+                        {"tool": tool_name, "run_id": ctx.run_id},
+                    )
+                    return ExecuteResult(
+                        success=False,
+                        outputs=outputs,
+                        errors=errors,
+                        encountered_plan_tool=True,
+                        plan_tool_name=tool_name,
+                    )
+                tool_args = tool_call.get("arguments", {})
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        errors.append(f"invalid tool arguments for {tool_name}")
+                        return ExecuteResult(success=False, outputs=outputs, errors=errors)
+
+                try:
+                    await self._log_event(
+                        "tool.invoke",
+                        {"tool": tool_name, "run_id": ctx.run_id},
+                    )
+                    result = await self._tool_runtime.invoke(tool_name, tool_args, ctx)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(str(exc))
+                    milestone_ctx.add_error(
+                        ToolErrorRecord(
+                            error_type="tool_exception",
+                            tool_name=tool_name,
+                            message=str(exc),
+                        )
+                    )
+                    await self._log_event(
+                        "tool.error",
+                        {"tool": tool_name, "error": str(exc), "run_id": ctx.run_id},
+                    )
+                    return ExecuteResult(success=False, outputs=outputs, errors=errors)
+                outputs.append(result)
+                milestone_ctx.evidence_collected.extend(result.evidence)
+                if not result.success:
+                    errors.append(result.error or "tool failed")
+                    milestone_ctx.add_error(
+                        ToolErrorRecord(
+                            error_type="tool_failure",
+                            tool_name=tool_name,
+                            message=result.error or "tool failed",
+                        )
+                    )
+                    return ExecuteResult(success=False, outputs=outputs, errors=errors)
+
+                tool_content = json.dumps(
+                    {
+                        "tool": tool_name,
+                        "output": result.output,
+                        "error": result.error,
+                    }
+                )
+                messages.append(
+                    Message(
+                        role="tool",
+                        content=tool_content,
+                        name=tool_name,
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+
+        errors.append("model tool loop exceeded max iterations")
+        return ExecuteResult(success=False, outputs=outputs, errors=errors)
 
     async def _log_event(self, event_type: str, payload: dict[str, Any]) -> None:
         await self._event_log.append(Event(event_type=event_type, payload=payload))

@@ -6,6 +6,8 @@ from enum import Enum
 from typing import Any, Generic, TypeVar
 from uuid import uuid4
 
+from .config import Config
+
 DepsT = TypeVar("DepsT")
 
 
@@ -28,6 +30,7 @@ class RunContext(Generic[DepsT]):
     task_id: str | None = None
     milestone_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    config: Config | None = None
 
 
 @dataclass(frozen=True)

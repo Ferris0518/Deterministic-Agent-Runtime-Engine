@@ -241,7 +241,9 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         validator = self._validator or CompositeValidator([SimpleValidator()])
         policy_engine = self._policy_engine or AllowAllPolicyEngine()
         remediator = self._remediator or NoOpRemediator()
-        context_assembler = self._context_assembler or BasicContextAssembler()
+        if self._prompt_store is None:
+            self._prompt_store = InMemoryPromptStore()
+        context_assembler = self._context_assembler or BasicContextAssembler(self._prompt_store)
         if self._plan_generator is None:
             if self._tool_registry.get_tool("noop") is None:
                 self._tool_registry.register_tool(NoOpTool())
@@ -260,6 +262,7 @@ class AgentBuilder(Generic[DepsT, OutputT]):
         runtime = AgentRuntime(
             tool_runtime=tool_runtime,
             plan_generator=plan_generator,
+            model_adapter=self._model_adapter,
             validator=validator,
             policy_engine=policy_engine,
             remediator=remediator,

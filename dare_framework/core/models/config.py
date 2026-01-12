@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
+
+
+def _default_workspace_roots() -> list[str]:
+    return [str(Path.cwd().resolve())]
 
 
 class ComponentType(Enum):
@@ -76,6 +81,7 @@ class Config:
     allowtools: list[str] = field(default_factory=list)
     allowmcps: list[str] = field(default_factory=list)
     components: dict[str, ComponentConfig] = field(default_factory=dict)
+    workspace_roots: list[str] = field(default_factory=_default_workspace_roots)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -91,6 +97,11 @@ class Config:
             for key, value in components_raw.items()
             if isinstance(value, dict)
         }
+        workspace_roots_raw = data.get("workspace_roots")
+        if isinstance(workspace_roots_raw, list):
+            workspace_roots = [str(item) for item in workspace_roots_raw]
+        else:
+            workspace_roots = _default_workspace_roots()
         return cls(
             llm=llm,
             mcp=mcp,
@@ -98,6 +109,7 @@ class Config:
             allowtools=allowtools,
             allowmcps=allowmcps,
             components=components,
+            workspace_roots=workspace_roots,
         )
 
     def component_settings(self, component_type: ComponentType) -> ComponentConfig:
@@ -119,4 +131,5 @@ class Config:
             "allowtools": list(self.allowtools),
             "allowmcps": list(self.allowmcps),
             "components": {key: value.to_dict() for key, value in self.components.items()},
+            "workspace_roots": list(self.workspace_roots),
         }

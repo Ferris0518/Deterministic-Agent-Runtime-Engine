@@ -8,7 +8,6 @@ Simple Coding Agent Example
 from typing import Iterable
 
 from dare_framework.composition.builder import AgentBuilder
-from dare_framework.components.model_adapters.mock import MockModelAdapter
 from dare_framework.components.plan_generator import DeterministicPlanGenerator
 from dare_framework.core.models.plan import ProposedStep, Task
 from dare_framework.core.models.runtime import new_id
@@ -51,7 +50,6 @@ class CodingAgent:
                 ProposedStep(step_id=new_id("step"), tool_name="read_file", tool_input={"path": "README.md"})
             ]
             builder.with_plan_generator(DeterministicPlanGenerator([steps]))
-            builder.with_model(MockModelAdapter(["mock"]))
         else:
             if model_adapter is None or plan_generator is None:
                 raise ValueError("model_adapter and plan_generator are required when mock_mode=False")
