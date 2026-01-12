@@ -1,6 +1,6 @@
 import pytest
 
-from dare_framework.component_manager import (
+from dare_framework.composition.component_manager import (
     ENTRYPOINT_MODEL_ADAPTERS,
     ENTRYPOINT_TOOLS,
     ENTRYPOINT_VALIDATORS,
@@ -8,19 +8,17 @@ from dare_framework.component_manager import (
     ToolManager,
     ValidatorManager,
 )
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.components.base_component import ConfigurableComponent
 from dare_framework.components.registries import ToolRegistry
-from dare_framework.core.interfaces import IModelAdapter, ITool, IValidator
-from dare_framework.core.models import (
-    Milestone,
-    ModelResponse,
-    ProposedStep,
-    RunContext,
-    ToolRiskLevel,
-    ToolType,
-    ValidationResult,
-    VerifyResult,
-)
+from dare_framework.core.context import IModelAdapter
+from dare_framework.core.tooling import ITool
+from dare_framework.core.validation import IValidator
+from dare_framework.core.models.config import ComponentType, Config
+from dare_framework.core.models.context import ModelResponse
+from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.models.results import ExecuteResult
+from dare_framework.core.models.runtime import RunContext
+from dare_framework.core.models.tool import ToolRiskLevel, ToolType
 
 
 class FakeEntryPoint:
@@ -40,7 +38,9 @@ class FakeEntryPoints:
         return list(self._mapping.get(group, []))
 
 
-class RecordingValidator(BaseComponent, IValidator):
+class RecordingValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
+
     def __init__(self, name: str, order: int, log: list[str]):
         self._name = name
         self._order = order
@@ -60,14 +60,21 @@ class RecordingValidator(BaseComponent, IValidator):
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         return ValidationResult(success=True, errors=[])
 
-    async def validate_milestone(self, milestone: Milestone, result, ctx: RunContext) -> VerifyResult:
+    async def validate_milestone(
+        self,
+        milestone: Milestone,
+        result: ExecuteResult,
+        ctx: RunContext,
+    ) -> VerifyResult:
         return VerifyResult(success=True, errors=[], evidence=[])
 
     async def validate_evidence(self, evidence, predicate) -> bool:
         return True
 
 
-class DummyTool(BaseComponent, ITool):
+class DummyTool(ConfigurableComponent, ITool):
+    component_type = ComponentType.TOOL
+
     @property
     def name(self) -> str:
         return "dummy"
@@ -112,7 +119,9 @@ class DummyTool(BaseComponent, ITool):
         raise RuntimeError("Not implemented")
 
 
-class DummyModelAdapter(BaseComponent, IModelAdapter):
+class DummyModelAdapter(ConfigurableComponent, IModelAdapter):
+    component_type = ComponentType.MODEL_ADAPTER
+
     async def generate(self, messages, tools=None, options=None) -> ModelResponse:
         return ModelResponse(content="ok", tool_calls=[])
 
@@ -165,3 +174,15 @@ async def test_model_adapter_manager_returns_ordered_list():
 
     assert len(adapters) == 1
     assert isinstance(adapters[0], DummyModelAdapter)
+
+
+@pytest.mark.asyncio
+async def test_component_manager_skips_disabled_components():
+    registry = ToolRegistry()
+    entry_points = FakeEntryPoints({ENTRYPOINT_TOOLS: [FakeEntryPoint("dummy", DummyTool)]})
+    manager = ToolManager(registry, entry_points_loader=lambda: entry_points)
+    config = Config.from_dict({"components": {"tool": {"disabled": ["dummy"]}}})
+
+    await manager.load(config)
+
+    assert registry.get_tool("dummy") is None

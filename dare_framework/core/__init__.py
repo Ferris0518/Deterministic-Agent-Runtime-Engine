@@ -1,3 +1,1 @@
-from .errors import *
-from .interfaces import *
-from .models import *
+"""Core infrastructure layer: interfaces, models, runtime, and errors."""

@@ -8,8 +8,9 @@ Fix Bug Skill
 4. Skill 如何调用多个 Tool？
 """
 
-from dare_framework.components import BaseComponent
-from dare_framework.models import Evidence, RunContext, ToolResult, new_id
+from dare_framework.components.base_component import BaseComponent
+from dare_framework.core.models.runtime import RunContext, new_id
+from dare_framework.core.models.tool import Evidence, ToolResult
 
 
 class FixBugSkill(BaseComponent):

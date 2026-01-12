@@ -1,17 +1,36 @@
 from __future__ import annotations
 
-from ..core.interfaces import IContextAssembler
-from ..core.models import AssembledContext, Message, Milestone, MilestoneContext, RunContext
+from ..core.context import IContextAssembler
+from ..core.config import IPromptStore
+from ..core.models.context import AssembledContext, Message, MilestoneContext
+from ..core.models.plan import Milestone
+from ..core.models.runtime import RunContext
+from ..core.prompts import BASE_SYSTEM_PROMPT, BASE_SYSTEM_PROMPT_NAME
 
 
 class BasicContextAssembler(IContextAssembler):
+    def __init__(self, prompt_store: IPromptStore | None = None) -> None:
+        self._prompt_store = prompt_store
+
+    def _get_base_prompt(self) -> str:
+        if self._prompt_store is None:
+            return BASE_SYSTEM_PROMPT
+        try:
+            return self._prompt_store.get_prompt(BASE_SYSTEM_PROMPT_NAME)
+        except KeyError:
+            return BASE_SYSTEM_PROMPT
+
     async def assemble(
         self,
         milestone: Milestone,
         milestone_ctx: MilestoneContext,
         ctx: RunContext,
     ) -> AssembledContext:
-        return AssembledContext(messages=[Message(role="system", content=milestone.description)])
+        messages = [
+            Message(role="system", content=self._get_base_prompt()),
+            Message(role="user", content=milestone_ctx.user_input),
+        ]
+        return AssembledContext(messages=messages)
 
     async def compress(self, context: AssembledContext, max_tokens: int) -> AssembledContext:
         return context

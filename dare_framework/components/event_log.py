@@ -6,8 +6,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from ..core.interfaces import IEventLog
-from ..core.models import Event, EventFilter
+from ..core.runtime import IEventLog
+from ..core.models.event import Event, EventFilter
 
 
 class LocalEventLog(IEventLog):

@@ -3,8 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.errors import ApprovalRequired, ToolAccessDenied, ToolError, ToolNotFoundError
-from ..core.interfaces import IPolicyEngine, IToolRuntime, IToolkit, ISkillRegistry, IValidator
-from ..core.models import DonePredicate, Envelope, RunContext, ToolResult, PolicyDecision
+from ..core.policy import IPolicyEngine
+from ..core.registries import ISkillRegistry
+from ..core.tooling import IToolRuntime, IToolkit
+from ..core.validation import IValidator
+from ..core.models.plan import DonePredicate, Envelope
+from ..core.models.runtime import RunContext
+from ..core.models.tool import PolicyDecision, ToolResult
 
 
 class ToolRuntime(IToolRuntime):

@@ -1,19 +1,16 @@
 import pytest
 
-from dare_framework.components.validator import CompositeValidator
-from dare_framework.components.base_component import BaseComponent
-from dare_framework.core.interfaces import IValidator
-from dare_framework.core.models import (
-    Milestone,
-    ProposedStep,
-    RunContext,
-    ValidationResult,
-    VerifyResult,
-    new_id,
-)
+from dare_framework.components.validators.composite import CompositeValidator
+from dare_framework.components.base_component import ConfigurableComponent
+from dare_framework.core.validation import IValidator
+from dare_framework.core.models.config import ComponentType
+from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.models.results import ExecuteResult
+from dare_framework.core.models.runtime import RunContext, new_id
 
 
-class FailingValidator(BaseComponent, IValidator):
+class FailingValidator(ConfigurableComponent, IValidator):
+    component_type = ComponentType.VALIDATOR
     def __init__(self, order: int, errors: list[str]):
         self._order = order
         self._errors = errors
@@ -25,7 +22,12 @@ class FailingValidator(BaseComponent, IValidator):
     async def validate_plan(self, proposed_steps: list[ProposedStep], ctx: RunContext) -> ValidationResult:
         return ValidationResult(success=False, errors=self._errors)
 
-    async def validate_milestone(self, milestone: Milestone, result, ctx: RunContext) -> VerifyResult:
+    async def validate_milestone(
+        self,
+        milestone: Milestone,
+        result: ExecuteResult,
+        ctx: RunContext,
+    ) -> VerifyResult:
         return VerifyResult(success=False, errors=self._errors, evidence=[])
 
     async def validate_evidence(self, evidence, predicate) -> bool:
@@ -55,7 +57,7 @@ async def test_composite_validator_collects_verify_errors():
 
     result = await composite.validate_milestone(
         Milestone(milestone_id="m1", description="desc", user_input="input"),
-        result=object(),
+        result=ExecuteResult(success=False),
         ctx=RunContext(deps=None, run_id="run"),
     )
 

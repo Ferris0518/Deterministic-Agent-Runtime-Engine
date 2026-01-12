@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from ..core.interfaces import IPlanGenerator
-from ..core.models import Milestone, MilestoneContext, ProposedPlan, ProposedStep, RunContext, new_id
+from ..core.planning import IPlanGenerator
+from ..core.models.context import MilestoneContext
+from ..core.models.plan import Milestone, ProposedPlan, ProposedStep
+from ..core.models.runtime import RunContext, new_id
 
 
 class DeterministicPlanGenerator(IPlanGenerator):

@@ -1,19 +1,22 @@
 import pytest
 
-from dare_framework.checkpoint import FileCheckpoint
-from dare_framework.defaults import DeterministicPlanGenerator, NoOpTool
-from dare_framework.event_log import LocalEventLog
-from dare_framework.models import PlanStep, RuntimeState, Task, new_id
-from dare_framework.registries import SkillRegistry, ToolRegistry
-from dare_framework.runtime import AgentRuntime
-from dare_framework.tool_runtime import ToolRuntime
-from dare_framework.defaults import AllowAllPolicyEngine, SimpleValidator
+from dare_framework.components.checkpoint import FileCheckpoint
+from dare_framework.components.event_log import LocalEventLog
+from dare_framework.components.tools.noop import NoOpTool
+from dare_framework.components.plan_generator import DeterministicPlanGenerator
+from dare_framework.components.policy_engine import AllowAllPolicyEngine
+from dare_framework.components.registries import SkillRegistry, ToolRegistry
+from dare_framework.components.tool_runtime import ToolRuntime
+from dare_framework.components.validators.simple import SimpleValidator
+from dare_framework.core.models.plan import ProposedStep, Task
+from dare_framework.core.models.runtime import RuntimeState, new_id
+from dare_framework.core.runtime_engine import AgentRuntime
 
 
 @pytest.mark.asyncio
 async def test_runtime_transitions_to_stopped(tmp_path):
     plan_generator = DeterministicPlanGenerator(
-        [[PlanStep(step_id=new_id("step"), tool_name="noop", tool_input={})]]
+        [[ProposedStep(step_id=new_id("step"), tool_name="noop", tool_input={})]]
     )
 
     tool_registry = ToolRegistry()
