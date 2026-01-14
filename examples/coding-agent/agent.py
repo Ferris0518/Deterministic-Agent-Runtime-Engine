@@ -7,22 +7,23 @@ Simple Coding Agent Example
 
 from typing import Any, Iterable
 
-from dare_framework import AgentBuilder, FileCheckpoint, LocalEventLog
-from dare_framework.defaults import DeterministicPlanGenerator, MockModelAdapter
-from dare_framework.interfaces import IModelAdapter, IPlanGenerator
-from dare_framework.models import (
-    Milestone,
-    MilestoneContext,
-    PlanStep,
-    ProposedPlan,
-    RunContext,
-    Task,
-    new_id,
-)
+from dare_framework.components.checkpoint import FileCheckpoint
+from dare_framework.components.event_log import LocalEventLog
+from dare_framework.components.plan_generator import DeterministicPlanGenerator
+from dare_framework.composition.builder import AgentBuilder
+from dare_framework.core.context import IModelAdapter
+from dare_framework.core.models.context import MilestoneContext
+from dare_framework.core.models.plan import Milestone, ProposedPlan, ProposedStep, Task
+from dare_framework.core.models.runtime import RunContext, new_id
+from dare_framework.core.planning import IPlanGenerator
 
 from plan_helpers import FIX_HINTS, build_demo_steps, contains_any, read_envelope, seen_plan_tool
-from skills import FixBugSkill
-from tools import EditLineTool, ReadFileTool, RunTestsTool, SearchCodeTool, WriteFileTool
+from skills.fix_bug import FixBugSkill
+from tools.edit_line import EditLineTool
+from tools.read_file import ReadFileTool
+from tools.run_tests import RunTestsTool
+from tools.search_code import SearchCodeTool
+from tools.write_file import WriteFileTool
 
 
 class DemoPlanGenerator(IPlanGenerator):
@@ -44,7 +45,7 @@ class DemoPlanGenerator(IPlanGenerator):
         # Use a plan tool once to demonstrate the plan tool -> replan signal path.
         if contains_any(description, FIX_HINTS) and not seen_plan_tool(milestone_ctx, "fix_bug"):
             steps = [
-                PlanStep(
+                ProposedStep(
                     step_id=new_id("step"),
                     tool_name="fix_bug",
                     tool_input={"goal": raw_description},
@@ -59,7 +60,7 @@ class DemoPlanGenerator(IPlanGenerator):
         steps = build_demo_steps(description, raw_description, self._default_read_path)
         if not steps:
             steps = [
-                PlanStep(
+                ProposedStep(
                     step_id=new_id("step"),
                     tool_name="read_file",
                     tool_input={"path": self._default_read_path},
@@ -89,7 +90,7 @@ class CodingAgent:
         self,
         workspace: str = ".",
         mock_mode: bool = True,
-        plan_steps: Iterable[PlanStep] | None = None,
+        plan_steps: Iterable[ProposedStep] | None = None,
         model_adapter: IModelAdapter | None = None,
         plan_generator: IPlanGenerator | None = None,
         event_log_path: str | None = None,
@@ -108,11 +109,6 @@ class CodingAgent:
             .with_skills(FixBugSkill())
         )
 
-        if event_log_path:
-            builder.with_event_log(LocalEventLog(path=event_log_path))
-        if checkpoint_path:
-            builder.with_checkpoint(FileCheckpoint(path=checkpoint_path))
-
         if mock_mode:
             steps = list(plan_steps) if plan_steps else []
             if plan_generator is not None:
@@ -123,14 +119,13 @@ class CodingAgent:
                 builder.with_plan_generator(DemoPlanGenerator())
             else:
                 fallback = [
-                    PlanStep(
+                    ProposedStep(
                         step_id=new_id("step"),
                         tool_name="read_file",
                         tool_input={"path": "README.md"},
                     )
                 ]
                 builder.with_plan_generator(DeterministicPlanGenerator([fallback]))
-            builder.with_model(MockModelAdapter(["mock"]))
         else:
             if model_adapter is None or plan_generator is None:
                 raise ValueError(
@@ -138,6 +133,11 @@ class CodingAgent:
                 )
             builder.with_model(model_adapter)
             builder.with_plan_generator(plan_generator)
+
+        if event_log_path:
+            builder.with_event_log(LocalEventLog(path=event_log_path))
+        if checkpoint_path:
+            builder.with_checkpoint(FileCheckpoint(path=checkpoint_path))
 
         self._agent = builder.build()
 

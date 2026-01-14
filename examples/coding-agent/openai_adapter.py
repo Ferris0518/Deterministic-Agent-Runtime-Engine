@@ -8,20 +8,14 @@ import urllib.error
 import urllib.request
 from typing import Any, Iterable
 
-from dare_framework.components import BaseComponent, ToolRegistry
-from dare_framework.interfaces import IModelAdapter, IPlanGenerator
-from dare_framework.models import (
-    GenerateOptions,
-    Message,
-    Milestone,
-    MilestoneContext,
-    ModelResponse,
-    PlanStep,
-    ProposedPlan,
-    RunContext,
-    ToolDefinition,
-    new_id,
-)
+from dare_framework.components.base_component import BaseComponent
+from dare_framework.components.registries import ToolRegistry
+from dare_framework.core.context import IModelAdapter
+from dare_framework.core.models.context import GenerateOptions, Message, MilestoneContext, ModelResponse
+from dare_framework.core.models.plan import Milestone, ProposedPlan, ProposedStep
+from dare_framework.core.models.runtime import RunContext, new_id
+from dare_framework.core.models.tool import ToolDefinition
+from dare_framework.core.planning import IPlanGenerator
 
 from plan_helpers import DEFAULT_EDIT_TEXT, read_envelope, seen_plan_tool, test_envelope
 
@@ -127,7 +121,7 @@ class OpenAIModelAdapter(BaseComponent, IModelAdapter):
 
 
 class OpenAIPlanGenerator(IPlanGenerator):
-    """Plan generator that asks OpenAI for a JSON plan and maps it to PlanStep objects."""
+    """Plan generator that asks OpenAI for a JSON plan and maps it to ProposedStep objects."""
 
     def __init__(
         self,
@@ -194,7 +188,7 @@ class OpenAIPlanGenerator(IPlanGenerator):
             )
         if not steps:
             steps = [
-                PlanStep(
+                ProposedStep(
                     step_id=new_id("step"),
                     tool_name="read_file",
                     tool_input={"path": self._default_read_path},
@@ -207,12 +201,12 @@ class OpenAIPlanGenerator(IPlanGenerator):
             attempt=len(plan_attempts),
         )
 
-    def _steps_from_payload(self, data: dict[str, Any]) -> list[PlanStep]:
+    def _steps_from_payload(self, data: dict[str, Any]) -> list[ProposedStep]:
         raw_steps = data.get("steps", [])
         if not isinstance(raw_steps, list):
             return []
 
-        steps: list[PlanStep] = []
+        steps: list[ProposedStep] = []
         for raw_step in raw_steps[: self._max_steps]:
             if not isinstance(raw_step, dict):
                 continue
@@ -242,7 +236,7 @@ class OpenAIPlanGenerator(IPlanGenerator):
                 envelope = test_envelope()
 
             steps.append(
-                PlanStep(
+                ProposedStep(
                     step_id=new_id("step"),
                     tool_name=tool_name,
                     tool_input=tool_input,

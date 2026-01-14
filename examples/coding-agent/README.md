@@ -63,10 +63,11 @@ PYTHONPATH=. python examples/coding-agent/agent.py
 
 ```python
 from agent import CodingAgent
-from dare_framework.models import PlanStep, new_id
+from dare_framework.core.models.plan import ProposedStep
+from dare_framework.core.models.runtime import new_id
 
 steps = [
-    PlanStep(step_id=new_id("step"), tool_name="read_file", tool_input={"path": "README.md"})
+    ProposedStep(step_id=new_id("step"), tool_name="read_file", tool_input={"path": "README.md"})
 ]
 
 agent = CodingAgent(

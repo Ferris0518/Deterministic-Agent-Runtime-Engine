@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import re
 
-from dare_framework.models import (
+from dare_framework.core.models.context import MilestoneContext
+from dare_framework.core.models.plan import (
     DonePredicate,
     Envelope,
     EnvelopeBudget,
     EvidenceCondition,
-    MilestoneContext,
-    PlanStep,
-    new_id,
+    ProposedStep,
 )
+from dare_framework.core.models.runtime import new_id
 
 FIX_HINTS = ("fix", "bug", "修复", "修正")
 SEARCH_HINTS = ("search", "grep", "搜索")
@@ -26,11 +26,11 @@ def build_demo_steps(
     description: str,
     raw_description: str,
     default_read_path: str,
-) -> list[PlanStep]:
-    steps: list[PlanStep] = []
+) -> list[ProposedStep]:
+    steps: list[ProposedStep] = []
     if contains_any(description, SEARCH_HINTS):
         steps.append(
-            PlanStep(
+            ProposedStep(
                 step_id=new_id("step"),
                 tool_name="search_code",
                 tool_input={"pattern": extract_pattern(description)},
@@ -38,7 +38,7 @@ def build_demo_steps(
         )
     if contains_any(description, READ_HINTS) or not steps:
         steps.append(
-            PlanStep(
+            ProposedStep(
                 step_id=new_id("step"),
                 tool_name="read_file",
                 tool_input={"path": default_read_path},
@@ -47,7 +47,7 @@ def build_demo_steps(
         )
     if contains_any(description, EDIT_INSERT_HINTS):
         steps.append(
-            PlanStep(
+            ProposedStep(
                 step_id=new_id("step"),
                 tool_name="edit_line",
                 tool_input={
@@ -60,7 +60,7 @@ def build_demo_steps(
         )
     if contains_any(description, EDIT_DELETE_HINTS):
         steps.append(
-            PlanStep(
+            ProposedStep(
                 step_id=new_id("step"),
                 tool_name="edit_line",
                 tool_input={
@@ -74,7 +74,7 @@ def build_demo_steps(
         )
     if contains_any(description, WRITE_HINTS):
         steps.append(
-            PlanStep(
+            ProposedStep(
                 step_id=new_id("step"),
                 tool_name="write_file",
                 tool_input={
@@ -85,7 +85,7 @@ def build_demo_steps(
         )
     if contains_any(description, TEST_HINTS):
         steps.append(
-            PlanStep(
+            ProposedStep(
                 step_id=new_id("step"),
                 tool_name="run_tests",
                 tool_input={},

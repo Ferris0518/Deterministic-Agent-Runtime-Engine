@@ -4,8 +4,8 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ..core.interfaces import ICheckpoint
-from ..core.models import RuntimeSnapshot, RuntimeState
+from ..core.runtime import ICheckpoint
+from ..core.models.runtime import RuntimeSnapshot, RuntimeState
 
 
 class FileCheckpoint(ICheckpoint):
