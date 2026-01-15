@@ -23,7 +23,9 @@ from dare_framework.core.models.runtime import RunContext
 
 MODEL = "qwen-7b"
 API_KEY = os.getenv("api_sk")
-ENDPOINT = "http://localhost:8000/v1"
+ENDPOINT = "http://127.0.0.1:8000/v1"
+# httpx 0.28 (used by openai client) does not expose allow_env_proxies; set trust_env=False to bypass proxies.
+HTTP_CLIENT_OPTIONS = {"trust_env": False, "proxy": None}
 LOG_LEVEL = os.getenv("CHAT_LOG_LEVEL", "INFO").upper()
 
 logger = logging.getLogger("basic-chat")
@@ -59,7 +61,12 @@ async def main() -> None:
     )
     logger.info(
         "boot basic chat agent",
-        extra={"model": MODEL, "endpoint": ENDPOINT, "api_key_set": bool(API_KEY)},
+        extra={
+            "model": MODEL,
+            "endpoint": ENDPOINT,
+            "api_key_set": bool(API_KEY),
+            "trust_env": HTTP_CLIENT_OPTIONS.get("trust_env", True),
+        },
     )
     history: list[Message] = []
     prompt_store = InMemoryPromptStore()
@@ -68,8 +75,16 @@ async def main() -> None:
     builder = AgentBuilder("basic-chat")
     builder.with_prompt_store(prompt_store)
     builder.with_context_assembler(context_assembler)
-    builder.with_model(OpenAIModelAdapter(model=MODEL, api_key=API_KEY, endpoint=ENDPOINT))
+    builder.with_model(
+        OpenAIModelAdapter(
+            model=MODEL,
+            api_key=API_KEY,
+            endpoint=ENDPOINT,
+            http_client_options=HTTP_CLIENT_OPTIONS,
+        )
+    )
     builder.with_tools(RunCommandTool())
+
     builder.with_hook(StdoutHook())
     agent = builder.build()
 
