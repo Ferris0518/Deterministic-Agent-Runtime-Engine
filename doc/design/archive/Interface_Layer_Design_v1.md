@@ -284,9 +284,9 @@ class ITool(ABC):
         pass
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
+    def risk_level(self) -> RiskLevel:
         """风险级别，默认 READ_ONLY"""
-        return ToolRiskLevel.READ_ONLY
+        return RiskLevel.READ_ONLY
 
     @property
     def requires_approval(self) -> bool:
@@ -370,8 +370,8 @@ class ReadFileTool(ITool):
         }
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
-        return ToolRiskLevel.READ_ONLY
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.READ_ONLY
 
     async def execute(self, input: dict, context: ExecutionContext) -> dict:
         path = input["path"]

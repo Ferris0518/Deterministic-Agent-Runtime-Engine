@@ -10,12 +10,13 @@ from typing import Any, Iterable
 from dare_framework.components.checkpoint import FileCheckpoint
 from dare_framework.components.event_log import LocalEventLog
 from dare_framework.components.plan_generator import DeterministicPlanGenerator
-from dare_framework.composition.builder import AgentBuilder
-from dare_framework.core.context import IContextAssembler, IModelAdapter
-from dare_framework.core.models.context import MilestoneContext
-from dare_framework.core.models.plan import Milestone, ProposedPlan, ProposedStep, Task
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.planning import IPlanGenerator
+from dare_framework.builder import AgentBuilder
+from dare_framework.core.context.protocols import IContextAssembler
+from dare_framework.core.models.model_adapter import IModelAdapter
+from dare_framework.core.context.models import MilestoneContext, RunContext
+from dare_framework.core.plan.models import Milestone, ProposedPlan, ProposedStep, Task
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.plan.plan_generator import IPlanGenerator
 
 from plan_helpers import FIX_HINTS, build_demo_steps, contains_any, read_envelope, seen_plan_tool
 from skills.fix_bug import FixBugSkill
@@ -46,7 +47,7 @@ class DemoPlanGenerator(IPlanGenerator):
         if contains_any(description, FIX_HINTS) and not seen_plan_tool(milestone_ctx, "fix_bug"):
             steps = [
                 ProposedStep(
-                    step_id=new_id("step"),
+                    step_id=generator_id("step"),
                     tool_name="fix_bug",
                     tool_input={"goal": raw_description},
                 )
@@ -61,7 +62,7 @@ class DemoPlanGenerator(IPlanGenerator):
         if not steps:
             steps = [
                 ProposedStep(
-                    step_id=new_id("step"),
+                    step_id=generator_id("step"),
                     tool_name="read_file",
                     tool_input={"path": self._default_read_path},
                     envelope=read_envelope(),
@@ -125,7 +126,7 @@ class CodingAgent:
             else:
                 fallback = [
                     ProposedStep(
-                        step_id=new_id("step"),
+                        step_id=generator_id("step"),
                         tool_name="read_file",
                         tool_input={"path": "README.md"},
                     )

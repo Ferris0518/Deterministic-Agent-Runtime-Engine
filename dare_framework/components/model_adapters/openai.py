@@ -4,11 +4,12 @@ from typing import Any
 import json
 import logging
 
-from ...core.config import IPromptStore
-from ...core.context import IModelAdapter
-from ...core.models.config import ComponentType, Config
-from ...core.models.context import GenerateOptions, Message, ModelResponse
-from ...core.models.tool import ToolDefinition
+from dare_framework.core.models.prompt_store import IPromptStore
+from dare_framework.core.models.model_adapter import IModelAdapter
+from dare_framework.core.config.config import Config
+from ...core.component_type import ComponentType
+from dare_framework.core.models.model_adapter import GenerateOptions, Message, ModelResponse
+from dare_framework.core.tool.models import ToolDefinition
 from ..base_component import ConfigurableComponent
 
 try:

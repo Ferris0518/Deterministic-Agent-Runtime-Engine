@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ...core.runtime import IHook
-from ...core.models.config import ComponentType
-from ...core.models.event import Event
+from dare_framework.core.hook.hook import IHook
+from ...core.component_type import ComponentType
+from dare_framework.core.event.event import Event
 from ..base_component import ConfigurableComponent
 
 

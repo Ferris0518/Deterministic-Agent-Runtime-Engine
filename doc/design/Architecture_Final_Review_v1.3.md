@@ -2325,7 +2325,7 @@ class FixFailingTestSkill(ISkill):
 ### 7.1 开箱即用（零配置）
 
 ```python
-from dare_framework.composition.builder import AgentBuilder
+from dare_framework.builder import AgentBuilder
 
 agent = AgentBuilder.quick_start(
     name="my-agent",
@@ -2338,7 +2338,7 @@ result = await agent.run(Task(description="读取 README.md 并总结"))
 ### 7.2 混合使用（选择性配置）
 
 ```python
-from dare_framework.composition.builder import AgentBuilder
+from dare_framework.builder import AgentBuilder
 from dare_framework.components.memory.in_memory import InMemoryMemory
 from dare_framework.components.model_adapters.mock import MockModelAdapter
 from skills import FixBugSkill
@@ -2362,18 +2362,21 @@ result = await agent.run(task)
 
 ```python
 from dataclasses import dataclass
-from dare_framework.composition.builder import AgentBuilder
-from dare_framework.core.models.runtime import RunContext
+from dare_framework.builder import AgentBuilder
+from dare_framework.core.context.models import RunContext
 from pydantic import BaseModel
+
 
 @dataclass
 class MyDeps:
     workspace: Path
     db: Database
 
+
 class MyOutput(BaseModel):
     files_modified: list[str]
     tests_passed: bool
+
 
 agent: Agent[MyDeps, MyOutput] = (
     AgentBuilder("my-agent")
@@ -2418,11 +2421,12 @@ result = await agent.run(task)  # 从中断处继续
 ```python
 import asyncio
 
-from dare_framework.composition.builder import AgentBuilder
-from dare_framework.core.models.plan import Task
-from dare_framework.core.models.runtime import RuntimeState
-from dare_framework.core.models.tool import PolicyDecision, RiskLevel
-from dare_framework.core.policy import IPolicyEngine
+from dare_framework.builder import AgentBuilder
+from dare_framework.core.plan.models import Task
+from dare_framework.core.models.runtime_state import RuntimeState
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.tool.enums import PolicyDecision
+from dare_framework.core.context.protocols import IPolicyEngine
 
 
 class RiskBasedPolicy(IPolicyEngine):
@@ -2441,6 +2445,7 @@ class RiskBasedPolicy(IPolicyEngine):
     def enforce(self, action: str, resource: str, ctx) -> None:
         return None
 
+
 # 配置策略：所有 NON_IDEMPOTENT 操作需要审批
 policy = RiskBasedPolicy(
     approval_required_for=[
@@ -2454,6 +2459,7 @@ agent = (
     .with_policy_engine(policy)
     .build()
 )
+
 
 # 运行（会在需要时暂停）
 async def run_with_approval():
@@ -2483,6 +2489,7 @@ async def run_with_approval():
         await asyncio.sleep(1)
 
     return await run_task
+
 
 result = await run_with_approval()
 ```

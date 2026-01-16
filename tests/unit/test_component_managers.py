@@ -1,24 +1,25 @@
 import pytest
 
-from dare_framework.composition.component_manager import (
+from dare_framework.composition.base_component_manager import (
     ENTRYPOINT_MODEL_ADAPTERS,
     ENTRYPOINT_TOOLS,
     ENTRYPOINT_VALIDATORS,
-    ModelAdapterManager,
-    ToolManager,
-    ValidatorManager,
 )
+from dare_framework.composition.validator_manager import ValidatorManager
+from dare_framework.composition.model_adapter_manager import ModelAdapterManager
+from dare_framework.composition.tool_manager import ToolManager
 from dare_framework.components.base_component import ConfigurableComponent
 from dare_framework.components.registries import ToolRegistry
-from dare_framework.core.context import IModelAdapter
-from dare_framework.core.tooling import ITool
-from dare_framework.core.validation import IValidator
-from dare_framework.core.models.config import ComponentType, Config
-from dare_framework.core.models.context import ModelResponse
-from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
-from dare_framework.core.models.results import ExecuteResult
-from dare_framework.core.models.runtime import RunContext
-from dare_framework.core.models.tool import ToolRiskLevel, ToolType
+from dare_framework.core.models.model_adapter import IModelAdapter
+from dare_framework.core.tool.protocols import ITool
+from dare_framework.core.validator.validator import IValidator
+from dare_framework.core.config.config import Config
+from dare_framework.core.component_type import ComponentType
+from dare_framework.core.models.model_adapter import ModelResponse
+from dare_framework.core.plan.models import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.context.models import ExecuteResult, RunContext
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.tool.enums import ToolType
 
 
 class FakeEntryPoint:
@@ -97,7 +98,7 @@ class DummyTool(ConfigurableComponent, ITool):
 
     @property
     def risk_level(self):
-        return ToolRiskLevel.READ_ONLY
+        return RiskLevel.READ_ONLY
 
     @property
     def requires_approval(self) -> bool:

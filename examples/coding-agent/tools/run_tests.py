@@ -11,8 +11,12 @@ import asyncio
 
 from dare_framework.components.base_component import BaseComponent
 from dare_framework.core.errors import ToolError
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.models.evidence import Evidence
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.enums import ToolType
 
 
 class RunTestsTool(BaseComponent):
@@ -82,8 +86,8 @@ Use this tool when you need to:
         }
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
-        return ToolRiskLevel.READ_ONLY
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.READ_ONLY
 
     @property
     def tool_type(self) -> ToolType:
@@ -144,7 +148,7 @@ Use this tool when you need to:
                 },
                 evidence=[
                     Evidence(
-                        evidence_id=new_id("evidence"),
+                        evidence_id=generator_id("evidence"),
                         kind="test_report",
                         payload={"success": success},
                     )

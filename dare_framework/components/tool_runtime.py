@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.errors import ApprovalRequired, ToolAccessDenied, ToolError, ToolNotFoundError
-from ..core.policy import IPolicyEngine
-from ..core.registries import ISkillRegistry
-from ..core.tooling import IToolRuntime, IToolkit
-from ..core.validation import IValidator
-from ..core.models.plan import DonePredicate, Envelope
-from ..core.models.runtime import RunContext
-from ..core.models.tool import PolicyDecision, ToolResult
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.context.protocols import IPolicyEngine
+from dare_framework.core.skill.skill_registry import ISkillRegistry
+from dare_framework.core.tool.protocols import IToolRuntime, IToolkit
+from dare_framework.core.validator.validator import IValidator
+from dare_framework.core.plan.models import DonePredicate, Envelope
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.enums import PolicyDecision
 
 
 class ToolRuntime(IToolRuntime):

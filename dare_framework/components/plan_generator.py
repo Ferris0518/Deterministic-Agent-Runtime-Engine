@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from ..core.planning import IPlanGenerator
-from ..core.models.context import MilestoneContext
-from ..core.models.plan import Milestone, ProposedPlan, ProposedStep
-from ..core.models.runtime import RunContext, new_id
+from dare_framework.core.plan.plan_generator import IPlanGenerator
+from dare_framework.core.context.models import MilestoneContext, RunContext
+from dare_framework.core.plan.models import Milestone, ProposedPlan, ProposedStep
+from dare_framework.core.dare_utils import generator_id
 
 
 class DeterministicPlanGenerator(IPlanGenerator):
@@ -25,7 +25,7 @@ class DeterministicPlanGenerator(IPlanGenerator):
         if not steps:
             steps = [
                 ProposedStep(
-                    step_id=new_id("step"),
+                    step_id=generator_id("step"),
                     tool_name="noop",
                     tool_input={},
                     description=milestone.description,

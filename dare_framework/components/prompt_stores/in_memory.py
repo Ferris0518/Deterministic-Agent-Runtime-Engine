@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ...core.config import IPromptStore
-from ...core.models.config import ComponentType
-from ...core.prompts import BASE_SYSTEM_PROMPT, BASE_SYSTEM_PROMPT_NAME
+from dare_framework.core.models.prompt_store import IPromptStore
+from ...core.component_type import ComponentType
+from dare_framework.core.models.prompts import BASE_SYSTEM_PROMPT, BASE_SYSTEM_PROMPT_NAME
 from ..base_component import ConfigurableComponent
 
 

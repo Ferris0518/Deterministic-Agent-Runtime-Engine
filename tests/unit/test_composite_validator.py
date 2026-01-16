@@ -2,11 +2,11 @@ import pytest
 
 from dare_framework.components.validators.composite import CompositeValidator
 from dare_framework.components.base_component import ConfigurableComponent
-from dare_framework.core.validation import IValidator
-from dare_framework.core.models.config import ComponentType
-from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
-from dare_framework.core.models.results import ExecuteResult
-from dare_framework.core.models.runtime import RunContext, new_id
+from dare_framework.core.validator.validator import IValidator
+from dare_framework.core.component_type import ComponentType
+from dare_framework.core.plan.models import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.context.models import ExecuteResult, RunContext
+from dare_framework.core.dare_utils import generator_id
 
 
 class FailingValidator(ConfigurableComponent, IValidator):
@@ -41,7 +41,7 @@ async def test_composite_validator_aggregates_errors_in_order():
     composite = CompositeValidator([validator_high, validator_low])
 
     result = await composite.validate_plan(
-        [ProposedStep(step_id=new_id("step"), tool_name="noop", tool_input={})],
+        [ProposedStep(step_id=generator_id("step"), tool_name="noop", tool_input={})],
         RunContext(deps=None, run_id="run"),
     )
 

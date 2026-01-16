@@ -10,12 +10,13 @@ from typing import Any, Iterable
 
 from dare_framework.components.base_component import BaseComponent
 from dare_framework.components.registries import ToolRegistry
-from dare_framework.core.context import IModelAdapter
-from dare_framework.core.models.context import GenerateOptions, Message, MilestoneContext, ModelResponse
-from dare_framework.core.models.plan import Milestone, ProposedPlan, ProposedStep
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import ToolDefinition
-from dare_framework.core.planning import IPlanGenerator
+from dare_framework.core.models.model_adapter import IModelAdapter
+from dare_framework.core.context.models import MilestoneContext, RunContext
+from dare_framework.core.models.model_adapter import GenerateOptions, Message, ModelResponse
+from dare_framework.core.plan.models import Milestone, ProposedPlan, ProposedStep
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.tool.models import ToolDefinition
+from dare_framework.core.plan.plan_generator import IPlanGenerator
 
 from plan_helpers import DEFAULT_EDIT_TEXT, read_envelope, seen_plan_tool, test_envelope
 
@@ -208,7 +209,7 @@ class OpenAIPlanGenerator(IPlanGenerator):
         if not steps:
             steps = [
                 ProposedStep(
-                    step_id=new_id("step"),
+                    step_id=generator_id("step"),
                     tool_name="read_file",
                     tool_input={"path": self._default_read_path},
                     envelope=read_envelope(),
@@ -256,7 +257,7 @@ class OpenAIPlanGenerator(IPlanGenerator):
 
             steps.append(
                 ProposedStep(
-                    step_id=new_id("step"),
+                    step_id=generator_id("step"),
                     tool_name=tool_name,
                     tool_input=tool_input,
                     description=str(raw_step.get("description") or ""),

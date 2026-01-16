@@ -4,8 +4,9 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ..core.runtime import ICheckpoint
-from ..core.models.runtime import RuntimeSnapshot, RuntimeState
+from dare_framework.core.context.models import RuntimeSnapshot
+from dare_framework.core.context.protocols import ICheckpoint
+from dare_framework.core.models.runtime_state import RuntimeState
 
 
 class FileCheckpoint(ICheckpoint):

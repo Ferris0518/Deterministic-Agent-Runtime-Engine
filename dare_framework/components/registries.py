@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..core.registries import ISkillRegistry, IToolRegistry
-from ..core.tooling import ISkill, ITool, IToolkit
-from ..core.models.tool import ToolDefinition, ToolRiskLevel, ToolType
+from dare_framework.core.skill.skill_registry import ISkillRegistry
+from dare_framework.core.skill.skill import ISkill
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.tool.enums import ToolType
+from dare_framework.core.tool.models import ToolDefinition
+from dare_framework.core.tool.protocols import ITool, IToolkit, IToolRegistry
 
 
 class ToolRegistry(IToolkit, IToolRegistry):
@@ -77,10 +80,10 @@ class SkillRegistry(ISkillRegistry):
             self.register_skill(skill)
 
 
-def _normalize_risk(value) -> ToolRiskLevel:
-    if isinstance(value, ToolRiskLevel):
+def _normalize_risk(value) -> RiskLevel:
+    if isinstance(value, RiskLevel):
         return value
     try:
-        return ToolRiskLevel(value)
+        return RiskLevel(value)
     except ValueError:
-        return ToolRiskLevel.READ_ONLY
+        return RiskLevel.READ_ONLY

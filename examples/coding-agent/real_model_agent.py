@@ -21,10 +21,10 @@ import os
 from pathlib import Path
 from typing import Iterable
 
-from dare_framework.core.context import IContextAssembler
-from dare_framework.core.models.context import AssembledContext, Message, MilestoneContext
-from dare_framework.core.models.plan import Milestone
-from dare_framework.core.models.runtime import RunContext
+from dare_framework.core.context.models import AssembledContext, MilestoneContext, RunContext
+from dare_framework.core.context.protocols import IContextAssembler
+from dare_framework.core.models.model_adapter import Message
+from dare_framework.core.plan.models import Milestone
 
 from agent import CodingAgent
 from openai_adapter import OpenAIModelAdapter, OpenAIPlanGenerator, tool_definitions_from_tools

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import re
 
-from dare_framework.core.models.context import MilestoneContext
-from dare_framework.core.models.plan import (
+from dare_framework.core.context.models import MilestoneContext
+from dare_framework.core.plan.models import (
     DonePredicate,
     Envelope,
     EnvelopeBudget,
     EvidenceCondition,
     ProposedStep,
 )
-from dare_framework.core.models.runtime import new_id
+from dare_framework.core.dare_utils import generator_id
 
 FIX_HINTS = ("fix", "bug", "修复", "修正")
 SEARCH_HINTS = ("search", "grep", "搜索")
@@ -31,7 +31,7 @@ def build_demo_steps(
     if contains_any(description, SEARCH_HINTS):
         steps.append(
             ProposedStep(
-                step_id=new_id("step"),
+                step_id=generator_id("step"),
                 tool_name="search_code",
                 tool_input={"pattern": extract_pattern(description)},
             )
@@ -39,7 +39,7 @@ def build_demo_steps(
     if contains_any(description, READ_HINTS) or not steps:
         steps.append(
             ProposedStep(
-                step_id=new_id("step"),
+                step_id=generator_id("step"),
                 tool_name="read_file",
                 tool_input={"path": default_read_path},
                 envelope=read_envelope(),
@@ -48,7 +48,7 @@ def build_demo_steps(
     if contains_any(description, EDIT_INSERT_HINTS):
         steps.append(
             ProposedStep(
-                step_id=new_id("step"),
+                step_id=generator_id("step"),
                 tool_name="edit_line",
                 tool_input={
                     "path": default_read_path,
@@ -61,7 +61,7 @@ def build_demo_steps(
     if contains_any(description, EDIT_DELETE_HINTS):
         steps.append(
             ProposedStep(
-                step_id=new_id("step"),
+                step_id=generator_id("step"),
                 tool_name="edit_line",
                 tool_input={
                     "path": default_read_path,
@@ -75,7 +75,7 @@ def build_demo_steps(
     if contains_any(description, WRITE_HINTS):
         steps.append(
             ProposedStep(
-                step_id=new_id("step"),
+                step_id=generator_id("step"),
                 tool_name="write_file",
                 tool_input={
                     "path": "notes.txt",
@@ -86,7 +86,7 @@ def build_demo_steps(
     if contains_any(description, TEST_HINTS):
         steps.append(
             ProposedStep(
-                step_id=new_id("step"),
+                step_id=generator_id("step"),
                 tool_name="run_tests",
                 tool_input={},
                 envelope=test_envelope(),

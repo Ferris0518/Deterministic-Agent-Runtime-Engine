@@ -1,4 +1,4 @@
-from dare_framework.components.config_provider import LayeredConfigProvider
+from dare_framework.components.config_providers.layered_config_provider import LayeredConfigProvider
 
 
 def test_layered_config_merge_precedence():

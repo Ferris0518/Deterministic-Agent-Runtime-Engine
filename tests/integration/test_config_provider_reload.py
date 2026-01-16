@@ -1,8 +1,8 @@
-from dare_framework.components.config_providers.static import StaticConfigProvider
+from dare_framework.components.config_providers.default_config_provider import DefaultConfigProvider
 
 
 def test_static_config_provider_reload_returns_new_config():
-    provider = StaticConfigProvider({"llm": {"model": "m1"}})
+    provider = DefaultConfigProvider({"llm": {"model": "m1"}})
 
     current = provider.current()
     reloaded = provider.reload()

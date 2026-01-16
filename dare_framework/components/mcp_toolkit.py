@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..core.mcp import IMCPClient
-from ..core.tooling import ITool
-from ..core.models.config import ComponentType
-from ..core.models.runtime import RunContext
-from ..core.models.tool import ToolDefinition, ToolResult, ToolRiskLevel
+from dare_framework.core.mcp.mcp_client import IMCPClient
+from dare_framework.core.component_type import ComponentType
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.tool.models import ToolDefinition, ToolResult
+from dare_framework.core.tool.protocols import ITool
 from .base_component import ConfigurableComponent
 
 
@@ -80,7 +81,7 @@ class MCPToolkit:
 
 
 def _coerce_risk(tool_def: ToolDefinition) -> ToolDefinition:
-    if isinstance(tool_def.risk_level, ToolRiskLevel):
+    if isinstance(tool_def.risk_level, RiskLevel):
         return tool_def
     return ToolDefinition(
         name=tool_def.name,
@@ -88,7 +89,7 @@ def _coerce_risk(tool_def: ToolDefinition) -> ToolDefinition:
         input_schema=tool_def.input_schema,
         output_schema=tool_def.output_schema,
         tool_type=tool_def.tool_type,
-        risk_level=ToolRiskLevel.READ_ONLY,
+        risk_level=RiskLevel.READ_ONLY,
         requires_approval=tool_def.requires_approval,
         timeout_seconds=tool_def.timeout_seconds,
         produces_assertions=tool_def.produces_assertions,

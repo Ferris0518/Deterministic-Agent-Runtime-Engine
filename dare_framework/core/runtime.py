@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Generic, Protocol, TypeVar, runtime_checkable
+from typing import Generic, Protocol, TypeVar
 
-from .models.event import Event, EventFilter
-from .models.plan import Task
-from .models.results import RunResult
-from .models.runtime import RuntimeSnapshot, RuntimeState
-from .composition import IConfigurableComponent
+from dare_framework.core.plan.models import Task
+from dare_framework.core.context.models import RunResult
+from .models.runtime_state import RuntimeState
 
 DepsT = TypeVar("DepsT")
 OutputT = TypeVar("OutputT")
@@ -41,45 +39,4 @@ class IRuntime(Protocol, Generic[DepsT, OutputT]):
 
     def get_state(self) -> RuntimeState:
         """Return the current runtime lifecycle state."""
-        ...
-
-
-class IEventLog(Protocol):
-    """Append-only event log for audit and WORM guarantees (Architecture_Final_Review_v1.3)."""
-
-    async def append(self, event: Event) -> str:
-        """Append an event and return its event identifier or hash."""
-        ...
-
-    async def query(self, filter: EventFilter | None = None, offset: int = 0, limit: int = 100) -> list[Event]:
-        """Query a window of events for replay or inspection."""
-        ...
-
-    async def verify_chain(self) -> bool:
-        """Verify hash-chain integrity for audit purposes."""
-        ...
-
-    async def get_checkpoint_events(self, checkpoint_id: str) -> list[Event]:
-        """Return events associated with a checkpoint."""
-        ...
-
-
-class ICheckpoint(Protocol):
-    """Snapshot storage for runtime state across context windows (Architecture_Final_Review_v1.3)."""
-
-    async def save(self, snapshot: RuntimeSnapshot) -> str:
-        """Persist a runtime snapshot and return checkpoint id."""
-        ...
-
-    async def load(self, checkpoint_id: str) -> RuntimeSnapshot:
-        """Load a previously saved runtime snapshot."""
-        ...
-
-
-@runtime_checkable
-class IHook(IConfigurableComponent, Protocol):
-    """Lifecycle hooks for observing runtime events (Interface_Layer_Design_v1.1)."""
-
-    async def on_event(self, event: Event) -> None:
-        """Handle a runtime event for logging or metrics."""
         ...

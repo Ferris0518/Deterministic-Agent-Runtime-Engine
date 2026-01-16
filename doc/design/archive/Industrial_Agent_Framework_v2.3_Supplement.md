@@ -82,7 +82,7 @@ class TrustBoundary:
     """信任边界强制器"""
     
     @staticmethod
-    def derive_risk_level(tool_name: str, tool_registry: ToolRegistry) -> ToolRiskLevel:
+    def derive_risk_level(tool_name: str, tool_registry: ToolRegistry) -> RiskLevel:
         """
         risk_level 只能从 Tool Registry 派生
         Plan 里写的 risk_level 会被忽略/覆盖
@@ -966,7 +966,7 @@ class ToolContract:
     output_schema: JSONSchema
     
     # 行为契约
-    risk_level: ToolRiskLevel
+    risk_level: RiskLevel
     idempotent: bool
     deterministic: bool
     

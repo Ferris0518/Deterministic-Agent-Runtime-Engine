@@ -4,9 +4,13 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from ...core.models.config import ComponentType
-from ...core.models.runtime import RunContext, new_id
-from ...core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from ...core.component_type import ComponentType
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.context.models import RunContext
+from ...core.risk_level import RiskLevel
+from ...core.models.evidence import Evidence
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.enums import ToolType
 from ..base_component import ConfigurableComponent
 
 
@@ -45,8 +49,8 @@ class RunCommandTool(ConfigurableComponent):
         }
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
-        return ToolRiskLevel.NON_IDEMPOTENT_EFFECT
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.NON_IDEMPOTENT_EFFECT
 
     @property
     def tool_type(self) -> ToolType:
@@ -105,7 +109,7 @@ class RunCommandTool(ConfigurableComponent):
                 "exit_code": proc.returncode,
             },
             error=None if proc.returncode == 0 else "command failed",
-            evidence=[Evidence(evidence_id=new_id("evidence"), kind="command", payload={"cwd": str(cwd)})],
+            evidence=[Evidence(evidence_id=generator_id("evidence"), kind="command", payload={"cwd": str(cwd)})],
         )
         return result
 

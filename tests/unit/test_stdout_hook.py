@@ -1,7 +1,7 @@
 import pytest
 
 from dare_framework.components.hooks.stdout import StdoutHook
-from dare_framework.core.models.event import Event
+from dare_framework.core.event.event import Event
 
 
 @pytest.mark.asyncio

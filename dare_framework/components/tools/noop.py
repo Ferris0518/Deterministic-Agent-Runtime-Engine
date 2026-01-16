@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from ...core.models.config import ComponentType
-from ...core.models.runtime import RunContext, new_id
-from ...core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from ...core.component_type import ComponentType
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.context.models import RunContext
+from ...core.risk_level import RiskLevel
+from ...core.models.evidence import Evidence
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.enums import ToolType
 from ..base_component import ConfigurableComponent
 
 
@@ -27,7 +31,7 @@ class NoOpTool(ConfigurableComponent):
 
     @property
     def risk_level(self):
-        return ToolRiskLevel.READ_ONLY
+        return RiskLevel.READ_ONLY
 
     @property
     def tool_type(self) -> ToolType:
@@ -53,5 +57,5 @@ class NoOpTool(ConfigurableComponent):
         return ToolResult(
             success=True,
             output={"status": "ok"},
-            evidence=[Evidence(evidence_id=new_id("evidence"), kind="noop", payload={"status": "ok"})],
+            evidence=[Evidence(evidence_id=generator_id("evidence"), kind="noop", payload={"status": "ok"})],
         )

@@ -3,11 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ...core.mcp import IMCPClient
-from ...core.models.config import ComponentType
-from ...core.models.mcp import Resource, ResourceContent
-from ...core.models.runtime import RunContext, new_id
-from ...core.models.tool import Evidence, ToolDefinition, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.core.mcp.mcp_client import IMCPClient
+from ...core.component_type import ComponentType
+from dare_framework.core.mcp.mcp import Resource, ResourceContent
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.context.models import RunContext
+from ...core.risk_level import RiskLevel
+from ...core.models.evidence import Evidence
+from dare_framework.core.tool.models import ToolDefinition, ToolResult
+from dare_framework.core.tool.enums import ToolType
 from ..base_component import ConfigurableComponent
 
 try:
@@ -82,7 +86,7 @@ class BaseMCPClient(ConfigurableComponent, IMCPClient):
                 input_schema=getattr(tool, "inputSchema", {}) or {},
                 output_schema=getattr(tool, "outputSchema", {}) or {},
                 tool_type=ToolType.ATOMIC,
-                risk_level=ToolRiskLevel.READ_ONLY,
+                risk_level=RiskLevel.READ_ONLY,
                 requires_approval=False,
                 timeout_seconds=30,
                 produces_assertions=[],
@@ -101,7 +105,7 @@ class BaseMCPClient(ConfigurableComponent, IMCPClient):
         output = structured if structured is not None else {"content": text_chunks}
         evidence = [
             Evidence(
-                evidence_id=new_id("evidence"),
+                evidence_id=generator_id("evidence"),
                 kind="mcp_result",
                 payload=output or {},
             )

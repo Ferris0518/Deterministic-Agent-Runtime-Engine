@@ -2,8 +2,11 @@ import pytest
 
 from dare_framework.components.composite_tool import CompositeTool
 from dare_framework.components.registries import ToolRegistry
-from dare_framework.core.interfaces import ITool
-from dare_framework.core.models import RunContext, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.tool.enums import ToolType
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.protocols import ITool
 
 
 class GoodTool(ITool):
@@ -27,7 +30,7 @@ class GoodTool(ITool):
 
     @property
     def risk_level(self):
-        return ToolRiskLevel.READ_ONLY
+        return RiskLevel.READ_ONLY
 
     @property
     def tool_type(self):

@@ -1,17 +1,17 @@
 import pytest
 
-from dare_framework.composition.builder import AgentBuilder
-from dare_framework.composition.component_manager import ENTRYPOINT_MODEL_ADAPTERS, ENTRYPOINT_VALIDATORS
+from dare_framework.builder import AgentBuilder
+from dare_framework.composition import base_component_manager as component_manager
+from dare_framework.composition.base_component_manager import ENTRYPOINT_MODEL_ADAPTERS, ENTRYPOINT_VALIDATORS
 from dare_framework.components.validators.composite import CompositeValidator
 from dare_framework.components.base_component import ConfigurableComponent
-from dare_framework.core.context import IModelAdapter
-from dare_framework.core.validation import IValidator
-from dare_framework.core.models.config import ComponentType
-from dare_framework.core.models.context import ModelResponse
-from dare_framework.core.models.plan import Milestone, ProposedStep, ValidationResult, VerifyResult
-from dare_framework.core.models.results import ExecuteResult
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.composition import component_manager
+from dare_framework.core.models.model_adapter import IModelAdapter
+from dare_framework.core.validator.validator import IValidator
+from dare_framework.core.component_type import ComponentType
+from dare_framework.core.models.model_adapter import ModelResponse
+from dare_framework.core.plan.models import Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.context.models import ExecuteResult, RunContext
+from dare_framework.core.dare_utils import generator_id
 
 
 class FakeEntryPoint:
@@ -69,7 +69,7 @@ async def test_builder_loads_discovered_components(monkeypatch):
     assert isinstance(builder._model_adapter, StubAdapter)
 
     result = await builder._validator.validate_plan(
-        [ProposedStep(step_id=new_id("step"), tool_name="noop", tool_input={})],
+        [ProposedStep(step_id=generator_id("step"), tool_name="noop", tool_input={})],
         RunContext(deps=None, run_id="run"),
     )
     assert result.success is False

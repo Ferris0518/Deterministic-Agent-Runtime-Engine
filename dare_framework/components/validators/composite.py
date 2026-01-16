@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from ...core.validation import IValidator
-from ...core.models.config import ComponentType
-from ...core.models.plan import DonePredicate, Milestone, ProposedStep, ValidationResult, VerifyResult
-from ...core.models.results import ExecuteResult
-from ...core.models.runtime import RunContext
-from ...core.models.tool import Evidence
+from dare_framework.core.validator.validator import IValidator
+from ...core.component_type import ComponentType
+from ...core.plan.models import DonePredicate, Milestone, ProposedStep, ValidationResult, VerifyResult
+from dare_framework.core.context.models import ExecuteResult, RunContext
+from ...core.models.evidence import Evidence
 from ..base_component import ConfigurableComponent
 
 

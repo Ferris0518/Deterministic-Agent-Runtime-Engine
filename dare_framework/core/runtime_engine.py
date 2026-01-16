@@ -2,43 +2,49 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic
 from uuid import uuid4
 
-from ..components.checkpoint import FileCheckpoint
-from ..components.context_assembler import BasicContextAssembler
-from ..components.event_log import LocalEventLog
-from ..components.policy_engine import AllowAllPolicyEngine
-from ..components.remediator import NoOpRemediator
-from ..components.validators.simple import SimpleValidator
-from .context import IContextAssembler, IModelAdapter
-from .planning import IPlanGenerator, IRemediator
-from .policy import IPolicyEngine
-from .runtime import ICheckpoint, IEventLog, IHook, IRuntime
-from .tooling import IToolRuntime
-from .validation import IValidator
-from .models.config import Config
-from .models.context import Message, MilestoneContext, SessionContext
-from .models.event import Event
-from .models.plan import (
+from dare_framework.core.component import DepsT, OutputT
+from dare_framework.core.config.config import Config
+from dare_framework.core.context.models import (
+    ExecuteResult,
+    MilestoneContext,
+    MilestoneResult,
+    MilestoneSummary,
+    RunContext,
+    RunResult,
+    RuntimeSnapshot,
+    SessionContext,
+    SessionSummary,
+)
+from dare_framework.core.context.protocols import ICheckpoint, IContextAssembler, IPolicyEngine
+from dare_framework.core.event.event import Event
+from dare_framework.core.event_log import IEventLog
+from dare_framework.core.hook.hook import IHook
+from dare_framework.core.models.model_adapter import IModelAdapter, Message
+from dare_framework.core.models.runtime_state import RuntimeState
+from dare_framework.core.plan.models import (
     Milestone,
     PlanBudget,
-    ProposedStep,
     ProposedPlan,
+    ProposedStep,
     Task,
     ValidatedPlan,
     ValidatedStep,
     VerifyResult,
 )
-from .models.results import ExecuteResult, MilestoneResult, MilestoneSummary, RunResult, SessionSummary
-from .models.runtime import RunContext, RuntimeSnapshot, RuntimeState
-from .models.tool import RiskLevel, StepType, ToolErrorRecord, ToolResult
+from dare_framework.core.plan.plan_generator import IPlanGenerator
+from dare_framework.core.remediator.remediator import IRemediator
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.runtime import IRuntime
+from dare_framework.core.tool.enums import StepType
+from dare_framework.core.tool.models import ToolErrorRecord, ToolResult
+from dare_framework.core.tool.protocols import IToolRuntime
+from dare_framework.core.validator.validator import IValidator
 
-DepsT = TypeVar("DepsT")
-OutputT = TypeVar("OutputT")
 
-
-@dataclass
+@dataclass(frozen=True)
 class PlanLoopOutcome:
     validated_plan: ValidatedPlan | None
     reflection: str | None
@@ -46,29 +52,37 @@ class PlanLoopOutcome:
 
 
 class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
+    """Five-loop runtime state machine (Architecture_Final_Review_v1.3).
+
+    Note: this module lives in `core/` and MUST NOT import default component implementations
+    from `components/`. The composition layer (e.g. AgentBuilder) is responsible for selecting
+    concrete implementations.
+    """
+
     def __init__(
         self,
+        *,
         tool_runtime: IToolRuntime,
         plan_generator: IPlanGenerator,
-        model_adapter: IModelAdapter | None = None,
-        validator: IValidator | None = None,
-        policy_engine: IPolicyEngine | None = None,
-        remediator: IRemediator | None = None,
-        context_assembler: IContextAssembler | None = None,
-        event_log: IEventLog | None = None,
-        checkpoint: ICheckpoint | None = None,
+        model_adapter: IModelAdapter | None,
+        validator: IValidator,
+        policy_engine: IPolicyEngine,
+        remediator: IRemediator,
+        context_assembler: IContextAssembler,
+        event_log: IEventLog,
+        checkpoint: ICheckpoint,
         hooks: list[IHook] | None = None,
         config: Config | None = None,
     ) -> None:
         self._tool_runtime = tool_runtime
         self._plan_generator = plan_generator
         self._model_adapter = model_adapter
-        self._validator = validator or SimpleValidator()
-        self._policy_engine = policy_engine or AllowAllPolicyEngine()
-        self._remediator = remediator or NoOpRemediator()
-        self._context_assembler = context_assembler or BasicContextAssembler()
-        self._event_log = event_log or LocalEventLog()
-        self._checkpoint = checkpoint or FileCheckpoint()
+        self._validator = validator
+        self._policy_engine = policy_engine
+        self._remediator = remediator
+        self._context_assembler = context_assembler
+        self._event_log = event_log
+        self._checkpoint = checkpoint
         self._hooks = list(hooks) if hooks else []
         self._config = config or Config()
         self._state = RuntimeState.READY
@@ -89,7 +103,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         self._run_id = uuid4().hex
         await self._log_event("runtime.run", {"task_id": task.task_id, "run_id": self._run_id})
 
-        previous_summary = None
+        previous_summary: SessionSummary | None = None
         if isinstance(task.context.get("previous_session_summary"), SessionSummary):
             previous_summary = task.context.get("previous_session_summary")
 
@@ -352,7 +366,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         milestone_ctx: MilestoneContext,
         ctx: RunContext,
     ) -> ExecuteResult:
-        outputs: list = []
+        outputs: list[ToolResult] = []
         errors: list[str] = []
         for step in plan.steps:
             if self._tool_runtime.is_plan_tool(step.tool_name):
@@ -427,7 +441,7 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         milestone_ctx: MilestoneContext,
         ctx: RunContext,
     ) -> ExecuteResult:
-        outputs: list = []
+        outputs: list[ToolResult] = []
         errors: list[str] = []
         assembled = await self._context_assembler.assemble(milestone, milestone_ctx, ctx)
         ctx.metadata["context_messages"] = assembled.messages
@@ -580,3 +594,4 @@ class AgentRuntime(IRuntime[DepsT, OutputT], Generic[DepsT, OutputT]):
         if isinstance(name, str):
             return name
         return hook.__class__.__name__
+

@@ -118,7 +118,7 @@ class EventLog:
 **不能一刀切要求所有工具都有补偿函数。按风险级别强制不同合同。**
 
 ```python
-class ToolRiskLevel(Enum):
+class RiskLevel(Enum):
     """工具风险分级"""
     READ_ONLY = "read_only"                      # 只读，无副作用
     IDEMPOTENT_WRITE = "idempotent_write"        # 幂等写入
@@ -128,23 +128,23 @@ class ToolRiskLevel(Enum):
 
 # 不同风险级别的合同要求
 TOOL_CONTRACTS = {
-    ToolRiskLevel.READ_ONLY: {
+    RiskLevel.READ_ONLY: {
         "required": ["permission_scope", "timeout", "output_schema"],
         "optional": ["retry_policy"],
         "forbidden": ["compensate_fn"],  # 不需要
     },
-    ToolRiskLevel.IDEMPOTENT_WRITE: {
+    RiskLevel.IDEMPOTENT_WRITE: {
         "required": ["permission_scope", "timeout", "output_schema", 
                      "idempotency_key_fn", "retry_policy"],
         "optional": ["compensate_fn"],
     },
-    ToolRiskLevel.NON_IDEMPOTENT_EFFECT: {
+    RiskLevel.NON_IDEMPOTENT_EFFECT: {
         "required": ["permission_scope", "timeout", "output_schema",
                      "dry_run_fn", "human_approval_required"],  # 必须两阶段
         "optional": [],
         "max_auto_retry": 0,  # 不能自动重试
     },
-    ToolRiskLevel.COMPENSATABLE: {
+    RiskLevel.COMPENSATABLE: {
         "required": ["permission_scope", "timeout", "output_schema",
                      "idempotency_key_fn", "retry_policy", "compensate_fn"],
         "optional": [],
@@ -174,16 +174,16 @@ class ToolRuntime:
             raise PermissionDenied()
         
         # 2. 根据风险级别分流
-        if tool.risk_level == ToolRiskLevel.READ_ONLY:
+        if tool.risk_level == RiskLevel.READ_ONLY:
             return await self._execute_readonly(tool, input, context)
         
-        elif tool.risk_level == ToolRiskLevel.IDEMPOTENT_WRITE:
+        elif tool.risk_level == RiskLevel.IDEMPOTENT_WRITE:
             return await self._execute_idempotent(tool, input, context)
         
-        elif tool.risk_level == ToolRiskLevel.NON_IDEMPOTENT_EFFECT:
+        elif tool.risk_level == RiskLevel.NON_IDEMPOTENT_EFFECT:
             return await self._execute_two_phase(tool, input, context)
         
-        elif tool.risk_level == ToolRiskLevel.COMPENSATABLE:
+        elif tool.risk_level == RiskLevel.COMPENSATABLE:
             return await self._execute_with_saga(tool, input, context)
     
     async def _execute_two_phase(self, tool: Tool, input: dict, context: ExecutionContext) -> ToolResult:

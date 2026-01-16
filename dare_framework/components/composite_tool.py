@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.errors import ToolError
-from ..core.interfaces import IToolkit
-from ..core.models import Evidence, RunContext, ToolDefinition, ToolResult, ToolRiskLevel, ToolType, new_id
-from .base_component import BaseComponent
+from dare_framework.components.base_component import BaseComponent
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.errors import ToolError
+from dare_framework.core.models.evidence import Evidence
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.tool.enums import ToolType
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.protocols import IToolkit
 
 
 class CompositeTool(BaseComponent):
@@ -42,7 +47,7 @@ class CompositeTool(BaseComponent):
 
     @property
     def risk_level(self):
-        return ToolRiskLevel.READ_ONLY
+        return RiskLevel.READ_ONLY
 
     @property
     def tool_type(self) -> ToolType:
@@ -116,7 +121,7 @@ class CompositeTool(BaseComponent):
         # Add a composite evidence marker for traceability.
         evidence.append(
             Evidence(
-                evidence_id=new_id("evidence"),
+                evidence_id=generator_id("evidence"),
                 kind="composite_tool",
                 payload={"name": self._name, "steps": [s.get("tool") for s in self._steps]},
             )

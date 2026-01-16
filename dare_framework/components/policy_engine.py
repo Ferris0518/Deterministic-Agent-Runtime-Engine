@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ..core.policy import IPolicyEngine
-from ..core.models.plan import Milestone, ValidatedPlan
-from ..core.models.runtime import RunContext
-from ..core.models.tool import PolicyDecision
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.context.protocols import IPolicyEngine
+from dare_framework.core.plan.models import Milestone, ValidatedPlan
+from dare_framework.core.tool.enums import PolicyDecision
 
 
 class AllowAllPolicyEngine(IPolicyEngine):

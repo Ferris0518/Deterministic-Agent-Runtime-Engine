@@ -10,16 +10,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dare_framework.components.context_assembler import BasicContextAssembler
+from dare_framework.components.base_context_assembler import BasicContextAssembler
 from dare_framework.components.hooks.stdout import StdoutHook
 from dare_framework.components.model_adapters.openai import OpenAIModelAdapter
 from dare_framework.components.prompt_stores.in_memory import InMemoryPromptStore
 from dare_framework.components.tools.run_command import RunCommandTool
-from dare_framework.composition.builder import AgentBuilder
-from dare_framework.core.context import IContextAssembler
-from dare_framework.core.models.context import AssembledContext, Message, MilestoneContext
-from dare_framework.core.models.plan import Milestone, Task
-from dare_framework.core.models.runtime import RunContext
+from dare_framework.builder import AgentBuilder
+from dare_framework.core.context.models import AssembledContext, MilestoneContext, RunContext
+from dare_framework.core.context.protocols import IContextAssembler
+from dare_framework.core.models.model_adapter import Message
+from dare_framework.core.plan.models import Milestone, Task
 
 MODEL = "qwen-7b"
 API_KEY = os.getenv("api_sk")

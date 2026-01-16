@@ -11,8 +11,12 @@ from pathlib import Path
 
 from dare_framework.components.base_component import BaseComponent
 from dare_framework.core.errors import ToolError
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.core.dare_utils import generator_id
+from dare_framework.core.context.models import RunContext
+from dare_framework.core.risk_level import RiskLevel
+from dare_framework.core.models.evidence import Evidence
+from dare_framework.core.tool.models import ToolResult
+from dare_framework.core.tool.enums import ToolType
 
 
 class WriteFileTool(BaseComponent):
@@ -83,8 +87,8 @@ Parent directories will be created automatically.
         }
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
-        return ToolRiskLevel.IDEMPOTENT_WRITE
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.IDEMPOTENT_WRITE
 
     @property
     def tool_type(self) -> ToolType:
@@ -137,7 +141,7 @@ Parent directories will be created automatically.
             },
             evidence=[
                 Evidence(
-                    evidence_id=new_id("evidence"),
+                    evidence_id=generator_id("evidence"),
                     kind="file_write",
                     payload={"path": str(abs_path), "created": created},
                 )

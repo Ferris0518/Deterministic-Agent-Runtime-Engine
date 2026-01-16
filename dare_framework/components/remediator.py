@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from ..core.planning import IRemediator
-from ..core.models.context import MilestoneContext
-from ..core.models.plan import VerifyResult
-from ..core.models.runtime import RunContext
-from ..core.models.tool import ToolErrorRecord
+from dare_framework.core.remediator.remediator import IRemediator
+from dare_framework.core.context.models import MilestoneContext, RunContext
+from dare_framework.core.plan.models import VerifyResult
+from dare_framework.core.tool.models import ToolErrorRecord
 
 
 class NoOpRemediator(IRemediator):

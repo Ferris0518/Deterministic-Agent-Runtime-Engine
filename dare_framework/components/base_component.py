@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from ..core.composition import IComponentRegistrar
-from ..core.config import IPromptStore
-from ..core.models.config import ComponentType, Config
+from dare_framework.core.component_register import IComponentRegistrar
+from dare_framework.core.models.prompt_store import IPromptStore
+from dare_framework.core.config.config import Config
+from dare_framework.core.component_type import ComponentType
 
 
 class BaseComponent:

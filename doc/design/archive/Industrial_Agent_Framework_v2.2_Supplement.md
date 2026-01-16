@@ -153,7 +153,7 @@ class WorkspaceSafetyGate:
         返回WritePermit，包含回滚句柄
         没有回滚句柄 = 拒绝执行
         """
-        if tool.risk_level == ToolRiskLevel.READ_ONLY:
+        if tool.risk_level == RiskLevel.READ_ONLY:
             return WritePermit(allowed=True, rollback_handle=None)
         
         # 选择回滚策略
@@ -164,7 +164,7 @@ class WorkspaceSafetyGate:
             rollback_handle = await provider.create_handle(tool, input)
         except RollbackNotPossible as e:
             # 无法创建回滚句柄
-            if tool.risk_level >= ToolRiskLevel.NON_IDEMPOTENT_EFFECT:
+            if tool.risk_level >= RiskLevel.NON_IDEMPOTENT_EFFECT:
                 # 高风险操作必须有回滚能力
                 return WritePermit(
                     allowed=False, 
@@ -335,7 +335,7 @@ class ToolRuntime:
         # ... 权限检查等 ...
         
         # 写操作必须先获取WritePermit
-        if tool.risk_level >= ToolRiskLevel.IDEMPOTENT_WRITE:
+        if tool.risk_level >= RiskLevel.IDEMPOTENT_WRITE:
             permit = await self.safety_gate.prepare_write(tool, input, context)
             
             if not permit.allowed:
@@ -414,7 +414,7 @@ class PlanStep:
     # 工具信息
     tool: str
     tool_input: dict
-    risk_level: ToolRiskLevel
+    risk_level: RiskLevel
     
     # 前置条件
     preconditions: List[Precondition]
@@ -530,19 +530,19 @@ class RiskGateValidator:
     """风险门禁校验器：高风险步骤必须有回滚+审批"""
     
     RISK_REQUIREMENTS = {
-        ToolRiskLevel.NON_IDEMPOTENT_EFFECT: {
+        RiskLevel.NON_IDEMPOTENT_EFFECT: {
             "rollback_possible": True,        # 必须可回滚
             "human_approval": True,           # 必须人工审批
             "two_phase": True,                # 必须两阶段
             "postchecks_required": True,      # 必须有后置检查
         },
-        ToolRiskLevel.COMPENSATABLE: {
+        RiskLevel.COMPENSATABLE: {
             "rollback_possible": True,
             "human_approval": False,          # 可选
             "two_phase": False,
             "postchecks_required": True,
         },
-        ToolRiskLevel.IDEMPOTENT_WRITE: {
+        RiskLevel.IDEMPOTENT_WRITE: {
             "rollback_possible": False,       # 可选（幂等可重试）
             "human_approval": False,
             "two_phase": False,
@@ -807,7 +807,7 @@ class ApprovalRequest:
     # 审批内容
     action_to_approve: str
     action_params_hash: str
-    risk_level: ToolRiskLevel
+    risk_level: RiskLevel
     impact_summary: str
     
     # 证据
@@ -988,7 +988,7 @@ class ApprovalRequirements:
     
     # 基于风险级别的默认要求
     DEFAULTS = {
-        ToolRiskLevel.NON_IDEMPOTENT_EFFECT: {
+        RiskLevel.NON_IDEMPOTENT_EFFECT: {
             "min_approvers": 1,
             "required_roles": ["operator"],
             "ttl_seconds": 3600,  # 1小时
