@@ -7,7 +7,7 @@
 > **v2.0 相对 v1.3 的核心变更**：
 > 1. **架构内核化**：引入 `Layer 0: Kernel`（不可变基础设施），把“策略/算法”整体下放为可插拔组件。
 > 2. **上下文工程优先**：用 `IContextManager + IResourceManager` 显式管理“什么进入上下文窗口”（注意力资源）。
-> 3. **协议与实现分离**：引入 `Layer 1.5: Protocol Adapters`（MCP/A2A/A2UI），Kernel 协议无关。
+> 3. **协议与实现分离**：引入 `Layer 1: Protocol Adapters`（MCP/A2A/A2UI），Kernel 协议无关。
 > 4. **长任务原生支持**：将 Checkpoint/暂停/恢复收敛到 `IExecutionControl`（中断控制面）。
 > 5. **安全边界升级**：以 `ISecurityBoundary` 统一表达 **Trust + Policy + Sandbox**，但保留 trust/policy 子模块以避免“巨石接口”。
 
@@ -54,7 +54,7 @@ v2 将其重排为更“OS-kernel”式的 4 层：
                                 │
                                 ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Layer 1.5: Protocol Adapters（协议适配层）                                     │
+│ Layer 1: Protocol Adapters（协议适配层）                                       │
 │  - MCP / A2A / A2UI ...  (协议 = 如何发现/调用能力；不是能力本身)               │
 └──────────────────────────────────────────────────────────────────────────────┘
                                 │
@@ -150,7 +150,7 @@ DARE 的边界可以用一句话描述：
 v2 里我们建议把这四层统一为一个“责任主体”：
 
 > `IContextManager` 是“上下文工程的总负责人”，对外承诺：**决定什么进入上下文窗口，并给出可解释的理由/预算消耗**。  
-> 但它不需要亲自实现所有层的细节，而是协调 Layer 2/1.5 的组件：
+> 但它不需要亲自实现所有层的细节，而是协调 Layer 2/1 的组件：
 > - Layer 4（调度）：`IContextManager` 自己负责路由/compaction/handoff 的“决策逻辑”
 > - Layer 3（组装）：通过 `IContextStrategy` 插件化实现 prompt/tool schemas/skills 注入
 > - Layer 2（检索）：通过 `IMemory`/`IRetriever` 等组件实现
@@ -160,7 +160,7 @@ v2 里我们建议把这四层统一为一个“责任主体”：
 
 ### 2.2 v2 的映射（建议）
 
-| 上下文工程层 | 责任主体（Kernel） | 主要实现来源（Layer 2 / 1.5） | 典型产物 |
+| 上下文工程层 | 责任主体（Kernel） | 主要实现来源（Layer 2 / 1） | 典型产物 |
 |---:|---|---|---|
 | L4 Orchestration | `IContextManager` + `IExecutionControl` | 多 Agent 路由器、compactor、handoff 策略 | `SessionSummary` / `MilestoneSummary` / `ContextPacket` |
 | L3 Assembly | `IContextManager` | `IContextStrategy`, `IPromptStore`, tool schema minimizer | `AssembledPrompt` |
@@ -598,7 +598,7 @@ class IExtensionPoint(Protocol):
 
 ---
 
-### 4.2 Layer 1.5: Protocol Adapters（协议适配层）
+### 4.2 Layer 1: Protocol Adapters（协议适配层）
 
 > 你最后那张图的启发点非常关键：  
 > **Protocol Adapter 负责“把协议世界翻译成 Kernel 世界”**（canonical types），而不是把协议直接渗透进 Kernel。
@@ -865,7 +865,7 @@ agent = (
 - “什么进入上下文窗口”是 AI-native 的核心资源分配问题
 - 它跨越五层循环，是系统级控制面，不能散落在实现里
 
-### 决策 3：为什么引入 `Layer 1.5 Protocol Adapters`？
+### 决策 3：为什么引入 `Layer 1 Protocol Adapters`？
 - 协议是“通信标准”，不是“能力实现”
 - 让 Kernel 协议无关，避免 MCP/A2A/A2UI 绑死内核
 
@@ -886,10 +886,12 @@ agent = (
 | `IContextAssembler` | `IContextManager`（+ `IContextStrategy`） | 上下文工程统一责任主体 |
 | `IToolRuntime` | `IToolGateway` | 从“执行总线”升级为“系统调用边界” |
 | `TrustBoundary` + `IPolicyEngine` | `ISecurityBoundary`（组合式） | trust/policy/sandbox 统一边界 |
-| `IMCPClient` | `Layer 1.5 MCPAdapter`（或 provider） | 协议适配与能力来源分离 |
+| `IMCPClient` | `Layer 1 MCPAdapter`（或 provider） | 协议适配与能力来源分离 |
 
 ### A.2 遗留问题（需要在 v2 迭代中定稿）
 1. `CapabilityType.AGENT/UI` 是否纳入 v2.0 首发，或作为后续扩展？
 2. `IContextManager.ensure_index()` 的责任边界：仅检查/触发，还是包含增量更新策略？
 3. `SandboxSpec` 的最小可用定义：先以“高风险操作必须 HITL + 默认拒绝”替代真正 sandbox，是否可接受？
 4. 多 Session Context 加载策略：`previous_session_summary` 之外，如何选择/压缩/解释性记录历史 SessionSummary？
+5. 事件模型定稿：Event 类型枚举、payload schema、correlation ids（task/session/milestone/tool），以及 replay 的最小要求。
+6. Envelope/DonePredicate 的来源：由 `Skill`/`Tool` 定义、还是由 `IValidator.validate_plan` 派生，二者如何组合与审计？
