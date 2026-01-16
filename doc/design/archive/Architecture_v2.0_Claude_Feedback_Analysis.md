@@ -4,7 +4,7 @@
 
 ## 一、核心反馈回顾
 
-Claude 的两份反馈文档 (`claude_review_1.3_feedbck.md` 和 `claude_1.3_fb_2.md`) 提出了一个核心隐喻：**Agent Framework as OS Kernel**。
+Claude 的两份反馈文档（`Architecture_v1.3_Claude_Feedback_1.md`、`Architecture_v1.3_Claude_Feedback_2.md`）提出了一个核心隐喻：**Agent Framework as OS Kernel**。
 
 ### 1. 核心观点
 - **最小内核原则**：Framework 应该像 OS 内核一样，只负责最底层的调度、资源分配、IO 和安全，而不包含具体的业务策略（如具体的规划算法）。
