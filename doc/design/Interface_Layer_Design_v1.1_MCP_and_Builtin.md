@@ -303,10 +303,10 @@ class MCPTool(ITool):
         return self._def.input_schema
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
+    def risk_level(self) -> RiskLevel:
         # MCP 工具默认需要更高的警惕
         # 可以通过配置覆盖
-        return ToolRiskLevel.IDEMPOTENT_WRITE
+        return RiskLevel.IDEMPOTENT_WRITE
 
     async def execute(self, input: dict, context: ExecutionContext) -> Any:
         return await self._client.call_tool(

@@ -513,7 +513,7 @@ class AgentRuntime(IRuntime, Generic[DepsT, OutputT]):
 |-----|------|------------|
 | `TrustBoundary` | LLM 输出不可信，安全字段从 Registry 派生 | ✅ |
 | `IEventLog` + Hash Chain | Append-only 审计日志，防篡改 | ✅ |
-| `ToolRiskLevel` | 工具风险分级（READ_ONLY → COMPENSATABLE） | ✅ |
+| `RiskLevel` | 工具风险分级（READ_ONLY → COMPENSATABLE） | ✅ |
 | `IPolicyEngine` | 策略即代码，权限控制 | ✅ |
 | `Envelope` + `DonePredicate` | WorkUnit 执行边界和完成条件 | ✅ |
 | 五个可验证闭环 | 每个安全机制都可证明 | ✅ |

@@ -10,9 +10,11 @@ from typing import Any
 import asyncio
 
 from dare_framework.components.base_component import BaseComponent
-from dare_framework.core.errors import ToolError
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.contracts.evidence import Evidence
+from dare_framework.contracts.ids import generator_id
+from dare_framework.contracts.risk import RiskLevel
+from dare_framework.contracts.run_context import RunContext
+from dare_framework.contracts.tool import ToolResult, ToolType
 
 
 class RunTestsTool(BaseComponent):
@@ -82,8 +84,8 @@ Use this tool when you need to:
         }
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
-        return ToolRiskLevel.READ_ONLY
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.READ_ONLY
 
     @property
     def tool_type(self) -> ToolType:
@@ -144,7 +146,7 @@ Use this tool when you need to:
                 },
                 evidence=[
                     Evidence(
-                        evidence_id=new_id("evidence"),
+                        evidence_id=generator_id("evidence"),
                         kind="test_report",
                         payload={"success": success},
                     )
@@ -165,7 +167,7 @@ Use this tool when you need to:
                 evidence=[],
             )
         except OSError as exc:
-            raise ToolError(code="TEST_RUN_FAILED", message=str(exc)) from exc
+            return ToolResult(success=False, output={"success": False, "output": str(exc)}, error=str(exc), evidence=[])
 
     def _parse_pytest_output(self, output: str) -> dict:
         return {

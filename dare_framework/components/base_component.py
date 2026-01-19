@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from ..core.composition import IComponentRegistrar
-from ..core.config import IPromptStore
-from ..core.models.config import ComponentType, Config
+from dare_framework.components.plugin_system.component import IComponentRegistrar
+from dare_framework.components.plugin_system.component_type import ComponentType
 
 
 class BaseComponent:
@@ -17,8 +16,8 @@ class BaseComponent:
 
     async def init(
         self,
-        config: Config | None = None,
-        prompts: IPromptStore | None = None,
+        config: object | None = None,
+        prompts: object | None = None,
     ) -> None:
         return None
 

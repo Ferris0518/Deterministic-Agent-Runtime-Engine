@@ -1,1 +1,5 @@
-"""Model adapter implementations loaded via the `dare_framework.model_adapters` entry point group."""
+"""Model adapter implementations (Layer 2)."""
+
+from .openai_adapter import OpenAIModelAdapter
+
+__all__ = ["OpenAIModelAdapter"]

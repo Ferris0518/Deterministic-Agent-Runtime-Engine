@@ -1,1 +1,1 @@
-"""Skill implementations loaded via the `dare_framework.skills` entry point group."""
+"""Skill components (Layer 2), loaded via the `dare_framework.v2.skills` entrypoint group."""

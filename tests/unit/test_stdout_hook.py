@@ -1,34 +1,50 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from dare_framework.components.hooks.stdout import StdoutHook
-from dare_framework.core.models.event import Event
 
 
-@pytest.mark.asyncio
-async def test_stdout_hook_renders_tool_invoke(capsys):
+def test_stdout_hook_renders_plan_validated():
     hook = StdoutHook()
-    event = Event(event_type="tool.invoke", payload={"tool": "run_command", "args": {"cmd": "ls"}})
+    payload = {
+        "event_type": "plan.validated",
+        "payload": {"plan_description": "Test Plan"},
+    }
 
-    await hook.on_event(event)
+    with patch("sys.stdout", new_callable=MagicMock) as mock_stdout:
+        hook(payload)
+        # Check if print was called with the expected string
+        # print() appends a newline by default, so we check for exact match or startswith
+        calls = [call.args[0] for call in mock_stdout.write.call_args_list if call.args[0] != "\n"]
+        assert any(" [DARE:PLAN] Test Plan" in f" {c}" for c in calls)
 
-    output = capsys.readouterr().out
-    assert "[tool.invoke]" in output
-    assert "run_command" in output
-    assert "cmd" in output
 
-
-@pytest.mark.asyncio
-async def test_stdout_hook_renders_model_response(capsys):
+def test_stdout_hook_renders_model_response():
     hook = StdoutHook()
-    event = Event(
-        event_type="model.response",
-        payload={"content": "ok", "tool_calls": [{"name": "run_command", "arguments": {}}]},
-    )
+    payload = {
+        "event_type": "model.response",
+        "payload": {
+            "content": "Thinking...",
+            "tool_calls": [{"name": "test_tool", "arguments": '{"arg": 1}'}],
+        },
+    }
 
-    await hook.on_event(event)
+    with patch("sys.stdout", new_callable=MagicMock) as mock_stdout:
+        hook(payload)
+        output = "".join(call.args[0] for call in mock_stdout.write.call_args_list)
+        assert "[DARE:MODEL] Thinking..." in output
+        assert "[DARE:TOOL_CALL] test_tool" in output
 
-    output = capsys.readouterr().out
-    assert "[model]" in output
-    assert "ok" in output
-    assert "[model.tools]" in output
-    assert "run_command" in output
+
+def test_stdout_hook_renders_tool_result():
+    hook = StdoutHook()
+    payload = {
+        "event_type": "tool.result",
+        "payload": {"capability_id": "test_tool", "success": True},
+    }
+
+    with patch("sys.stdout", new_callable=MagicMock) as mock_stdout:
+        hook(payload)
+        output = "".join(call.args[0] for call in mock_stdout.write.call_args_list)
+        assert "[DARE:TOOL_RESULT] test_tool -> SUCCESS" in output

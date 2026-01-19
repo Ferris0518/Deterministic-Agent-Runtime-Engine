@@ -1,1 +1,8 @@
-"""Hook implementations loaded via the `dare_framework.hooks` entry point group."""
+"""Hook components (Layer 2)."""
+
+from .protocols import IHook
+from .noop import NoOpHook
+from .stdout import StdoutHook
+
+__all__ = ["IHook", "NoOpHook", "StdoutHook"]
+

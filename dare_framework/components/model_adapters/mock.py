@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ...core.context import IModelAdapter
-from ...core.models.config import ComponentType
-from ...core.models.context import Message, ModelResponse
+from dare_framework.contracts.model import IModelAdapter, Message, ModelResponse
+from dare_framework.components.plugin_system.component_type import ComponentType
 from ..base_component import ConfigurableComponent
 
 

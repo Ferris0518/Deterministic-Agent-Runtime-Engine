@@ -721,7 +721,7 @@ class ToolRuntime(IToolRuntime):
 |-----|------|------------|
 | `TrustBoundary` | LLM 输出不可信，安全字段从 Registry 派生 | ✅ |
 | `IEventLog` + Hash Chain | Append-only 审计日志，防篡改 | ✅ |
-| `ToolRiskLevel` | 工具风险分级（READ_ONLY → COMPENSATABLE） | ✅ |
+| `RiskLevel` | 工具风险分级（READ_ONLY → COMPENSATABLE） | ✅ |
 | `IPolicyEngine` | 策略即代码，权限控制 | ✅ |
 | `Plan Loop` + `Remediate` | 计划生成隔离 + Verify 失败反思 | ✅ |
 | `Envelope` + `DonePredicate` | WorkUnit 执行边界和完成条件 | ✅ |

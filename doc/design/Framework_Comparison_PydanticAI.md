@@ -278,7 +278,7 @@ DARE：
 └── 补偿操作支持
 ```
 
-**我们应该保持**：`ToolRiskLevel`, `requires_approval`, `compensate()`
+**我们应该保持**：`RiskLevel`, `requires_approval`, `compensate()`
 
 ### 4.4 验证闭环（DARE 独有）
 
@@ -575,7 +575,7 @@ class StreamEvent:
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │  信任边界        TrustBoundary, LLM 输出不可信                    │   │
 │  │  审计日志        EventLog + Hash Chain + WORM                    │   │
-│  │  工具风险级别    ToolRiskLevel + 审批机制                         │   │
+│  │  工具风险级别    RiskLevel + 审批机制                         │   │
 │  │  策略引擎        PolicyEngine                                    │   │
 │  │  验证闭环        五个可验证闭环                                   │   │
 │  └─────────────────────────────────────────────────────────────────┘   │

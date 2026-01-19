@@ -1,1 +1,5 @@
-"""DARE Framework package. Import submodules for concrete implementations."""
+"""DARE Framework package: Deterministic Agent Runtime Engine."""
+
+from .builder import Agent, AgentBuilder
+
+__all__ = ["Agent", "AgentBuilder"]

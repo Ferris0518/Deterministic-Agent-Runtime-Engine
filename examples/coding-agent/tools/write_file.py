@@ -10,9 +10,11 @@ from typing import Any
 from pathlib import Path
 
 from dare_framework.components.base_component import BaseComponent
-from dare_framework.core.errors import ToolError
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.contracts.evidence import Evidence
+from dare_framework.contracts.ids import generator_id
+from dare_framework.contracts.risk import RiskLevel
+from dare_framework.contracts.run_context import RunContext
+from dare_framework.contracts.tool import ToolResult, ToolType
 
 
 class WriteFileTool(BaseComponent):
@@ -83,8 +85,8 @@ Parent directories will be created automatically.
         }
 
     @property
-    def risk_level(self) -> ToolRiskLevel:
-        return ToolRiskLevel.IDEMPOTENT_WRITE
+    def risk_level(self) -> RiskLevel:
+        return RiskLevel.IDEMPOTENT_WRITE
 
     @property
     def tool_type(self) -> ToolType:
@@ -115,7 +117,10 @@ Parent directories will be created automatically.
         mode = input.get("mode", "overwrite")
         create_dirs = input.get("create_dirs", True)
 
-        abs_path = self._resolve_path(path)
+        try:
+            abs_path = self._resolve_path(path)
+        except ValueError as exc:
+            return ToolResult(success=False, output={}, error=str(exc), evidence=[])
         created = not abs_path.exists()
 
         if create_dirs:
@@ -126,7 +131,7 @@ Parent directories will be created automatically.
             with open(abs_path, write_mode, encoding="utf-8") as handle:
                 bytes_written = handle.write(content)
         except OSError as exc:
-            raise ToolError(code="WRITE_FAILED", message=str(exc), retryable=False) from exc
+            return ToolResult(success=False, output={}, error=str(exc), evidence=[])
 
         return ToolResult(
             success=True,
@@ -137,7 +142,7 @@ Parent directories will be created automatically.
             },
             evidence=[
                 Evidence(
-                    evidence_id=new_id("evidence"),
+                    evidence_id=generator_id("evidence"),
                     kind="file_write",
                     payload={"path": str(abs_path), "created": created},
                 )
@@ -168,5 +173,5 @@ Parent directories will be created automatically.
     def _resolve_path(self, path: str) -> Path:
         resolved = (self._workspace / path).resolve()
         if not resolved.is_relative_to(self._workspace):
-            raise ToolError(code="PATH_TRAVERSAL", message=f"Path traversal attempt: {path}")
+            raise ValueError(f"path traversal attempt: {path}")
         return resolved

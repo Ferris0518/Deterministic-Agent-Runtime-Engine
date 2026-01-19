@@ -1,1 +1,6 @@
-"""MCP client implementations loaded via the `dare_framework.mcp_clients` entry point group."""
+"""MCP client components (Layer 2)."""
+
+from .protocols import IMCPClient
+
+__all__ = ["IMCPClient"]
+

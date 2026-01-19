@@ -12,9 +12,11 @@ from typing import Any
 from pathlib import Path
 
 from dare_framework.components.base_component import BaseComponent
-from dare_framework.core.errors import ToolError
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import Evidence, ToolResult, ToolRiskLevel, ToolType
+from dare_framework.contracts.evidence import Evidence
+from dare_framework.contracts.ids import generator_id
+from dare_framework.contracts.risk import RiskLevel
+from dare_framework.contracts.run_context import RunContext
+from dare_framework.contracts.tool import ToolResult, ToolType
 
 
 class ReadFileTool(BaseComponent):  # (ITool)
@@ -111,8 +113,8 @@ The file path should be relative to the workspace root.
     # 验证：这些属性是否足够？
 
     @property
-    def risk_level(self):  # -> ToolRiskLevel
-        return ToolRiskLevel.READ_ONLY
+    def risk_level(self):  # -> RiskLevel
+        return RiskLevel.READ_ONLY
 
     @property
     def tool_type(self) -> ToolType:
@@ -161,24 +163,18 @@ The file path should be relative to the workspace root.
         end_line = input.get("end_line")
 
         # 路径安全检查（框架应该已经做过，这里是防御性编程）
-        abs_path = self._resolve_path(path)
+        try:
+            abs_path = self._resolve_path(path)
+        except ValueError as exc:
+            return ToolResult(success=False, output={}, error=str(exc), evidence=[])
 
         # 读取文件
         try:
             content = abs_path.read_text(encoding=encoding)
         except FileNotFoundError:
-            # 验证：错误如何表达？
-            raise ToolError(
-                code="FILE_NOT_FOUND",
-                message=f"File not found: {path}",
-                retryable=False,
-            )
+            return ToolResult(success=False, output={}, error=f"file not found: {path}", evidence=[])
         except PermissionError:
-            raise ToolError(
-                code="PERMISSION_DENIED",
-                message=f"Permission denied: {path}",
-                retryable=False,
-            )
+            return ToolResult(success=False, output={}, error=f"permission denied: {path}", evidence=[])
 
         # 处理行范围
         lines = content.splitlines(keepends=True)
@@ -205,7 +201,7 @@ The file path should be relative to the workspace root.
             },
             evidence=[
                 Evidence(
-                    evidence_id=new_id("evidence"),
+                    evidence_id=generator_id("evidence"),
                     kind="file_read",
                     payload={"path": str(abs_path)},
                 )
@@ -217,9 +213,5 @@ The file path should be relative to the workspace root.
         # 防止路径遍历攻击
         resolved = (self._workspace / path).resolve()
         if not resolved.is_relative_to(self._workspace):
-            raise ToolError(
-                code="PATH_TRAVERSAL",
-                message=f"Path traversal attempt: {path}",
-                retryable=False,
-            )
+            raise ValueError(f"path traversal attempt: {path}")
         return resolved

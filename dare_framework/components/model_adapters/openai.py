@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 import json
+import logging
 
-from ...core.config import IPromptStore
-from ...core.context import IModelAdapter
-from ...core.models.config import ComponentType, Config
-from ...core.models.context import GenerateOptions, Message, ModelResponse
-from ...core.models.tool import ToolDefinition
+from dare_framework.config.config import Config
+from dare_framework.contracts.model import GenerateOptions, IModelAdapter, Message, ModelResponse
+from dare_framework.contracts.tool import ToolDefinition
+from dare_framework.components.plugin_system.component_type import ComponentType
 from ..base_component import ConfigurableComponent
 
 try:
@@ -23,20 +23,23 @@ except ImportError:  # pragma: no cover - handled at runtime
 
 class OpenAIModelAdapter(ConfigurableComponent, IModelAdapter):
     component_type = ComponentType.MODEL_ADAPTER
+    _logger = logging.getLogger(__name__)
 
     def __init__(
         self,
         model: str | None = None,
         api_key: str | None = None,
         endpoint: str | None = None,
+        http_client_options: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
         self._endpoint = endpoint
+        self._http_client_options = dict(http_client_options or {})
         self._extra: dict[str, Any] = {}
         self._client = None
 
-    async def init(self, config: Config | None = None, prompts: IPromptStore | None = None) -> None:
+    async def init(self, config: Config | None = None, prompts: object | None = None) -> None:
         if config is not None:
             llm = config.llm
             if self._model is None:
@@ -45,7 +48,15 @@ class OpenAIModelAdapter(ConfigurableComponent, IModelAdapter):
                 self._api_key = llm.api_key
             if self._endpoint is None:
                 self._endpoint = llm.endpoint
-            self._extra = dict(llm.extra)
+            if not self._http_client_options:
+                llm_http_client = llm.extra.get("http_client_options") or llm.extra.get("http_client")
+                if isinstance(llm_http_client, dict):
+                    self._http_client_options = dict(llm_http_client)
+            self._extra = {
+                key: value
+                for key, value in llm.extra.items()
+                if key not in {"http_client_options", "http_client"}
+            }
         self._client = self._build_client()
 
     async def generate(
@@ -58,6 +69,7 @@ class OpenAIModelAdapter(ConfigurableComponent, IModelAdapter):
         client = self._apply_options(client, options)
         if tools:
             client = client.bind_tools([self._tool_definition(tool) for tool in tools])
+        self._log_client_config(client)
         response = await client.ainvoke(self._to_langchain_messages(messages))
         tool_calls = self._extract_tool_calls(response)
         return ModelResponse(content=response.content or "", tool_calls=tool_calls)
@@ -84,9 +96,19 @@ class OpenAIModelAdapter(ConfigurableComponent, IModelAdapter):
         kwargs: dict[str, Any] = {"model": model}
         if self._api_key:
             kwargs["api_key"] = self._api_key
+        elif self._endpoint:
+            # Local/self-hosted endpoints still require a key in OpenAI client; use a placeholder.
+            kwargs["api_key"] = "dummy-key"
         if self._endpoint:
             kwargs["base_url"] = self._endpoint
         kwargs.update(self._extra)
+
+        sync_client, async_client = self._build_http_clients()
+        if sync_client is not None:
+            kwargs["http_client"] = sync_client
+        if async_client is not None:
+            kwargs["http_async_client"] = async_client
+
         return ChatOpenAI(**kwargs)
 
     def _to_langchain_messages(self, messages: list[Message]) -> list[Any]:
@@ -162,6 +184,40 @@ class OpenAIModelAdapter(ConfigurableComponent, IModelAdapter):
                 }
             )
         return normalized
+
+    def _log_client_config(self, client: Any) -> None:
+        if not self._logger.isEnabledFor(logging.DEBUG):
+            return
+        base_url = (
+            getattr(getattr(client, "client", None), "base_url", None)
+            or getattr(client, "base_url", None)
+            or getattr(getattr(client, "_client", None), "base_url", None)
+        )
+        model_name = getattr(client, "model_name", None) or getattr(client, "model", None)
+        self._logger.debug(
+            "OpenAIModelAdapter generate call",
+            extra={
+                "model": model_name or self._model,
+                "base_url": str(base_url) if base_url else None,
+                "has_api_key": bool(self._api_key),
+                "extra": bool(self._extra),
+            },
+        )
+
+    def _build_http_clients(self) -> tuple[Any | None, Any | None]:
+        if not self._http_client_options:
+            return None, None
+        try:
+            import httpx
+        except Exception:
+            return None, None
+        try:
+            opts = dict(self._http_client_options)
+            sync_client = httpx.Client(**opts)
+            async_client = httpx.AsyncClient(**opts)
+            return sync_client, async_client
+        except Exception:
+            return None, None
 
     def _tool_definition(self, tool: ToolDefinition) -> dict[str, Any]:
         parameters = tool.input_schema or {"type": "object", "properties": {}}

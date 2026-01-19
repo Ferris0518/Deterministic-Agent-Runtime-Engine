@@ -174,7 +174,7 @@ class ValidatedStep:
     tool: str
     tool_input: Dict[str, Any]          # 已消毒
     # 以下字段从 ToolRegistry 派生，可信
-    risk_level: 'ToolRiskLevel'         # 从 Registry 派生
+    risk_level: 'RiskLevel'         # 从 Registry 派生
     requires_approval: bool             # 从 Registry 派生
     rollback_capable: bool              # 从 Registry 派生
     produces_assertions: List['Assertion']  # 从 Registry 派生
@@ -629,7 +629,7 @@ tools:
 ### 4.1 六步编排
 
 ```python
-# core/runtime.py
+# core/dare_utils.py
 
 from typing import Optional
 from enum import Enum
@@ -1082,7 +1082,7 @@ class IPolicyEngine(ABC):
     def check_tool(
         self,
         tool: str,
-        risk_level: 'ToolRiskLevel',
+        risk_level: 'RiskLevel',
         context: 'RunState',
     ) -> 'PolicyResult':
         """检查工具调用策略"""
@@ -1155,7 +1155,7 @@ from typing import List, Dict, Any, Optional, Callable
 from enum import Enum
 
 
-class ToolRiskLevel(Enum):
+class RiskLevel(Enum):
     """工具风险级别"""
     READ_ONLY = 1
     IDEMPOTENT_WRITE = 2
@@ -1182,7 +1182,7 @@ class ToolContract:
     version: str = "1.0.0"
     
     # 风险与权限（框架强制，不允许 LLM 修改）
-    risk_level: ToolRiskLevel = ToolRiskLevel.READ_ONLY
+    risk_level: RiskLevel = RiskLevel.READ_ONLY
     requires_approval: bool = False
     rollback_capable: bool = False
     
@@ -1234,12 +1234,12 @@ class ToolRegistry(IToolRegistry):
     def _validate_contract(self, contract: ToolContract) -> None:
         """校验契约一致性"""
         # 非幂等工具不能自动重试
-        if contract.risk_level == ToolRiskLevel.NON_IDEMPOTENT_EFFECT:
+        if contract.risk_level == RiskLevel.NON_IDEMPOTENT_EFFECT:
             if contract.max_retries > 0:
                 raise ContractError("NON_IDEMPOTENT tools cannot have auto-retry")
         
         # 可补偿工具必须有补偿函数
-        if contract.risk_level == ToolRiskLevel.COMPENSATABLE:
+        if contract.risk_level == RiskLevel.COMPENSATABLE:
             if not contract.compensate_fn:
                 raise ContractError("COMPENSATABLE tools must have compensate_fn")
 ```
@@ -1267,7 +1267,7 @@ class ExecutionContext:
     """执行上下文"""
     run_id: str
     step_id: str
-    risk_level: ToolRiskLevel
+    risk_level: RiskLevel
     requires_approval: bool
 
 
@@ -1642,7 +1642,7 @@ class RetryPolicy:
             return False
         if attempt >= contract.max_retries:
             return False
-        if contract.risk_level == ToolRiskLevel.NON_IDEMPOTENT_EFFECT:
+        if contract.risk_level == RiskLevel.NON_IDEMPOTENT_EFFECT:
             return False  # 非幂等永不重试
         return True
 ```

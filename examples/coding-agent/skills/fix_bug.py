@@ -9,8 +9,10 @@ Fix Bug Skill
 """
 
 from dare_framework.components.base_component import BaseComponent
-from dare_framework.core.models.runtime import RunContext, new_id
-from dare_framework.core.models.tool import Evidence, ToolResult
+from dare_framework.contracts.evidence import Evidence
+from dare_framework.contracts.ids import generator_id
+from dare_framework.contracts.run_context import RunContext
+from dare_framework.contracts.tool import ToolResult
 
 
 class FixBugSkill(BaseComponent):
@@ -44,7 +46,7 @@ This skill will:
             error="not_implemented",
             evidence=[
                 Evidence(
-                    evidence_id=new_id("evidence"),
+                    evidence_id=generator_id("evidence"),
                     kind="skill_stub",
                     payload={"name": "fix_bug"},
                 )

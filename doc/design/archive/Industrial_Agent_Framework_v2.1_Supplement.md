@@ -575,17 +575,17 @@ class ToolRegistrationChecker:
                 errors.append(f"Forbidden field present: {field}")
         
         # 风险级别特定检查
-        if tool.risk_level == ToolRiskLevel.IDEMPOTENT_WRITE:
+        if tool.risk_level == RiskLevel.IDEMPOTENT_WRITE:
             # 检查幂等键函数签名
             if not self._check_idempotency_fn_signature(tool.idempotency_key_fn):
                 errors.append("idempotency_key_fn must accept (input: dict) -> str")
         
-        if tool.risk_level == ToolRiskLevel.NON_IDEMPOTENT_EFFECT:
+        if tool.risk_level == RiskLevel.NON_IDEMPOTENT_EFFECT:
             # 检查重试策略
             if tool.retry_policy and tool.retry_policy.max_retries > 0:
                 errors.append("NON_IDEMPOTENT tools cannot have auto-retry")
         
-        if tool.risk_level == ToolRiskLevel.COMPENSATABLE:
+        if tool.risk_level == RiskLevel.COMPENSATABLE:
             # 检查补偿函数
             if not self._check_compensate_fn_signature(tool.compensate_fn):
                 errors.append("compensate_fn must accept (original_input, original_output) -> bool")
