@@ -8,12 +8,13 @@ from uuid import uuid4
 from dare_framework.contracts.model import IModelAdapter, Message
 from dare_framework.contracts.risk import RiskLevel
 from dare_framework.contracts.tool import ToolDefinition, ToolResult, ToolType
-from dare_framework.core.budget import ResourceType
-from dare_framework.core.context import ContextStage, RuntimeStateView
-from dare_framework.core.execution_control import IExecutionControl
-from dare_framework.core.hook import HookPhase, IExtensionPoint
-from dare_framework.core.event import IEventLog
-from dare_framework.core.orchestrator import ILoopOrchestrator
+from dare_framework.core.budget.models import ResourceType
+from dare_framework.core.context.models import ContextStage, RuntimeStateView
+from dare_framework.core.execution_control.protocols import IExecutionControl
+from dare_framework.core.event.protocols import IEventLog
+from dare_framework.core.hook.models import HookPhase
+from dare_framework.core.hook.protocols import IExtensionPoint
+from dare_framework.core.orchestrator.protocols import ILoopOrchestrator
 from dare_framework.core.plan.envelope import DonePredicate, Envelope, ToolLoopRequest
 from dare_framework.core.plan.planning import ProposedPlan, ValidatedPlan
 from dare_framework.core.plan.results import (
@@ -26,9 +27,10 @@ from dare_framework.core.plan.results import (
     VerifyResult,
 )
 from dare_framework.core.protocols import IPlanner, IRemediator, IValidator
-from dare_framework.core.security import ISecurityBoundary, PolicyDecision, SandboxSpec
-from dare_framework.core.tool.capabilities import CapabilityType
-from dare_framework.core.tool.tool_gateway import IToolGateway
+from dare_framework.core.security.models import PolicyDecision, SandboxSpec
+from dare_framework.core.security.protocols import ISecurityBoundary
+from dare_framework.core.tool.models import CapabilityType
+from dare_framework.core.tool.protocols import IToolGateway
 from dare_framework.core.plan.task import Milestone, Task
 from dare_framework.core.tool.run_context_state import RunContextState
 
@@ -92,7 +94,13 @@ class DefaultLoopOrchestrator(ILoopOrchestrator):
             self._run_ctx_state.run_id = self._run_id
             self._run_ctx_state.task_id = task.task_id
 
-        await self._log_event("session.start", {"task_id": task.task_id, "run_id": self._run_id})
+        session_start_payload = {"task_id": task.task_id, "run_id": self._run_id}
+        if self._run_ctx_state is not None and self._run_ctx_state.config is not None:
+            # Snapshots of Config (if it's our v2 model) should be serializable.
+            config = self._run_ctx_state.config
+            session_start_payload["config"] = config.to_dict() if hasattr(config, "to_dict") else str(config)
+
+        await self._log_event("session.start", session_start_payload)
 
         milestone_results: list[MilestoneResult] = []
         errors: list[str] = []
@@ -574,6 +582,8 @@ class DefaultLoopOrchestrator(ILoopOrchestrator):
 
     async def _log_event(self, event_type: str, payload: dict[str, Any]) -> None:
         await self._event_log.append(event_type, payload)
+        if self._ext is not None:
+            await self._ext.emit(HookPhase.ON_EVENT, {"event_type": event_type, "payload": payload})
 
 
 def _done_predicate_satisfied(evidence: list[Any], predicate: DonePredicate | None) -> bool:

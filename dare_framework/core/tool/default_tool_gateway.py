@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 from dare_framework.core.plan.envelope import Envelope
-from dare_framework.core.tool.capabilities import CapabilityDescriptor, ICapabilityProvider
-from dare_framework.core.tool.tool_gateway import IToolGateway
+from dare_framework.core.tool.models import CapabilityDescriptor
+from dare_framework.core.tool.protocols import ICapabilityProvider, IToolGateway
 
 
 class DefaultToolGateway(IToolGateway):

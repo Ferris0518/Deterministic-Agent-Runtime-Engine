@@ -4,7 +4,8 @@ from typing import Any, Callable
 
 from dare_framework.contracts.run_context import RunContext
 from dare_framework.contracts.tool import ITool
-from dare_framework.core.tool.capabilities import CapabilityDescriptor, CapabilityType, ICapabilityProvider
+from dare_framework.core.tool.models import CapabilityDescriptor, CapabilityType
+from dare_framework.core.tool.protocols import ICapabilityProvider
 
 
 class NativeToolProvider(ICapabilityProvider):

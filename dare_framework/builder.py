@@ -7,13 +7,13 @@ from dare_framework.contracts.memory import IMemory
 from dare_framework.components.planners.deterministic import DeterministicPlanner
 from dare_framework.components.providers.native_tool_provider import NativeToolProvider
 from dare_framework.components.providers.protocol_adapter_provider import ProtocolAdapterProvider
-from dare_framework.components.remediators import NoOpRemediator
+from dare_framework.components.remediators.noop import NoOpRemediator
 from dare_framework.components.tools.noop import NoOpTool
 from dare_framework.components.validators.composite import CompositeValidator
 from dare_framework.components.validators.kernel_validator import GatewayValidator
 from dare_framework.contracts.model import IModelAdapter
 from dare_framework.contracts.tool import ITool
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 from dare_framework.core.budget.in_memory import InMemoryResourceManager
 from dare_framework.core.context.default_context_manager import DefaultContextManager
 from dare_framework.core.execution_control.file_execution_control import FileExecutionControl
@@ -24,12 +24,13 @@ from dare_framework.core.run_loop.default_run_loop import DefaultRunLoop
 from dare_framework.core.security.default_security_boundary import DefaultSecurityBoundary
 from dare_framework.core.tool.default_tool_gateway import DefaultToolGateway
 from dare_framework.core.tool.run_context_state import RunContextState
-from dare_framework.core.event import IEventLog
+from dare_framework.core.event.protocols import IEventLog
 from dare_framework.core.protocols import IPlanner, IRemediator, IValidator
 from dare_framework.core.plan.results import RunResult
-from dare_framework.core.run_loop import IRunLoop
+from dare_framework.core.run_loop.protocols import IRunLoop
 from dare_framework.core.plan.task import Task
 from dare_framework.protocols.base import IProtocolAdapter
+from dare_framework.components.plugin_system.component_type import ComponentType
 from dare_framework.components.plugin_system.managers import PluginManagers
 
 
@@ -190,12 +191,30 @@ class AgentBuilder:
                 discovered = self._plugin_managers.hooks.load_hooks(config=self._plugin_config)
                 plugin_hooks = [item for item in discovered if isinstance(item, IHook)]
 
+        # Filter explicit and discovered components by config enablement if available.
+        if self._plugin_config is not None:
+            config = self._plugin_config
+            if hasattr(config, "is_component_enabled"):
+                self._tools = [
+                    t for t in self._tools 
+                    if config.is_component_enabled(ComponentType.TOOL, t.name)
+                ]
+                plugin_validators = [
+                    v for v in plugin_validators
+                    if config.is_component_enabled(ComponentType.VALIDATOR, getattr(v, "name", "unknown"))
+                ]
+                plugin_hooks = [
+                    h for h in plugin_hooks
+                    if config.is_component_enabled(ComponentType.HOOK, getattr(h, "name", "unknown"))
+                ]
+
         # Always include a NoOp tool as a safe default so the Kernel can run even when the
         # planner is configured with an empty plan (or when model-driven execution is used).
         if not any(tool.name == "noop" for tool in self._tools):
             self._tools.append(NoOpTool())
 
         run_context = RunContextState()
+        run_context.config = self._plugin_config
 
         tool_gateway = DefaultToolGateway()
         tool_gateway.register_provider(NativeToolProvider(tools=self._tools, context_factory=run_context.build))

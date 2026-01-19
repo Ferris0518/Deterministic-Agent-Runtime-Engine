@@ -5,7 +5,7 @@ from typing import Any, Iterable
 
 from dare_framework.contracts.evidence import Evidence
 from dare_framework.contracts.risk import RiskLevel
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 
 
 @dataclass(frozen=True)

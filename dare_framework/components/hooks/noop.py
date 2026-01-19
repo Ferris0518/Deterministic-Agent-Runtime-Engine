@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from dare_framework.components.base_component import ConfigurableComponent
-from dare_framework.core.hook import HookPhase
+from dare_framework.core.hook.models import HookPhase
 from dare_framework.components.plugin_system.component_type import ComponentType
 
 from .protocols import IHook

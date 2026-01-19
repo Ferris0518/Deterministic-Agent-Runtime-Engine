@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from dare_framework.contracts.ids import generator_id
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 from dare_framework.core.plan.envelope import DonePredicate, Envelope, EvidenceCondition
 from dare_framework.core.plan.planning import ProposedStep
 

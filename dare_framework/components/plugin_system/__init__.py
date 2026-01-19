@@ -1,9 +1,8 @@
-"""Entrypoint-based plugin loading utilities (v2).
+"""Entrypoint-based plugin loading utilities (v2)."""
 
-This package implements the *mechanism* for discovering and selecting pluggable
-components via Python entrypoints.
+from .managers import PluginManagers
+from .component_type import ComponentType
+from .configurable_component import IConfigurableComponent
+from .component import IComponent
 
-Layering note:
-- Kernel (Layer 0) MUST NOT import this package.
-- Builder/composition code MAY use it to assemble Layer 2 components deterministically.
-"""
+__all__ = ["PluginManagers", "ComponentType", "IConfigurableComponent", "IComponent"]

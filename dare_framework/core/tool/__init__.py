@@ -1,12 +1,14 @@
 """Kernel tool gateway and capability types (v2.0)."""
 
-from dare_framework.core.tool.capabilities import CapabilityDescriptor, CapabilityType, ICapabilityProvider
-from dare_framework.core.tool.tool_gateway import IToolGateway
+from .protocols import IToolGateway
+from .default_tool_gateway import DefaultToolGateway
+from .models import CapabilityType, CapabilityDescriptor
+from dare_framework.core.plan.envelope import ToolLoopRequest
 
 __all__ = [
-    "CapabilityDescriptor",
-    "CapabilityType",
-    "ICapabilityProvider",
     "IToolGateway",
+    "DefaultToolGateway",
+    "CapabilityType",
+    "CapabilityDescriptor",
+    "ToolLoopRequest",
 ]
-

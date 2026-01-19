@@ -680,9 +680,32 @@ agent = (
 )
 ```
 
+### 4.3 扩展性与插件系统 (Layer 2)
+
+DARE v2 采用基于 Python entrypoints 的标准化插件发现机制。
+
+#### 4.3.1 Plugin Entrypoint Groups (v2)
+
+| 类型 | Entrypoint Group Name | 策略 |
+|---|---|---|
+| 工具 | `dare_framework.v2.tools` | Multi-load |
+| 模型适配器 | `dare_framework.v2.model_adapters` | Single-select |
+| 规划器 | `dare_framework.v2.planners` | Single-select |
+| 验收器 | `dare_framework.v2.validators` | Multi-load (ordered) |
+| 反思器 | `dare_framework.v2.remediators` | Single-select |
+| 协议适配器 | `dare_framework.v2.protocol_adapters` | Multi-load |
+| 钩子 | `dare_framework.v2.hooks` | Multi-load |
+| 配置提供者 | `dare_framework.v2.config_providers` | Single-select |
+
+#### 4.3.2 插件加载与配置过滤
+
+- **Manager 驱动**：每个类别由专门的 `IComponentManager` 接口负责加载。默认实现为 No-Op。
+- **配置过滤**：`AgentBuilder` 会根据 `Config` 中的 `components.<type>.disabled` 列表过滤已加载的插件。
+- **显式覆盖**：Builder 上的 `.with_*()` 方法具有最高优先级，优于插件发现。
+
 ---
 
-## 五、核心数据结构（v2）
+## 五、核心数据结构 (v2)
 
 > 目标：把 v1.3 的核心数据模型延续下来，同时为 v2 的 Protocol/Context/Control 面补齐 canonical types。
 

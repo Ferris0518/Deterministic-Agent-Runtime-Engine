@@ -4,7 +4,7 @@ from typing import Any, Sequence
 
 from dare_framework.contracts.mcp import IMCPClient
 from dare_framework.contracts.run_context import RunContext
-from dare_framework.core.tool.capabilities import CapabilityDescriptor, CapabilityType
+from dare_framework.core.tool.models import CapabilityDescriptor, CapabilityType
 from dare_framework.protocols.base import IProtocolAdapter
 
 

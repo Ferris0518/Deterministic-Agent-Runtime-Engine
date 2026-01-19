@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dare_framework.contracts.risk import RiskLevel
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 from dare_framework.core.plan.envelope import Envelope
 from dare_framework.core.plan.planning import ProposedPlan, ValidatedPlan, ValidatedStep
 from dare_framework.core.plan.results import ExecuteResult, VerifyResult
 from dare_framework.core.protocols import IValidator
-from dare_framework.core.tool.capabilities import CapabilityDescriptor
-from dare_framework.core.tool.tool_gateway import IToolGateway
+from dare_framework.core.tool.models import CapabilityDescriptor
+from dare_framework.core.tool.protocols import IToolGateway
 
 
 class GatewayValidator(IValidator):

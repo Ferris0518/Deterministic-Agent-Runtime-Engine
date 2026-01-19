@@ -4,17 +4,17 @@ from typing import Any
 
 from dare_framework.contracts.memory import IMemory
 from dare_framework.contracts.model import Message
-from dare_framework.core.budget import Budget
-from dare_framework.core.context import (
+from dare_framework.core.budget.models import Budget
+from dare_framework.core.context.models import (
     AssembledContext,
     ContextPacket,
     ContextStage,
-    IContextManager,
     IndexStatus,
     RetrievedContext,
     RuntimeStateView,
     SessionContext,
 )
+from dare_framework.core.context.protocols import IContextManager
 from dare_framework.core.plan.task import Task
 
 

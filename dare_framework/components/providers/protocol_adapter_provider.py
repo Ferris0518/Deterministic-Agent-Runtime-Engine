@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from dare_framework.core.tool.capabilities import CapabilityDescriptor, ICapabilityProvider
+from dare_framework.core.tool.models import CapabilityDescriptor
+from dare_framework.core.tool.protocols import ICapabilityProvider
 from dare_framework.protocols.base import IProtocolAdapter
 
 

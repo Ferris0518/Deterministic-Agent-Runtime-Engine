@@ -6,14 +6,10 @@ from pathlib import Path
 from time import time
 from uuid import uuid4
 
-from dare_framework.core.event import IEventLog
-from dare_framework.core.execution_control import (
-    CancelRequested,
-    ExecutionSignal,
-    HumanApprovalRequired,
-    IExecutionControl,
-    PauseRequested,
-)
+from dare_framework.core.event.protocols import IEventLog
+from dare_framework.core.execution_control.errors import CancelRequested, HumanApprovalRequired, PauseRequested
+from dare_framework.core.execution_control.models import ExecutionSignal
+from dare_framework.core.execution_control.protocols import IExecutionControl
 
 
 @dataclass(frozen=True)

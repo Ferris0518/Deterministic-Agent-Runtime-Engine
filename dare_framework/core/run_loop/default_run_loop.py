@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dare_framework.core.orchestrator import ILoopOrchestrator
 from dare_framework.core.plan.results import RunResult
-from dare_framework.core.run_loop import IRunLoop, RunLoopState, TickResult
 from dare_framework.core.plan.task import Task
+from dare_framework.core.orchestrator.protocols import ILoopOrchestrator
+from dare_framework.core.run_loop.models import RunLoopState, TickResult
+from dare_framework.core.run_loop.protocols import IRunLoop
 
 
 class DefaultRunLoop(IRunLoop):

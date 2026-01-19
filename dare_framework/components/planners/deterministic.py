@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from dare_framework.contracts.ids import generator_id
-from dare_framework.core.context import AssembledContext
+from dare_framework.core.context.models import AssembledContext
 from dare_framework.core.plan.planning import ProposedPlan, ProposedStep
 from dare_framework.core.protocols import IPlanner
 

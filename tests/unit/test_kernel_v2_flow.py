@@ -4,14 +4,14 @@ import pytest
 
 from dare_framework.components.planners.deterministic import DeterministicPlanner
 from dare_framework.components.providers.native_tool_provider import NativeToolProvider
-from dare_framework.components.remediators import NoOpRemediator
+from dare_framework.components.remediators.noop import NoOpRemediator
 from dare_framework.components.tools.noop import NoOpTool
 from dare_framework.components.validators.kernel_validator import GatewayValidator
 from dare_framework.contracts.ids import generator_id
 from dare_framework.contracts.risk import RiskLevel
 from dare_framework.contracts.run_context import RunContext
 from dare_framework.contracts.tool import ITool, ToolResult, ToolType
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 from dare_framework.core.budget.in_memory import InMemoryResourceManager
 from dare_framework.core.context.default_context_manager import DefaultContextManager
 from dare_framework.core.execution_control.file_execution_control import FileExecutionControl
@@ -24,7 +24,7 @@ from dare_framework.core.tool.default_tool_gateway import DefaultToolGateway
 from dare_framework.core.tool.run_context_state import RunContextState
 from dare_framework.core.plan.envelope import DonePredicate, Envelope, EvidenceCondition, ToolLoopRequest
 from dare_framework.core.plan.planning import ProposedStep
-from dare_framework.core.security import PolicyDecision
+from dare_framework.core.security.models import PolicyDecision
 from dare_framework.core.plan.task import Task
 
 

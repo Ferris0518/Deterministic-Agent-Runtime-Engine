@@ -3,10 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from dare_framework.components.base_component import ConfigurableComponent
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 from dare_framework.components.plugin_system.component_type import ComponentType
-
-from .protocols import IMemory
+from dare_framework.contracts.memory import IMemory
 
 
 class NoOpMemory(ConfigurableComponent, IMemory):

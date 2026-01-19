@@ -1,0 +1,96 @@
+# configuration-management Specification
+
+## Purpose
+TBD - created by archiving change add-hierarchical-config-management. Update Purpose after archive.
+## ADDED Requirements
+### Requirement: Configuration Layers and JSON Sources
+The system SHALL support three configuration layers: system, user, and project. Each layer MUST be loaded from JSON-formatted configuration files.
+
+#### Scenario: Load layered JSON config files
+- **WHEN** the configuration system initializes
+- **THEN** it loads system, user, and project JSON configuration files as separate layers
+
+### Requirement: Deterministic Layer Override Order
+The system SHALL resolve configuration by applying layers in the order system < user < project, with later layers overriding earlier ones for the same key.
+
+#### Scenario: Project overrides user and system values
+- **GIVEN** a key exists in system and user layers
+- **AND** the same key is defined in the project layer
+- **WHEN** the effective configuration is computed
+- **THEN** the project value is used
+
+### Requirement: Effective Config Object
+The ConfigProvider SHALL return a single effective Config object that represents the resolved configuration. All runtime components MUST rely on this effective Config object for configuration access.
+
+#### Scenario: Components read from effective Config
+- **WHEN** a component requests configuration
+- **THEN** it receives values from the effective Config object produced by the ConfigProvider
+
+### Requirement: allowtools and allowmcps Override Semantics
+The allowtools and allowmcps settings SHALL be treated as normal configuration keys and follow the same layer override order (system < user < project). They MUST NOT be merged across layers unless explicitly specified by the effective layer.
+
+#### Scenario: Project allowtools overrides lower layers
+- **GIVEN** allowtools is defined in system and user layers
+- **AND** allowtools is defined in the project layer
+- **WHEN** the effective configuration is computed
+- **THEN** the project allowtools value replaces the lower-layer values
+
+### Requirement: Config Model Structure
+The Config model SHALL include at least the following top-level fields: llm, mcp, tools, allowtools, allowmcps, and components. The llm field MUST support connectivity configuration such as endpoint, api_key, and model. The mcp and tools fields MUST support component-scoped configuration objects keyed by component name. The components field MUST support enable/disable flags and per-component configuration for entry point components by type and name.
+
+#### Scenario: LLM connectivity fields available
+- **WHEN** the effective Config is produced
+- **THEN** the llm field can provide endpoint, api_key, and model values
+
+### Requirement: Component Enablement Configuration
+The system SHALL support a uniform enable/disable configuration for all entry point components using a type-scoped structure. The components.<type>.disabled list identifies disabled component names. The default behavior MUST be enabled when a name is absent from components.<type>.disabled.
+
+#### Scenario: Component enabled by default
+- **GIVEN** a component is discovered via entry points
+- **AND** the component name is not listed in components.<type>.disabled
+- **WHEN** the component manager evaluates configuration
+- **THEN** the component is treated as enabled
+
+### Requirement: Component Configuration Structure
+The components.<type> map SHALL store per-component configuration objects keyed by component name. The configuration system MUST treat reserved keys under components.<type> as non-instance entries.
+
+#### Scenario: Component instance config is stored under component name
+- **GIVEN** a component type with a configured instance
+- **WHEN** the effective Config is computed
+- **THEN** the per-component configuration is available at components.<type>.<name>
+
+### Requirement: Component Identity for Configuration
+Each entry point component interface SHALL expose a component type (enum) and a component name so configuration can resolve components.<type>.disabled and components.<type>.<name>.
+
+#### Scenario: Component exposes type and name for config lookup
+- **WHEN** a component is discovered via entry points
+- **THEN** the configuration system can read its type and name for enablement and config lookup
+
+### Requirement: Component Type Enumeration
+The component type enum MUST include validator, memory, model_adapter, tool, skill, mcp, hook, and prompt to cover all entry point component categories managed by BaseComponentManager.
+
+#### Scenario: Component type enum includes entry point categories
+- **WHEN** a component is registered via entry points
+- **THEN** its type matches one of the enumerated component types
+
+### Requirement: MCP Configuration in Config Model
+The Config model SHALL support MCP connection configuration keyed by MCP name so the MCP manager can construct MCP clients and MCP-backed tools.
+
+#### Scenario: MCP manager reads MCP config by name
+- **WHEN** the MCP manager initializes
+- **THEN** it can read MCP configuration from Config.mcp using the MCP name
+
+### Requirement: Reload Interface
+The ConfigProvider SHALL expose a reload operation that re-reads configuration files and returns a new effective Config object. Reloading MUST NOT implicitly mutate existing running sessions unless the caller chooses to replace the active Config.
+
+#### Scenario: Reload returns a new effective Config
+- **WHEN** reload is invoked
+- **THEN** the provider re-reads the layered JSON files and returns a new effective Config object
+
+### Requirement: Session Context Carries Effective Config
+The SessionContext SHALL store the effective Config for the session lifecycle, and subsequent components MUST treat that Config as the source of truth.
+
+#### Scenario: SessionContext includes effective Config
+- **WHEN** a session starts
+- **THEN** SessionContext holds the effective Config produced by the ConfigProvider
+

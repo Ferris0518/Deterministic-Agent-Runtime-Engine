@@ -3,7 +3,9 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from dare_framework.core.budget import Budget, IResourceManager, ResourceExhausted, ResourceType
+from dare_framework.core.budget.errors import ResourceExhausted
+from dare_framework.core.budget.models import Budget, ResourceType
+from dare_framework.core.budget.protocols import IResourceManager
 
 
 @dataclass

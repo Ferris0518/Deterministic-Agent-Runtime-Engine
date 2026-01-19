@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from dare_framework.contracts.risk import RiskLevel
-from dare_framework.core.security import ISecurityBoundary, PolicyDecision, SandboxSpec, TrustedInput
+from dare_framework.core.security.models import PolicyDecision, SandboxSpec, TrustedInput
+from dare_framework.core.security.protocols import ISecurityBoundary
 
 
 class DefaultSecurityBoundary(ISecurityBoundary):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, Sequence, runtime_checkable
 
-from dare_framework.core.tool.capabilities import CapabilityDescriptor
+from dare_framework.core.tool.models import CapabilityDescriptor
 
 
 @runtime_checkable

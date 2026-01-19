@@ -6,7 +6,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Sequence
 
-from dare_framework.core.event import Event, IEventLog, RuntimeSnapshot
+from dare_framework.core.event.models import Event, RuntimeSnapshot
+from dare_framework.core.event.protocols import IEventLog
 
 
 class LocalEventLog(IEventLog):

@@ -1,6 +1,9 @@
-"""Shared contracts and data types (v2).
+"""Shared contracts and data types (v2)."""
 
-This package hosts non-Kernel protocols and data types that are shared across the
-framework (tools, model adapters, evidence, etc.). Kernel contracts remain under
-`dare_framework/core/`.
-"""
+from .tool import ITool, ToolResult
+from .model import IModelAdapter, ModelResponse
+from .run_context import RunContext
+from .risk import RiskLevel
+from .evidence import Evidence
+
+__all__ = ["ITool", "IModelAdapter", "ModelResponse", "RunContext", "ToolResult", "RiskLevel", "Evidence"]

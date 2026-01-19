@@ -12,7 +12,7 @@ from dare_framework.components.base_component import BaseComponent
 from dare_framework.contracts.ids import generator_id
 from dare_framework.contracts.model import GenerateOptions, IModelAdapter, Message, ModelResponse
 from dare_framework.contracts.tool import ITool, ToolDefinition
-from dare_framework.core.context import AssembledContext
+from dare_framework.core.context.models import AssembledContext
 from dare_framework.core.plan.planning import ProposedPlan, ProposedStep
 from dare_framework.core.protocols import IPlanner
 

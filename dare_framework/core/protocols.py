@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from dare_framework.core.context import AssembledContext, Prompt
+from dare_framework.core.context.models import AssembledContext, Prompt
 from dare_framework.core.plan.planning import ProposedPlan, ValidatedPlan
 from dare_framework.core.plan.results import ExecuteResult, VerifyResult
 

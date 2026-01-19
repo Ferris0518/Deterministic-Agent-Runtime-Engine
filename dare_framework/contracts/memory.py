@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from dare_framework.core.budget import Budget
+from dare_framework.core.budget.models import Budget
 
 
 @runtime_checkable
@@ -22,4 +22,3 @@ class IMemory(Protocol):
     async def retrieve(self, query: str, *, budget: Budget | None = None) -> list[dict[str, Any]]: ...
 
     async def add(self, items: list[dict[str, Any]]) -> None: ...
-
