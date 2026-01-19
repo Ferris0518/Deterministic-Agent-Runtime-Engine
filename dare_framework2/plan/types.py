@@ -202,6 +202,18 @@ class DonePredicate:
     description: str | None = None
 
 
+def _default_budget() -> "Budget":
+    """Lazy import to avoid circular dependency."""
+    from dare_framework2.execution.types import Budget
+    return Budget()
+
+
+def _default_risk_level() -> "RiskLevel":
+    """Lazy import to avoid circular dependency."""
+    from dare_framework2.tool.types import RiskLevel
+    return RiskLevel.READ_ONLY
+
+
 @dataclass(frozen=True)
 class Envelope:
     """Execution boundary for the Tool Loop.
@@ -216,9 +228,9 @@ class Envelope:
         risk_level: The risk level for this execution
     """
     allowed_capability_ids: list[str] = field(default_factory=list)
-    budget: "Budget" = field(default_factory=lambda: Budget())
+    budget: "Budget" = field(default_factory=_default_budget)
     done_predicate: DonePredicate | None = None
-    risk_level: "RiskLevel" = field(default_factory=lambda: RiskLevel.READ_ONLY)
+    risk_level: "RiskLevel" = field(default_factory=_default_risk_level)
 
 
 @dataclass(frozen=True)
@@ -361,24 +373,3 @@ class RunResult:
     milestone_results: list[MilestoneResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     session_summary: SessionSummary | None = None
-
-
-# =============================================================================
-# Lazy imports for circular dependency resolution
-# =============================================================================
-
-# Import RiskLevel and Budget at module level for default_factory
-# These need to be available when dataclasses are instantiated
-def _get_default_risk_level() -> "RiskLevel":
-    from dare_framework2.tool.types import RiskLevel
-    return RiskLevel.READ_ONLY
-
-
-def _get_default_budget() -> "Budget":
-    from dare_framework2.execution.types import Budget
-    return Budget()
-
-
-# Update Envelope defaults to use lazy imports
-Envelope.__dataclass_fields__["risk_level"].default_factory = _get_default_risk_level  # type: ignore
-Envelope.__dataclass_fields__["budget"].default_factory = _get_default_budget  # type: ignore
