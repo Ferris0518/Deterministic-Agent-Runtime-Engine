@@ -6,6 +6,375 @@
 
 ---
 
+## 🆕 VAF 架构设计（精简版）
+
+> **设计日期**: 2026-01-20
+> **基于**: dare_framework3_2 精简 + AgentScope 参考
+> **命名**: VAF = Versatile Agent Framework
+
+---
+
+### 一、设计原则
+
+| 原则 | 说明 |
+|------|------|
+| **去冗余，保结构** | 删除重复/未使用类型，保留模块边界 |
+| **复用现有命名** | 优先使用 dare_framework3_2 的好名字 |
+| **保留扩展性** | security、event、context、plan 保持独立 |
+| **Hook 与 Event 统一** | hook/ 合并到 event/，统一管理横切关注点 |
+
+---
+
+### 二、模块处理（10 → 8）
+
+| 模块 | 处理 | 说明 |
+|------|------|------|
+| **agent/** | ✅ 保留 | hooks 注册/触发逻辑内置 |
+| **model/** | ✅ 保留 | 模型适配 |
+| **tool/** | ✅ 保留，精简类型 | 删除重复类型 |
+| **memory/** | ✅ 保留 | 会话记忆（可选挂件） |
+| **context/** | ✅ 保留，精简类型 | 上下文核心管理 |
+| **plan/** | ✅ 保留，**大幅精简** | 简化为 Task/Step/Plan/RunResult |
+| **event/** | ✅ 保留，**合并 hook/** | Event + Hook 统一管理 |
+| **security/** | ✅ 保留 | 安全（唯一定义 RiskLevel 等） |
+| **hook/** | ❌ **合并到 event/** | 与 event 统一管理横切关注点 |
+| **config/** | ❌ **删除** | 简单配置不需要独立模块 |
+| **utils/** | ✅ 保留 | 工具函数 |
+
+---
+
+### 三、删除的文件
+
+| 文件 | 理由 |
+|------|------|
+| 所有 `kernel.py` | 全是空文件，过度设计 |
+| `config/` 整个目录 | 简单配置不需要独立模块 |
+| `hook/` 整个目录 | 合并到 event/ |
+
+---
+
+### 四、类型精简
+
+#### 4.1 plan/types.py（20+ → 4）
+
+| 删除 | 保留/新增 |
+|------|----------|
+| Milestone | **Step**（改名，更通用） |
+| ProposedStep, ValidatedStep | - |
+| ProposedPlan, ValidatedPlan | **Plan**（新增，简化版） |
+| Envelope, DonePredicate, EvidenceCondition | - |
+| ToolLoopRequest, ToolLoopResult | - |
+| ExecuteResult, VerifyResult | - |
+| MilestoneResult, MilestoneSummary, SessionSummary | - |
+| - | **Task**（保留） |
+| - | **RunResult**（保留） |
+
+精简后：
+
+```python
+@dataclass
+class Step:
+    """计划中的一个步骤"""
+    step_id: str
+    name: str
+    description: str
+    state: Literal["pending", "in_progress", "done", "failed"] = "pending"
+    outcome: str | None = None
+
+@dataclass
+class Plan:
+    """执行计划"""
+    plan_id: str
+    name: str
+    description: str
+    steps: list[Step]
+    state: Literal["pending", "in_progress", "done", "failed"] = "pending"
+
+@dataclass
+class Task:
+    """任务（保留原有，简化字段）"""
+    description: str
+    task_id: str = field(default_factory=...)
+    context: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class RunResult:
+    """Agent 运行结果"""
+    success: bool
+    output: Any | None = None
+    errors: list[str] = field(default_factory=list)
+```
+
+#### 4.2 tool/types.py（15+ → 2）
+
+| 删除 | 保留 |
+|------|------|
+| RiskLevel, PolicyDecision, TrustedInput, SandboxSpec | → 移到 security/（去重） |
+| CapabilityType, CapabilityDescriptor | - |
+| ToolType | - |
+| Evidence, ToolErrorRecord | - |
+| RunContext | - |
+| ExecutionSignal, Checkpoint | - |
+| PauseRequested, CancelRequested, HumanApprovalRequired | - |
+| - | **ToolDefinition**（简化） |
+| - | **ToolResult**（保留） |
+
+精简后：
+
+```python
+@dataclass
+class ToolDefinition:
+    """工具定义"""
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any] | None = None
+
+@dataclass
+class ToolResult:
+    """工具执行结果"""
+    success: bool
+    output: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+```
+
+#### 4.3 context/types.py（10+ → 5）
+
+| 删除 | 保留 |
+|------|------|
+| AssembledContext | → 用 Prompt 替代（重复） |
+| ContextPacket | - （未使用） |
+| RuntimeStateView | - （未使用） |
+| IndexStatus | - （未使用） |
+| RetrievedContext | - （未使用） |
+| ResourceExhausted | → 移到 utils/errors.py |
+| - | **Budget**（保留） |
+| - | **ResourceType**（保留） |
+| - | **SessionContext**（保留） |
+| - | **Prompt**（保留） |
+| - | **ContextStage**（保留） |
+
+#### 4.4 event/types.py + hook/（合并）
+
+| 删除 | 保留 |
+|------|------|
+| RuntimeSnapshot | - （未使用） |
+| HookPhase | → 简化为 Literal 类型 |
+| - | **Event**（保留） |
+| - | **HookType**（新增） |
+
+精简后：
+
+```python
+@dataclass
+class Event:
+    """事件记录"""
+    event_type: str
+    payload: dict[str, Any]
+    event_id: str = field(default_factory=...)
+    timestamp: datetime = field(default_factory=...)
+
+HookType = Literal[
+    "agent.pre_reply", "agent.post_reply",
+    "tool.pre_call", "tool.post_call",
+]
+```
+
+#### 4.5 security/types.py（唯一定义）
+
+```python
+class RiskLevel(Enum):
+    READ_ONLY = "read_only"
+    IDEMPOTENT_WRITE = "idempotent_write"
+    COMPENSATABLE = "compensatable"
+    NON_IDEMPOTENT_EFFECT = "non_idempotent_effect"
+
+class PolicyDecision(Enum):
+    ALLOW = "allow"
+    DENY = "deny"
+    APPROVE_REQUIRED = "approve_required"
+```
+
+#### 4.6 model/types.py
+
+保留：`Message`, `ModelResponse`
+删除：`GenerateOptions`（用 **kwargs 替代）
+
+---
+
+### 五、接口精简
+
+#### 5.1 删除的接口
+
+| 接口 | 原位置 | 理由 |
+|------|--------|------|
+| IPlanner | plan/ | plan/ 精简，逻辑放 Agent |
+| IValidator | plan/ | 同上 |
+| IRemediator | plan/ | 同上 |
+| IConfigProvider | config/ | config/ 删除 |
+| IContextStrategy | context/ | 未使用 |
+| IResourceManager | context/ | 暂不需要 |
+| ICapabilityProvider | tool/ | 简化 |
+| IProtocolAdapter | tool/ | 简化 |
+| IMCPClient | tool/ | 简化 |
+| IExecutionControl | tool/ | 暂不需要 |
+| ISkill | tool/ | 未使用 |
+| IPromptStore | memory/ | 简化 |
+
+#### 5.2 保留的接口（8 个）
+
+| 接口 | 模块 | 说明 |
+|------|------|------|
+| **IModelAdapter** | model/ | 模型适配 |
+| **ITool** | tool/ | 工具接口 |
+| **IToolGateway** | tool/ | 工具调用入口 |
+| **IMemory** | memory/ | 记忆接口 |
+| **IContextManager** | context/ | 上下文管理 |
+| **IEventLog** | event/ | 事件日志 |
+| **IEventListener** | event/ | 事件监听 |
+| **ISecurityBoundary** | security/ | 安全边界 |
+
+#### 5.3 合并到 event/ 的接口
+
+| 接口 | 原位置 | 新位置 |
+|------|--------|--------|
+| IExtensionPoint | hook/ | event/ |
+| IHook | hook/ | event/ |
+
+---
+
+### 六、Agent 改动
+
+#### 6.1 改名
+
+| 原名 | 新名 | 说明 |
+|------|------|------|
+| FiveLayerAgent | **LoopAgent** | 更通用的名称 |
+| BaseAgent | BaseAgent | 保留 |
+| SimpleChatAgent | SimpleChatAgent | 保留 |
+| - | ReActAgent | 新增（可选） |
+
+#### 6.2 Hooks 内置于 BaseAgent
+
+```python
+class BaseAgent(ABC):
+    # 类级别 hooks
+    _class_hooks: dict[str, dict[str, Callable]] = {}
+    
+    def __init__(self, name: str, ...):
+        # 实例级别 hooks
+        self._hooks: dict[str, dict[str, Callable]] = {}
+    
+    @classmethod
+    def register_hook(cls, hook_type: str, name: str, callback: Callable):
+        """注册类级别 hook"""
+        ...
+    
+    def add_hook(self, hook_type: str, name: str, callback: Callable):
+        """注册实例级别 hook"""
+        ...
+    
+    def _emit_hook(self, hook_type: str, *args, **kwargs):
+        """触发 hooks"""
+        ...
+```
+
+---
+
+### 七、目录结构
+
+```
+vaf/
+├── __init__.py
+│
+├── agent/
+│   ├── __init__.py
+│   ├── base.py              # BaseAgent（含 hooks 逻辑）
+│   ├── loop_agent.py        # LoopAgent（原 FiveLayerAgent）
+│   └── simple_chat.py       # SimpleChatAgent
+│
+├── model/
+│   ├── __init__.py
+│   ├── component.py         # IModelAdapter
+│   ├── types.py             # Message, ModelResponse
+│   └── impl/
+│
+├── tool/
+│   ├── __init__.py
+│   ├── component.py         # ITool, IToolGateway（精简）
+│   ├── types.py             # ToolDefinition, ToolResult（精简）
+│   └── impl/
+│
+├── memory/
+│   ├── __init__.py
+│   ├── component.py         # IMemory
+│   ├── types.py
+│   └── impl/
+│
+├── context/
+│   ├── __init__.py
+│   ├── component.py         # IContextManager（精简）
+│   ├── types.py             # Budget, SessionContext, Prompt, ContextStage
+│   └── impl/
+│
+├── plan/
+│   ├── __init__.py
+│   ├── types.py             # Task, Step, Plan, RunResult（精简）
+│   └── impl/
+│
+├── event/
+│   ├── __init__.py
+│   ├── component.py         # IEventLog, IEventListener, IExtensionPoint, IHook
+│   ├── types.py             # Event, HookType
+│   └── impl/
+│
+├── security/
+│   ├── __init__.py
+│   ├── component.py         # ISecurityBoundary
+│   ├── types.py             # RiskLevel, PolicyDecision（唯一定义）
+│   └── impl/
+│
+└── utils/
+    ├── __init__.py
+    ├── errors.py
+    └── ids.py
+```
+
+---
+
+### 八、变化汇总
+
+| 维度 | dare_framework3_2 | VAF | 变化 |
+|------|-------------------|-----|------|
+| 模块数 | 10 | **8** | -2 |
+| plan/ 类型数 | 20+ | **4** | -80% |
+| tool/ 类型数 | 15+ | **2** | -87% |
+| context/ 类型数 | 10+ | **5** | -50% |
+| 接口数 | 20+ | **8** | -60% |
+| kernel.py | 10 个空文件 | **0** | 全删 |
+| 重复类型 | 有 | **无** | 去重 |
+
+---
+
+### 九、迁移步骤
+
+| 步骤 | 任务 |
+|------|------|
+| 1 | 复制 dare_framework3_2 → vaf |
+| 2 | 删除 config/ 目录 |
+| 3 | 删除 hook/ 目录（内容合并到 event/） |
+| 4 | 删除所有 kernel.py 文件 |
+| 5 | 精简 plan/types.py |
+| 6 | 精简 tool/types.py、tool/component.py |
+| 7 | 精简 context/types.py、context/component.py |
+| 8 | 合并 hook/ 到 event/ |
+| 9 | BaseAgent 内置 hooks 逻辑 |
+| 10 | FiveLayerAgent 改名 LoopAgent |
+| 11 | 更新所有 import 路径 |
+| 12 | 更新顶层 __init__.py |
+
+---
+
 ## 🆕 v3.2 架构设计
 
 > **设计日期**: 2026-01-20
