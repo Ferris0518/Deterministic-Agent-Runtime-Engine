@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from dare_framework2.plan.interfaces import IValidator
+from dare_framework2.plan.components import IValidator
 from dare_framework2.plan.types import (
     ProposedPlan,
     ValidatedPlan,
@@ -16,7 +16,7 @@ from dare_framework2.plan.types import (
 from dare_framework2.tool.types import RiskLevel
 
 if TYPE_CHECKING:
-    from dare_framework2.tool.interfaces import IToolGateway
+    from dare_framework2.tool.kernel import IToolGateway
     from dare_framework2.tool.types import CapabilityDescriptor
     from dare_framework2.execution.types import Budget
 

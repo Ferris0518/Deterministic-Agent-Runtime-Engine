@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dare_framework.contracts.ids import generator_id
-from dare_framework.core.plan.planning import ProposedStep
+from dare_framework.plan.planning import ProposedStep
 
 
 def _load_coding_agent():

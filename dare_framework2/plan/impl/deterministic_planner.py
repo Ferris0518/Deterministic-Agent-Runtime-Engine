@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from dare_framework2.context.types import AssembledContext
-from dare_framework2.plan.interfaces import IPlanner
+from dare_framework2.plan.components import IPlanner
 from dare_framework2.plan.types import ProposedPlan, ProposedStep
 from dare_framework2.utils.ids import generate_id
 

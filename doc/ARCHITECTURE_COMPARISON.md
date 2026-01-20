@@ -167,6 +167,11 @@ execution/interfaces.py 包含 6 个 Kernel 接口，但没有明确标识哪些
 
 ### 3.2 完整 v3 架构
 
+> Implementation note (2026-01-19): `dare_framework3/` ships a public facade
+> (`interfaces/`, `types/`, `presets/`, `builder/`) with internal domains under
+> `_internal/`. Top-level domain packages (`execution/`, `context/`, `security/`,
+> `tool/`, `plan/`, `model/`, `protocols/`) are provided as compatibility shims.
+
 ```
 dare_framework_v3/
 │

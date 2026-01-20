@@ -10,11 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 from dare_framework.builder import AgentBuilder
-from dare_framework.components.planners.deterministic import DeterministicPlanner
+from dare_framework.plan.impl.planners.deterministic import DeterministicPlanner
 from dare_framework.contracts.ids import generator_id
-from dare_framework.core.event.local_event_log import LocalEventLog
-from dare_framework.core.plan.planning import ProposedStep
-from dare_framework.core.plan.task import Task
+from dare_framework.execution.impl.event.local_event_log import LocalEventLog
+from dare_framework.plan.planning import ProposedStep
+from dare_framework.plan.task import Task
 
 from tools.edit_line import EditLineTool
 from tools.read_file import ReadFileTool

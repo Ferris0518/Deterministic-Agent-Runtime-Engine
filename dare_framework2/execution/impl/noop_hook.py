@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dare_framework2.execution.interfaces import IHook
+from dare_framework2.execution.components import IHook
 from dare_framework2.execution.types import HookPhase
 
 

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from dare_framework2.tool.interfaces import IMCPClient, IProtocolAdapter
+from dare_framework2.protocols.base import IProtocolAdapter
+from dare_framework2.protocols.mcp.interfaces import IMCPClient
 from dare_framework2.tool.types import (
     CapabilityDescriptor,
     CapabilityType,

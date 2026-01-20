@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.builder.base_component import BaseComponent
 from dare_framework.contracts.evidence import Evidence
 from dare_framework.contracts.ids import generator_id
 from dare_framework.contracts.risk import RiskLevel

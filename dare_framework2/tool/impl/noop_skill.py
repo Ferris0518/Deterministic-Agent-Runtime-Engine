@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dare_framework2.tool.interfaces import ISkill
+from dare_framework2.tool.components import ISkill
 from dare_framework2.tool.types import RunContext, ToolResult
 
 

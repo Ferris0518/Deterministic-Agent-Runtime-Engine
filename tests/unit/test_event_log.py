@@ -1,6 +1,6 @@
 import pytest
 
-from dare_framework.core.event.local_event_log import LocalEventLog
+from dare_framework.execution.impl.event.local_event_log import LocalEventLog
 
 
 @pytest.mark.asyncio

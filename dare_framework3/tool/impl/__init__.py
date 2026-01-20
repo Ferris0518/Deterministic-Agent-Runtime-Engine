@@ -1,0 +1,1 @@
+"""Tool implementations (compat shim)."""

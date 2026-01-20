@@ -51,19 +51,6 @@ class CapabilityType(Enum):
     UI = "ui"
 
 
-class PolicyDecision(Enum):
-    """Policy decision returned by ISecurityBoundary.check_policy.
-    
-    Values:
-        ALLOW: Action is permitted
-        DENY: Action is denied
-        APPROVE_REQUIRED: Action requires human approval
-    """
-    ALLOW = "allow"
-    DENY = "deny"
-    APPROVE_REQUIRED = "approve_required"
-
-
 # =============================================================================
 # Evidence
 # =============================================================================
@@ -203,34 +190,3 @@ class RunContext(Generic[DepsT]):
     metadata: dict[str, Any] = field(default_factory=dict)
     config: Any | None = None
 
-
-# =============================================================================
-# Security Types
-# =============================================================================
-
-@dataclass(frozen=True)
-class TrustedInput:
-    """Trusted input derived from untrusted params + registries.
-    
-    Attributes:
-        params: Validated parameters
-        risk_level: Trusted risk level from registry
-        metadata: Additional security metadata
-    """
-    params: dict[str, Any]
-    risk_level: RiskLevel
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class SandboxSpec:
-    """Minimal sandbox specification placeholder.
-    
-    The MVP may stub sandbox behavior, but keeps the contract surface.
-    
-    Attributes:
-        mode: Sandbox mode (e.g., "stub", "docker", "seccomp")
-        details: Mode-specific configuration
-    """
-    mode: str = "stub"
-    details: dict[str, Any] = field(default_factory=dict)

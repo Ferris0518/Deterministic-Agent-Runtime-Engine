@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dare_framework2.plan.interfaces import IRemediator
+from dare_framework2.plan.components import IRemediator
 from dare_framework2.plan.types import VerifyResult
 
 

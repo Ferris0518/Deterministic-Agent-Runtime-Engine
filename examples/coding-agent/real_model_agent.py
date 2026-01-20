@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 
 from dare_framework.builder import AgentBuilder
-from dare_framework.core.event.local_event_log import LocalEventLog
+from dare_framework.execution.impl.event.local_event_log import LocalEventLog
 
 from openai_adapter import OpenAIModelAdapter, OpenAIPlanner, tool_definitions_from_tools
 from plan_helpers import DEFAULT_EDIT_TEXT

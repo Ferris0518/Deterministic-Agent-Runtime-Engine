@@ -2,9 +2,9 @@ from typing import Any
 
 from dare_framework.builder import AgentBuilder
 from dare_framework.contracts import ComponentType
-from dare_framework.components.tools.noop import NoOpTool
-from dare_framework.core.config import ComponentConfig
-from dare_framework.core.config import Config
+from dare_framework.tool.impl.tools.noop import NoOpTool
+from dare_framework.config import ComponentConfig
+from dare_framework.config import Config
 
 
 class NamedNoOpTool(NoOpTool):

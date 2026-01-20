@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dare_framework.components.hooks.stdout import StdoutHook
+from dare_framework.execution.impl.hooks.stdout import StdoutHook
 
 
 def test_stdout_hook_renders_plan_validated():

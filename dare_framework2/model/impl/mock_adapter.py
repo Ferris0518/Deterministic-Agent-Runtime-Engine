@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from dare_framework2.model.interfaces import IModelAdapter
+from dare_framework2.model.components import IModelAdapter
 from dare_framework2.model.types import Message, ModelResponse
 
 

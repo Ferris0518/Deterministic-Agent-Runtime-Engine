@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dare_framework2.plan.interfaces import IValidator
+from dare_framework2.plan.components import IValidator
 from dare_framework2.plan.types import (
     ProposedPlan,
     ValidatedPlan,

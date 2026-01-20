@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from dare_framework2.execution.interfaces import IResourceManager
+from dare_framework2.execution.kernel import IResourceManager
 from dare_framework2.execution.types import Budget, ResourceType, ResourceExhausted
 
 

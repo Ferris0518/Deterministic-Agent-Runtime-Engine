@@ -1,11 +1,11 @@
 import pytest
 
 from dare_framework.builder import AgentBuilder
-from dare_framework.components.planners.deterministic import DeterministicPlanner
-from dare_framework.components.tools.noop import NoOpTool
+from dare_framework.plan.impl.planners.deterministic import DeterministicPlanner
+from dare_framework.tool.impl.tools.noop import NoOpTool
 from dare_framework.contracts.ids import generator_id
-from dare_framework.core.event.local_event_log import LocalEventLog
-from dare_framework.core.plan.planning import ProposedStep
+from dare_framework.execution.impl.event.local_event_log import LocalEventLog
+from dare_framework.plan.planning import ProposedStep
 
 
 @pytest.mark.asyncio

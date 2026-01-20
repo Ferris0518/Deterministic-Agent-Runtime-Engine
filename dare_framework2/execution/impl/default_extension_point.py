@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Callable
 
-from dare_framework2.execution.interfaces import IExtensionPoint
+from dare_framework2.execution.kernel import IExtensionPoint
 from dare_framework2.execution.types import HookPhase
 
 

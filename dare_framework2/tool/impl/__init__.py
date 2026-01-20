@@ -8,7 +8,6 @@ from dare_framework2.tool.impl.native_tool_provider import NativeToolProvider
 from dare_framework2.tool.impl.protocol_adapter_provider import ProtocolAdapterProvider
 from dare_framework2.tool.impl.mcp_adapter import MCPAdapter
 from dare_framework2.tool.impl.noop_mcp_client import NoOpMCPClient
-from dare_framework2.tool.impl.default_security_boundary import DefaultSecurityBoundary
 from dare_framework2.tool.impl.run_context_state import RunContextState
 
 __all__ = [
@@ -20,6 +19,5 @@ __all__ = [
     "ProtocolAdapterProvider",
     "MCPAdapter",
     "NoOpMCPClient",
-    "DefaultSecurityBoundary",
     "RunContextState",
 ]

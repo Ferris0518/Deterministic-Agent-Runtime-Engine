@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from dare_framework2.execution.interfaces import IRunLoop, ILoopOrchestrator
+from dare_framework2.execution.kernel import IRunLoop, ILoopOrchestrator
 from dare_framework2.execution.types import RunLoopState, TickResult
 from dare_framework2.plan.types import RunResult
 
