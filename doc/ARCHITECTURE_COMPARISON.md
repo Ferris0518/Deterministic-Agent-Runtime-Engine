@@ -20,27 +20,75 @@
 | **层级解耦** | Base Context 通用，上层（Session/Plan/Agent）按需扩展 |
 | **概念精简** | 减少冗余概念，职责清晰 |
 | **灵活组装** | messages 每次调 LLM 前临时组装，支持多数据源 |
-| **外部能力挂载** | 长期记忆、RAG、工具通过引用访问 |
+| **外部能力挂载** | 长期记忆、Knowledge Retrieval、工具通过引用访问 |
 
 ---
 
-### 二、核心概念
+### 二、上下文工程四层模型（Context Engineering）
+
+> **定位说明**：v3.4 的 BaseContext 主要提供 **Layer 3（Assembly）+ Layer 2（Retrieval）** 的基础抽象；  
+> Layer 4（Orchestration）由上层 Session/Agent 负责（例如 compaction/handoff 的策略决策）。
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    上下文工程 (Context Engineering)              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Layer 4: 上下文调度 (Context Orchestration)               │  │
+│  │ ├─ 多 Agent 协作时的上下文共享/隔离                        │  │
+│  │ ├─ 跨 context window 的状态传递 (compaction, handoff)     │  │
+│  │ └─ A2A 上下文路由                                         │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              ▲                                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Layer 3: 上下文组装 (Context Assembly)                    │  │
+│  │ ├─ System Prompt 结构化                                   │  │
+│  │ ├─ Tool 定义的精简与消歧                                   │  │
+│  │ ├─ Few-shot 示例选择                                      │  │
+│  │ ├─ Skills/Hooks 动态注入                                  │  │
+│  │ └─ 用户画像/偏好注入                                       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              ▲                                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Layer 2: 上下文检索 (Context Retrieval)                   │  │
+│  │ ├─ RAG (向量检索)                                         │  │
+│  │ ├─ Graph RAG (图谱检索)                                   │  │
+│  │ ├─ Agentic Search (Agent 自主探索)                        │  │
+│  │ ├─ Memory 系统 (短期/长期记忆)                             │  │
+│  │ └─ Context Lineage (Git 历史、变更溯源)                    │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              ▲                                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Layer 1: 上下文索引 (Context Indexing)                    │  │
+│  │ ├─ 代码解析 (AST/Tree-sitter)                             │  │
+│  │ ├─ 语义嵌入 (Embeddings)                                  │  │
+│  │ ├─ 知识图谱构建                                           │  │
+│  │ └─ 增量更新/实时同步                                       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 三、核心概念
 
 | 概念 | 定义 |
 |------|------|
 | **Message** | 统一消息格式 `(role, content, name?, metadata?)` |
 | **Budget** | 资源预算 = 限制 + 使用记录 |
-| **Context** | 上下文本体，管理短期记忆 + 预算 + 外部引用 |
-| **short_term_memory** | 当前任务的消息列表，Context 直接持有 |
-| **long_term_memory** | 跨会话持久记忆，外部服务引用 |
-| **rag** | 检索增强，外部服务引用 |
-| **tools** | 工具能力，外部服务引用 |
+| **BaseContext** | 上下文本体：预算 + 当前 session 短期记忆 + 外部引用 |
+| **short_term_memory** | 当前 session 的短期记忆（`IRetrievalContext` 实现；默认 in-memory） |
+| **long_term_memory** | 跨会话持久记忆检索（`IRetrievalContext` 引用；可远端/本地） |
+| **knowledge** | Knowledge Retrieval（RAG/GraphRAG 等；`IRetrievalContext` 引用；实现可远端 API / 本地 / MCP；MCP 当前尚未实现） |
+| **tools** | 工具能力，外部 provider 引用 |
 
 ---
 
-### 三、数据类型
+### 四、数据类型
 
-#### 3.1 Message
+#### 4.1 Message
 
 | 字段 | 类型 | 必须 | 说明 |
 |------|------|------|------|
@@ -49,7 +97,7 @@
 | `name` | `str \| None` | ✗ | 工具名称（role=tool 时使用） |
 | `metadata` | `dict` | ✗ | 扩展字段 |
 
-#### 3.2 Budget
+#### 4.2 Budget
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -64,32 +112,57 @@
 
 ---
 
-### 四、外部服务接口
+#### 4.3 AssembledContext
 
-| 接口 | 方法 | 说明 |
+> **说明**：一次 LLM 调用的“请求时上下文”（request-time context）。  
+> BaseContext 的 `assemble_context()` 负责构造它，并在 `budget` 约束下完成裁剪/压缩（compaction）。
+
+| 字段 | 类型 | 说明 |
 |------|------|------|
-| `IMemory` | `recall(query, limit?) -> list` | 长期记忆召回 |
-| | `store(content)` | 存入长期记忆 |
-| `IRAG` | `retrieve(query, top_k?) -> list` | 检索 |
-| `IToolProvider` | `list_tools() -> list` | 获取工具列表 |
-| | `get_tool(name) -> Tool` | 获取单个工具 |
+| `messages` | `list[Message]` | 送入模型的消息序列 |
+| `tools` | `list` | 工具定义（由 `IToolProvider` 提供并可在组装时精简/消歧） |
+| `metadata` | `dict` | 调试信息/溯源信息/预算消耗说明等 |
 
 ---
 
-### 五、Context 设计
+### 五、接口设计
 
-#### 5.1 字段
+#### 5.1 统一 Retrieval：`IRetrievalContext`
+
+> **约定**：`get/recall/retrieve` 本质都是“取回上下文片段”，实现上可统一为 `get()`；  
+> `recall/retrieve` 仅作为语义别名（可选）。
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `IRetrievalContext` | `get(query, **kwargs) -> list[Message]` | 统一检索接口：短期/长期/知识检索都可实现 |
+| | `recall(query, **kwargs) -> list[Message]` | 语义别名（可选） |
+| | `retrieve(query, **kwargs) -> list[Message]` | 语义别名（可选） |
+| `IToolProvider` | `list_tools() -> list` | 获取工具列表 |
+| | `get_tool(name) -> Tool` | 获取单个工具 |
+
+#### 5.2 Knowledge Retrieval 的实现形态
+
+- **远端 API**：通过 HTTP/SDK 调用外部检索服务（向量库/图谱/企业知识库等）
+- **本地实现**：内置向量检索、图谱检索或基于文件索引的检索
+- **MCP**：作为未来的实现路径之一（**当前尚未实现**）
+
+---
+
+### 六、BaseContext 设计
+
+#### 6.1 字段
 
 | 字段 | 类型 | 持有/引用 | 说明 |
 |------|------|----------|------|
 | `id` | `str` | 持有 | 唯一标识 |
-| `short_term_memory` | `list[Message]` | 持有 | 短期记忆 |
+| `short_term_memory` | `IRetrievalContext` | 持有 | 短期记忆（当前 session） |
 | `budget` | `Budget` | 持有 | 资源预算 |
-| `long_term_memory` | `IMemory \| None` | 引用 | 长期记忆服务 |
-| `rag` | `IRAG \| None` | 引用 | 检索服务 |
+| `long_term_memory` | `IRetrievalContext \| None` | 引用 | 长期记忆检索 |
+| `knowledge` | `IRetrievalContext \| None` | 引用 | Knowledge Retrieval（RAG/GraphRAG 等） |
 | `tools` | `IToolProvider \| None` | 引用 | 工具服务 |
+| `config` | `dict \| None` | 持有 | Context 级动态配置（支持增量 update） |
 
-#### 5.2 方法
+#### 6.2 方法
 
 | 分组 | 方法 | 签名 | 说明 |
 |------|------|------|------|
@@ -99,65 +172,85 @@
 | **预算** | `budget_use` | `(resource, amount)` | 记录消耗 |
 | | `budget_check` | `()` | 超限抛异常 |
 | | `budget_remaining` | `(resource) -> float` | 剩余额度 |
-| **长期记忆** | `ltm_recall` | `(query, limit?) -> list` | 召回 |
-| **RAG** | `rag_retrieve` | `(query, top_k?) -> list` | 检索 |
 | **工具** | `tools_list` | `() -> list` | 获取工具列表 |
-| **组装** | `assemble` | `(**options) -> list[Message]` | 组装消息，**可被子类覆盖** |
+| **组装** | `assemble` | `(**options) -> list[Message]` | 组装消息（可在 `budget` 下裁剪/压缩），**可被子类覆盖** |
+| | `assemble_context` | `(**options) -> AssembledContext` | 构造请求时上下文（messages + tools + metadata），默认封装 `assemble()` |
+| **配置** | `config_update` | `(patch: dict)` | 更新 Context 级配置（增量合并） |
 
 ---
 
-### 六、消息组装流程
+### 七、消息组装流程
 
-**核心思路**：`messages` 不是 Context 字段，而是每次调 LLM 前**临时组装**的输出。
+**核心思路**：`messages` 不是 BaseContext 字段，而是每次调 LLM 前**临时组装**的输出；  
+同时 `assemble_context()` 会把 **tools 定义**一并打包（并在 `budget` 下做裁剪/压缩）。
 
 ```
-Context
-├── short_term_memory ──────┐
-├── long_term_memory ───────┼──→ assemble() ──→ list[Message] ──→ LLM
-├── rag ────────────────────┘
-└── tools (提供工具定义)
+BaseContext
+├── short_term_memory / long_term_memory / knowledge (IRetrievalContext)
+├── tools (IToolProvider)
+└── budget (Budget)
+      │
+      └── assemble_context() ──→ AssembledContext ──→ ModelAdapter.convert() ──→ LLM
 ```
 
 **组装逻辑**（默认实现）：
 ```python
 def assemble(self, **options) -> list[Message]:
-    """组装消息，子类可覆盖扩展"""
-    return list(self.short_term_memory)
+    """组装 messages（默认：仅短期记忆）。
+
+    说明：
+    - Retrieval 统一为 IRetrievalContext.get()
+    - 上下文压缩（compaction）属于 assemble/budget 的范畴
+    """
+    return self.stm_get()
+
+def assemble_context(self, **options) -> AssembledContext:
+    """构造请求时上下文（messages + tools + metadata）。"""
+    messages = self.assemble(**options)
+    tools = self.tools_list()
+    return AssembledContext(messages=messages, tools=tools, metadata={})
 ```
 
 **上层扩展示例**：
 ```python
-class SessionContext(Context):
+class SessionContext(BaseContext):
     # 可添加新字段
     task_id: str
     
-    # 覆盖 assemble 实现自定义组装逻辑
-    def assemble(self, **options) -> list[Message]:
+    # 覆盖 assemble_context 实现自定义组装逻辑
+    def assemble_context(self, **options) -> AssembledContext:
         messages = []
-        # 1. 从长期记忆召回
-        messages.extend(self.ltm_recall(options.get("query", "")))
-        # 2. 从 RAG 检索
-        messages.extend(self.rag_retrieve(options.get("query", "")))
+        query = options.get("query", "")
+        # 1. 从长期记忆召回（可选）
+        if self.long_term_memory:
+            messages.extend(self.long_term_memory.get(query))
+        # 2. 从 Knowledge Retrieval 检索（可选，RAG/GraphRAG/Agentic Search...）
+        if self.knowledge:
+            messages.extend(self.knowledge.get(query))
         # 3. 加入短期记忆
         messages.extend(self.stm_get())
-        return messages
+        # 4. 在预算约束下做裁剪/压缩（策略可由上层决定，这里只标注发生点）
+        # messages = compact_under_budget(messages, self.budget)
+        tools = self.tools_list()
+        return AssembledContext(messages=messages, tools=tools, metadata={})
 ```
 
 ---
 
-### 七、完整架构图
+### 八、完整架构图
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                        Context                           │
+│                      BaseContext                         │
 ├──────────────────────────────────────────────────────────┤
 │  字段                                                    │
 │  ├── id: str                                             │
-│  ├── short_term_memory: list[Message]                    │
+│  ├── short_term_memory: IRetrievalContext                │
 │  ├── budget: Budget                                      │
-│  ├── long_term_memory: IMemory | None   ──→ 外部服务     │
-│  ├── rag: IRAG | None                   ──→ 外部服务     │
-│  └── tools: IToolProvider | None        ──→ 外部服务     │
+│  ├── long_term_memory: IRetrievalContext | None ──→ 外部 │
+│  ├── knowledge: IRetrievalContext | None       ──→ 外部  │
+│  ├── tools: IToolProvider | None        ──→ 外部服务     │
+│  └── config: dict | None                               │
 ├──────────────────────────────────────────────────────────┤
 │  方法                                                    │
 │  ├── stm_add(role, content)                              │
@@ -166,15 +259,15 @@ class SessionContext(Context):
 │  ├── budget_use(resource, amount)                        │
 │  ├── budget_check()                                      │
 │  ├── budget_remaining(resource) -> float                 │
-│  ├── ltm_recall(query, limit?) -> list                   │
-│  ├── rag_retrieve(query, top_k?) -> list                 │
 │  ├── tools_list() -> list                                │
-│  └── assemble(**options) -> list[Message]  ← 可覆盖扩展  │
+│  ├── assemble(**options) -> list[Message]  ← 可覆盖扩展  │
+│  ├── assemble_context(**options) -> AssembledContext      │
+│  └── config_update(patch: dict)                           │
 └──────────────────────────────────────────────────────────┘
                            │
-                           │ assemble()
+                           │ assemble_context()
                            ▼
-                    list[Message]
+                    AssembledContext
                            │
                            │ ModelAdapter.convert()
                            ▼
@@ -183,38 +276,38 @@ class SessionContext(Context):
 
 ---
 
-### 八、与 v3.3 的对比
+### 九、与 v3.3 的对比
 
 | 维度 | v3.3 | v3.4 |
 |------|------|------|
 | **Context 字段** | messages 是字段 | messages 是组装输出，不存储 |
-| **短期记忆** | 无明确概念 | `short_term_memory: list[Message]` |
-| **长期记忆** | IMemory 在 memory 域 | 作为 Context 引用 `long_term_memory` |
-| **RAG** | 无 | 作为 Context 引用 `rag` |
-| **组装** | IContextAssembler 独立接口 | `Context.assemble()` 方法，可覆盖 |
-| **扩展方式** | 不清晰 | 继承 Context，覆盖 `assemble()` |
+| **短期记忆** | 无明确概念 | `short_term_memory: IRetrievalContext`（当前 session） |
+| **长期记忆** | IMemory 在 memory 域 | 作为 `IRetrievalContext` 引用 `long_term_memory` |
+| **Knowledge** | 无 | `knowledge: IRetrievalContext`（RAG/GraphRAG 等实现；MCP 规划中） |
+| **组装** | IContextAssembler 独立接口 | `BaseContext.assemble_context()`（构造请求时上下文，支持预算压缩） |
+| **扩展方式** | 不清晰 | 继承 BaseContext，覆盖 `assemble_context()` |
 
 ---
 
-### 九、统计
+### 十、统计
 
 | 项目 | 数量 |
 |------|------|
-| 数据类型 | 2（Message, Budget） |
-| 外部接口 | 3（IMemory, IRAG, IToolProvider） |
-| Context 字段 | 6 |
-| Context 方法 | 10 |
+| 数据类型 | 3（Message, Budget, AssembledContext） |
+| 外部接口 | 2（IRetrievalContext, IToolProvider） |
+| BaseContext 字段 | 7 |
+| BaseContext 方法 | 10 |
 
 ---
 
-### 十、扩展方式
+### 十一、扩展方式
 
-上层（如 SessionContext、PlanContext）通过**继承 + 覆盖 assemble()** 实现自定义：
+上层（如 SessionContext、PlanContext）通过**继承 + 覆盖 assemble_context()** 实现自定义：
 
 - **Base Context**：通用能力，不绑定任何层级语义
-- **SessionContext**：添加 `task_id`、`user_input` 等，覆盖 `assemble()` 加入 session 级逻辑
-- **PlanContext**：添加 `attempt`、`constraints` 等，覆盖 `assemble()` 加入 plan 级逻辑
-- **AgentContext**：添加 agent 特定字段，覆盖 `assemble()` 加入 agent 级逻辑
+- **SessionContext**：添加 `task_id`、`user_input` 等，覆盖 `assemble_context()` 加入 session 级逻辑
+- **PlanContext**：添加 `attempt`、`constraints` 等，覆盖 `assemble_context()` 加入 plan 级逻辑
+- **AgentContext**：添加 agent 特定字段，覆盖 `assemble_context()` 加入 agent 级逻辑
 
 **关键**：Base Context 不预设上层需要什么，上层按需扩展。
 
