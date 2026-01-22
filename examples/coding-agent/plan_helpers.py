@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 
 from dare_framework.contracts.ids import generator_id
-from dare_framework.core.budget.models import Budget
-from dare_framework.core.plan.envelope import DonePredicate, Envelope, EvidenceCondition
-from dare_framework.core.plan.planning import ProposedStep
+from dare_framework.execution.types import Budget
+from dare_framework.plan.envelope import DonePredicate, Envelope, EvidenceCondition
+from dare_framework.plan.planning import ProposedStep
 
 FIX_HINTS = ("fix", "bug", "修复", "修正")
 SEARCH_HINTS = ("search", "grep", "搜索")

@@ -1,4 +1,4 @@
-from dare_framework.core.config.manager import ConfigManager
+from dare_framework.config.manager import ConfigManager
 
 
 def test_config_manager_reload_returns_new_config():

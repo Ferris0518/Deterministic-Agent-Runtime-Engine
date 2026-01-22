@@ -11,8 +11,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dare_framework.builder import AgentBuilder
-from dare_framework.components.model_adapters.openai import OpenAIModelAdapter
-from dare_framework.components.tools.run_command import RunCommandTool
+from dare_framework.model.impl.model_adapters.openai import OpenAIModelAdapter
+from dare_framework.tool.impl.tools.run_command import RunCommandTool
 
 MODEL = "qwen-7b"
 API_KEY = os.getenv("api_sk")

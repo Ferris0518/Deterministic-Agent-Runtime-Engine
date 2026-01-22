@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from dare_framework2.context.interfaces import IContextManager
+from dare_framework2.context.kernel import IContextManager
 from dare_framework2.context.types import (
     AssembledContext,
     ContextPacket,
@@ -17,7 +17,7 @@ from dare_framework2.context.types import (
 from dare_framework2.model.types import Message
 
 if TYPE_CHECKING:
-    from dare_framework2.memory.interfaces import IMemory
+    from dare_framework2.context.components import IMemory
     from dare_framework2.plan.types import Task
     from dare_framework2.execution.types import Budget
 

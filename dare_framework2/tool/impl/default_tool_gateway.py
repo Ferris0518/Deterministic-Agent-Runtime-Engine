@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Sequence
 
-from dare_framework2.tool.interfaces import IToolGateway, ICapabilityProvider
+from dare_framework2.tool.kernel import IToolGateway
+from dare_framework2.tool.components import ICapabilityProvider
 from dare_framework2.tool.types import CapabilityDescriptor
 
 if TYPE_CHECKING:

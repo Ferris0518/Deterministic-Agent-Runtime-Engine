@@ -8,7 +8,7 @@ Fix Bug Skill
 4. Skill 如何调用多个 Tool？
 """
 
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.builder.base_component import BaseComponent
 from dare_framework.contracts.evidence import Evidence
 from dare_framework.contracts.ids import generator_id
 from dare_framework.contracts.run_context import RunContext

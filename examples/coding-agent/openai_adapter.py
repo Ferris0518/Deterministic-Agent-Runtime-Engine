@@ -8,13 +8,14 @@ import urllib.error
 import urllib.request
 from typing import Any, Iterable
 
-from dare_framework.components.base_component import BaseComponent
+from dare_framework.builder.base_component import BaseComponent
 from dare_framework.contracts.ids import generator_id
-from dare_framework.contracts.model import GenerateOptions, IModelAdapter, Message, ModelResponse
+from dare_framework.model.components import IModelAdapter
+from dare_framework.model.types import GenerateOptions, Message, ModelResponse
 from dare_framework.contracts.tool import ITool, ToolDefinition
-from dare_framework.core.context.models import AssembledContext
-from dare_framework.core.plan.planning import ProposedPlan, ProposedStep
-from dare_framework.core.protocols import IPlanner
+from dare_framework.context.types import AssembledContext
+from dare_framework.plan.planning import ProposedPlan, ProposedStep
+from dare_framework.plan.components import IPlanner
 
 from plan_helpers import DEFAULT_EDIT_TEXT, read_envelope, seen_plan_tool, test_envelope
 

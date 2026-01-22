@@ -9,7 +9,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Sequence
 
-from dare_framework2.execution.interfaces import IEventLog
+from dare_framework2.execution.kernel import IEventLog
 from dare_framework2.execution.types import Event, RuntimeSnapshot
 
 

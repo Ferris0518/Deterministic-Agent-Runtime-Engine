@@ -18,7 +18,7 @@ from dare_framework2.plan.impl.composite_validator import CompositeValidator
 from dare_framework2.plan.impl.deterministic_planner import DeterministicPlanner
 from dare_framework2.plan.impl.gateway_validator import GatewayValidator
 from dare_framework2.plan.impl.noop_remediator import NoOpRemediator
-from dare_framework2.tool.impl.default_security_boundary import DefaultSecurityBoundary
+from dare_framework2.security.impl.default_security_boundary import DefaultSecurityBoundary
 from dare_framework2.tool.impl.default_tool_gateway import DefaultToolGateway
 from dare_framework2.tool.impl.native_tool_provider import NativeToolProvider
 from dare_framework2.tool.impl.noop_tool import NoOpTool
@@ -26,11 +26,13 @@ from dare_framework2.tool.impl.protocol_adapter_provider import ProtocolAdapterP
 from dare_framework2.tool.impl.run_context_state import RunContextState
 
 if TYPE_CHECKING:
-    from dare_framework2.execution.interfaces import IEventLog, IHook
-    from dare_framework2.memory.interfaces import IMemory
-    from dare_framework2.model.interfaces import IModelAdapter
-    from dare_framework2.plan.interfaces import IPlanner, IRemediator, IValidator
-    from dare_framework2.tool.interfaces import ITool, IProtocolAdapter
+    from dare_framework2.execution.kernel import IEventLog
+    from dare_framework2.execution.components import IHook
+    from dare_framework2.context.components import IMemory
+    from dare_framework2.model.components import IModelAdapter
+    from dare_framework2.plan.components import IPlanner, IRemediator, IValidator
+    from dare_framework2.tool.components import ITool
+    from dare_framework2.protocols.base import IProtocolAdapter
 
 
 class AgentBuilder:
@@ -334,11 +336,12 @@ class AgentBuilder:
         plugin_hooks: list["IHook"],
     ) -> None:
         """Load components from plugin managers."""
-        from dare_framework2.memory.interfaces import IMemory
-        from dare_framework2.model.interfaces import IModelAdapter
-        from dare_framework2.plan.interfaces import IPlanner, IRemediator, IValidator
-        from dare_framework2.tool.interfaces import ITool, IProtocolAdapter
-        from dare_framework2.execution.interfaces import IHook
+        from dare_framework2.context.components import IMemory
+        from dare_framework2.model.components import IModelAdapter
+        from dare_framework2.plan.components import IPlanner, IRemediator, IValidator
+        from dare_framework2.tool.components import ITool
+        from dare_framework2.protocols.base import IProtocolAdapter
+        from dare_framework2.execution.components import IHook
 
         managers = self._plugin_managers
         if managers is None:

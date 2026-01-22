@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from dare_framework2.tool.interfaces import ITool
+from dare_framework2.tool.components import ITool
 from dare_framework2.tool.types import (
     Evidence,
     RiskLevel,

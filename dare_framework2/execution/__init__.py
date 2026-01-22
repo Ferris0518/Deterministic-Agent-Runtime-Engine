@@ -5,15 +5,15 @@ including the run loop, orchestration, checkpointing, budgets,
 event logging, and hooks.
 """
 
-from dare_framework2.execution.interfaces import (
+from dare_framework2.execution.kernel import (
     IRunLoop,
     ILoopOrchestrator,
     IExecutionControl,
     IResourceManager,
     IEventLog,
     IExtensionPoint,
-    IHook,
 )
+from dare_framework2.execution.components import IHook
 from dare_framework2.execution.types import (
     # Run loop
     RunLoopState,

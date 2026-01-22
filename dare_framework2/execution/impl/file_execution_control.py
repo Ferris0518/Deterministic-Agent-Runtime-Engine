@@ -9,7 +9,7 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from dare_framework2.execution.interfaces import IExecutionControl, IEventLog
+from dare_framework2.execution.kernel import IExecutionControl, IEventLog
 from dare_framework2.execution.types import (
     ExecutionSignal,
     PauseRequested,

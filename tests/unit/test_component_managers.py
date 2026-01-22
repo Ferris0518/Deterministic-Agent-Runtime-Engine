@@ -1,18 +1,19 @@
 import pytest
 
-from dare_framework.components.base_component import ConfigurableComponent
-from dare_framework.core.config import Config
-from dare_framework.contracts.model import IModelAdapter, ModelResponse
+from dare_framework.builder.base_component import ConfigurableComponent
+from dare_framework.config import Config
+from dare_framework.model.components import IModelAdapter
+from dare_framework.model.types import ModelResponse
 from dare_framework.contracts.risk import RiskLevel
 from dare_framework.contracts.run_context import RunContext
 from dare_framework.contracts.tool import ITool, ToolResult, ToolType
 from dare_framework.contracts import ComponentType
-from dare_framework.components.plugin_system.entrypoint_managers import (
+from dare_framework.builder.plugin_system.entrypoint_managers import (
     EntrypointModelAdapterManager,
     EntrypointToolManager,
     EntrypointValidatorManager,
 )
-from dare_framework.components.plugin_system.entrypoints import (
+from dare_framework.builder.plugin_system.entrypoints import (
     ENTRYPOINT_V2_MODEL_ADAPTERS,
     ENTRYPOINT_V2_TOOLS,
     ENTRYPOINT_V2_VALIDATORS,

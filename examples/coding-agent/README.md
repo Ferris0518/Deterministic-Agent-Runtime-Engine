@@ -63,7 +63,7 @@ PYTHONPATH=. python examples/coding-agent/agent.py
 
 ```python
 from agent import CodingAgent
-from dare_framework.core.plan.planning import ProposedStep
+from dare_framework.plan.planning import ProposedStep
 from dare_framework.contracts.ids import generator_id
 
 steps = [
@@ -105,7 +105,7 @@ export OPENROUTER_APP_TITLE="dare-example"         # 可选
 
 ```python
 from dare_framework.builder import AgentBuilder
-from dare_framework.core.event.local_event_log import LocalEventLog
+from dare_framework.execution.impl.event.local_event_log import LocalEventLog
 from openai_adapter import OpenAIModelAdapter, OpenAIPlanner, tool_definitions_from_tools
 from tools import ReadFileTool, WriteFileTool, SearchCodeTool, RunTestsTool
 

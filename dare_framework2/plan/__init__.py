@@ -4,7 +4,7 @@ This domain handles the planning, validation, and verification
 of agent execution, implementing the core Plan-Execute-Verify loop.
 """
 
-from dare_framework2.plan.interfaces import IPlanner, IValidator, IRemediator
+from dare_framework2.plan.components import IPlanner, IValidator, IRemediator
 from dare_framework2.plan.types import (
     # Task and Milestone
     Task,

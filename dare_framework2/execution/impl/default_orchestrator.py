@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from dare_framework2.context.types import ContextStage, RuntimeStateView
-from dare_framework2.execution.interfaces import (
+from dare_framework2.execution.kernel import (
     ILoopOrchestrator,
     IExecutionControl,
     IResourceManager,
@@ -32,21 +32,21 @@ from dare_framework2.plan.types import (
     VerifyResult,
     ToolLoopResult,
 )
+from dare_framework2.security.types import PolicyDecision, SandboxSpec
 from dare_framework2.tool.types import (
     RiskLevel,
     ToolDefinition,
     ToolResult,
     ToolType,
     CapabilityType,
-    PolicyDecision,
-    SandboxSpec,
 )
 
 if TYPE_CHECKING:
-    from dare_framework2.model.interfaces import IModelAdapter
-    from dare_framework2.context.interfaces import IContextManager
-    from dare_framework2.tool.interfaces import IToolGateway, ISecurityBoundary
-    from dare_framework2.plan.interfaces import IPlanner, IValidator, IRemediator
+    from dare_framework2.model.components import IModelAdapter
+    from dare_framework2.context.kernel import IContextManager
+    from dare_framework2.tool.kernel import IToolGateway
+    from dare_framework2.security.kernel import ISecurityBoundary
+    from dare_framework2.plan.components import IPlanner, IValidator, IRemediator
     from dare_framework2.tool.impl.run_context_state import RunContextState
 
 

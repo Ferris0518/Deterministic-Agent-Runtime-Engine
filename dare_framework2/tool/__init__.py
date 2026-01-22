@@ -1,24 +1,16 @@
 """Tool domain: how to execute operations.
 
-This domain handles all capability definitions and executions,
-including tools, skills, and protocol adapters.
+This domain handles capability definitions and executions,
+including tools, skills, and capability providers.
 """
 
-from dare_framework2.tool.interfaces import (
-    ITool,
-    ISkill,
-    ICapabilityProvider,
-    IToolGateway,
-    IProtocolAdapter,
-    ISecurityBoundary,
-    IMCPClient,
-)
+from dare_framework2.tool.components import ITool, ISkill, ICapabilityProvider
+from dare_framework2.tool.kernel import IToolGateway
 from dare_framework2.tool.types import (
     # Enums
     RiskLevel,
     ToolType,
     CapabilityType,
-    PolicyDecision,
     # Evidence
     Evidence,
     # Tool types
@@ -29,9 +21,6 @@ from dare_framework2.tool.types import (
     CapabilityDescriptor,
     # Context
     RunContext,
-    # Security
-    TrustedInput,
-    SandboxSpec,
 )
 
 __all__ = [
@@ -40,14 +29,10 @@ __all__ = [
     "ISkill",
     "ICapabilityProvider",
     "IToolGateway",
-    "IProtocolAdapter",
-    "ISecurityBoundary",
-    "IMCPClient",
     # Enums
     "RiskLevel",
     "ToolType",
     "CapabilityType",
-    "PolicyDecision",
     # Evidence
     "Evidence",
     # Tool types
@@ -59,6 +44,4 @@ __all__ = [
     # Context
     "RunContext",
     # Security
-    "TrustedInput",
-    "SandboxSpec",
 ]

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from dare_framework2.plan.types import Task, RunResult
 
 if TYPE_CHECKING:
-    from dare_framework2.execution.interfaces import IRunLoop
+    from dare_framework2.execution.kernel import IRunLoop
     from dare_framework2.tool.impl.run_context_state import RunContextState
 
 

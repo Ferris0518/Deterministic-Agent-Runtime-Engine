@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from dare_framework2.tool.interfaces import ITool, ICapabilityProvider
+from dare_framework2.tool.components import ITool, ICapabilityProvider
 from dare_framework2.tool.types import (
     CapabilityDescriptor,
     CapabilityType,

@@ -1,4 +1,4 @@
-from dare_framework.core.config import build_config_from_layers, merge_config_layers
+from dare_framework.config import build_config_from_layers, merge_config_layers
 from dare_framework.contracts import ComponentType
 
 
