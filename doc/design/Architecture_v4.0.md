@@ -178,10 +178,10 @@ flowchart TB
 
 可选：
 - `components.py`：可插拔接口位、跨域组合接口位（例如 `IKnowledgeTool = IKnowledge + ITool`）
-- `internal/`：默认实现（不稳定）
+- `_internal/`：默认实现（不稳定；不作为公共 API）
 
 推荐依赖规则：
-- `types.py` 不依赖 `components.py/internal/`
+- `types.py` 不依赖 `components.py/_internal/`
 - `interfaces.py` 尽量只依赖 `types.py`
 - `components.py` 可依赖其他域 `interfaces.py` 表达组合
 

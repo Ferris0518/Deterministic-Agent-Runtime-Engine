@@ -18,11 +18,11 @@ dare_framework/<domain>/
   interfaces.py
   components.py      # 可选（可插拔/组合接口位）
   __init__.py
-  internal/          # 可选（默认实现；不稳定）
+  _internal/         # 可选（默认实现；不稳定；不作为公共 API）
 ```
 
 推荐依赖规则：
-- `types.py` MUST NOT 依赖 `components.py` 或 `internal/`
+- `types.py` MUST NOT 依赖 `components.py` 或 `_internal/`
 - `interfaces.py` SHOULD 只依赖 `types.py`
 - `components.py` MAY 依赖其他域的 `interfaces.py`（表达组合）
 

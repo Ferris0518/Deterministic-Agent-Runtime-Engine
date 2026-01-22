@@ -160,8 +160,8 @@ claims:
 
   - id: C-DOMAIN-001
     type: design_decision
-    statement: "v4.0 uses domain layout: types.py + interfaces.py + __init__.py per domain; pluggable/composed interfaces in components.py; default implementations in internal/."
-    rationale: "Aligns with DDD boundaries and enables convergence to a single dare_framework package layout."
+    statement: "v4.0 uses domain layout: types.py + interfaces.py + __init__.py per domain; pluggable/composed interfaces in components.py; default implementations in _internal/."
+    rationale: "Aligns with DDD boundaries, uses Python underscore convention to mark non-public implementation, and enables convergence to a single dare_framework package layout."
     refs: [doc-arch-compare]
     anchors:
       architecture:
