@@ -1,9 +1,4 @@
-"""plan domain types (task/plan/result/envelope).
-
-Scope:
-- Provide minimal data models for the current interface surface.
-- This is not a full runtime implementation.
-"""
+"""plan domain types (task/plan/result/envelope)."""
 
 from __future__ import annotations
 
@@ -15,12 +10,43 @@ from dare_framework.security.types import RiskLevel
 
 
 @dataclass(frozen=True)
+class Milestone:
+    """A milestone representing a sub-goal within a task.
+
+    Milestones are the unit of verification in the five-layer loop.
+    """
+
+    milestone_id: str
+    description: str
+    user_input: str | None = None
+    success_criteria: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class Task:
     """A high-level execution request."""
 
     description: str
     task_id: str | None = None
+    milestones: list[Milestone] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_milestones(self) -> list[Milestone]:
+        """Convert task to a list of milestones.
+
+        If milestones are already defined, return them.
+        Otherwise, create a single milestone from the task description.
+        """
+        if self.milestones:
+            return list(self.milestones)
+        from uuid import uuid4
+        return [
+            Milestone(
+                milestone_id=f"{self.task_id or uuid4().hex[:8]}_m1",
+                description=self.description,
+                user_input=self.description,
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -116,6 +142,7 @@ class ToolLoopRequest:
 __all__ = [
     "DonePredicate",
     "Envelope",
+    "Milestone",
     "ProposedStep",
     "ProposedPlan",
     "RunResult",
