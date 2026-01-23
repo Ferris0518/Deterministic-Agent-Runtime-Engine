@@ -13,6 +13,7 @@ when not provided, the agent degrades gracefully to a ReAct-style loop.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -28,6 +29,15 @@ from dare_framework.plan.types import (
     ValidatedPlan,
     VerifyResult,
 )
+
+
+@dataclass
+class MilestoneResult:
+    """Result from a milestone loop execution."""
+    success: bool
+    outputs: list[Any] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    verify_result: VerifyResult | None = None
 
 if TYPE_CHECKING:
     from dare_framework.context import Budget
@@ -259,7 +269,7 @@ class FiveLayerAgent(BaseAgent):
     # Milestone Loop (Layer 2)
     # =========================================================================
 
-    async def _run_milestone_loop(self, milestone: Milestone) -> Any:
+    async def _run_milestone_loop(self, milestone: Milestone) -> MilestoneResult:
         """Run the milestone loop - sub-goal tracking."""
         await self._log_event("milestone.start", {
             "milestone_id": milestone.milestone_id,
@@ -293,12 +303,12 @@ class FiveLayerAgent(BaseAgent):
                     "milestone_id": milestone.milestone_id,
                     "attempts": attempt + 1,
                 })
-                return {
-                    "success": True,
-                    "outputs": execute_result.get("outputs", []),
-                    "errors": [],
-                    "verify_result": verify_result,
-                }
+                return MilestoneResult(
+                    success=True,
+                    outputs=execute_result.get("outputs", []),
+                    errors=[],
+                    verify_result=verify_result,
+                )
 
             # Remediate if available
             if self._remediator is not None and milestone_state:
@@ -312,12 +322,12 @@ class FiveLayerAgent(BaseAgent):
         await self._log_event("milestone.failed", {
             "milestone_id": milestone.milestone_id,
         })
-        return {
-            "success": False,
-            "outputs": [],
-            "errors": ["milestone failed after max attempts"],
-            "verify_result": None,
-        }
+        return MilestoneResult(
+            success=False,
+            outputs=[],
+            errors=["milestone failed after max attempts"],
+            verify_result=None,
+        )
 
     # =========================================================================
     # Plan Loop (Layer 3)
