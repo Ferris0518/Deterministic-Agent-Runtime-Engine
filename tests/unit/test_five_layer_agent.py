@@ -118,6 +118,7 @@ class TestFiveLayerAgentInit:
         assert agent.name == "test-agent"
         assert agent.context is not None
         assert not agent.is_full_five_layer_mode
+        assert agent.is_simple_mode  # No planner, no tools
 
     def test_init_with_context(self) -> None:
         """Agent can use a provided context."""
@@ -205,11 +206,11 @@ class TestFiveLayerAgentExecution:
 
         await agent.run("Test task")
 
-        # Should have session.start, milestone.start, model.response, 
-        # milestone.success, session.complete
+        # Without planner or tools, runs in simple mode
+        # Should have simple.start, simple.complete
         event_types = [e[0] for e in event_log.events]
-        assert "session.start" in event_types
-        assert "session.complete" in event_types
+        assert "simple.start" in event_types
+        assert "simple.complete" in event_types
 
     @pytest.mark.asyncio
     async def test_budget_check_called(self) -> None:
@@ -243,9 +244,15 @@ class TestReActMode:
 
     @pytest.mark.asyncio
     async def test_react_mode_skips_plan_loop(self) -> None:
-        """Without planner, plan loop is skipped."""
+        """Without planner but with tools, runs in ReAct mode."""
         model = MockModelAdapter()
-        agent = FiveLayerAgent(name="react-agent", model=model)
+        tool_gateway = MockToolGateway()
+        agent = FiveLayerAgent(name="react-agent", model=model, tool_gateway=tool_gateway)
+
+        # Should be in react mode
+        assert agent.is_react_mode
+        assert not agent.is_full_five_layer_mode
+        assert not agent.is_simple_mode
 
         # Should not raise, just execute in ReAct mode
         result = await agent.run("Do something")

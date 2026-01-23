@@ -177,16 +177,37 @@ class FiveLayerAgent(BaseAgent):
         """Check if agent has full five-layer capabilities."""
         return self._planner is not None
 
+    @property
+    def is_react_mode(self) -> bool:
+        """Check if agent should run in ReAct mode.
+
+        ReAct mode: No planner, but has tool_gateway.
+        Skips Session/Milestone loops, runs Execute+Tool directly.
+        """
+        return self._planner is None and self._tool_gateway is not None
+
+    @property
+    def is_simple_mode(self) -> bool:
+        """Check if agent should run in simple chat mode.
+
+        Simple mode: No planner and no tool_gateway.
+        Just model generation, no tools.
+        """
+        return self._planner is None and self._tool_gateway is None
+
     # =========================================================================
     # IAgentOrchestration Implementation
     # =========================================================================
 
     async def execute(self, task: Task, deps: Any | None = None) -> RunResult:
-        """Execute task using the five-layer loop.
+        """Execute task with automatic mode selection.
 
         This is the primary entry point implementing IAgentOrchestration.
-        If planner is provided, runs full five-layer loop.
-        Otherwise, falls back to simple execute loop (ReAct-style).
+        Mode is automatically selected based on component configuration:
+
+        - **Full Five-Layer**: planner is provided → Session→Milestone→Plan→Execute→Tool
+        - **ReAct Mode**: no planner, has tools → Execute→Tool loop directly
+        - **Simple Mode**: no planner, no tools → Single model generation
 
         Args:
             task: Task to execute.
@@ -195,7 +216,16 @@ class FiveLayerAgent(BaseAgent):
         Returns:
             RunResult with execution outcome.
         """
-        return await self._run_session_loop(task)
+        # Full five-layer mode: has planner or task has explicit milestones
+        if self.is_full_five_layer_mode or task.milestones:
+            return await self._run_session_loop(task)
+
+        # ReAct mode: no planner but has tools
+        if self.is_react_mode:
+            return await self._run_react_loop(task)
+
+        # Simple mode: no planner, no tools → just model generation
+        return await self._run_simple_loop(task)
 
     # =========================================================================
     # IAgent.run() Override
@@ -238,6 +268,91 @@ class FiveLayerAgent(BaseAgent):
         if result.errors:
             return f"Error: {'; '.join(result.errors)}"
         return ""
+
+    # =========================================================================
+    # ReAct Loop (Degraded Mode - No Session/Milestone)
+    # =========================================================================
+
+    async def _run_react_loop(self, task: Task) -> RunResult:
+        """Run ReAct-style loop - direct Execute+Tool without Session/Milestone.
+
+        This is the degraded mode when no planner is configured but tools are
+        available. Skips Session and Milestone loops, runs Execute→Tool directly.
+        """
+        await self._log_event("react.start", {
+            "task_description": task.description[:100],
+        })
+
+        # Add user message to STM
+        user_message = Message(role="user", content=task.description)
+        self._context.stm_add(user_message)
+
+        # Run execute loop directly (no plan, no milestone)
+        execute_result = await self._run_execute_loop(None)
+
+        await self._log_event("react.complete", {
+            "success": execute_result.get("success", False),
+        })
+
+        return RunResult(
+            success=execute_result.get("success", False),
+            output=execute_result.get("outputs", [])[-1] if execute_result.get("outputs") else None,
+            errors=execute_result.get("errors", []),
+        )
+
+    # =========================================================================
+    # Simple Loop (Degraded Mode - No Tools)
+    # =========================================================================
+
+    async def _run_simple_loop(self, task: Task) -> RunResult:
+        """Run simple loop - single model generation without tools.
+
+        This is the most degraded mode when neither planner nor tools are
+        configured. Just generates a single model response.
+        """
+        await self._log_event("simple.start", {
+            "task_description": task.description[:100],
+        })
+
+        # Add user message to STM
+        user_message = Message(role="user", content=task.description)
+        self._context.stm_add(user_message)
+
+        # Budget check
+        self._context.budget_check()
+
+        # Assemble context
+        assembled = self._context.assemble()
+
+        # Create prompt
+        prompt = Prompt(
+            messages=assembled.messages,
+            tools=[],  # No tools in simple mode
+            metadata=assembled.metadata,
+        )
+
+        # Generate model response
+        response = await self._model.generate(prompt)
+
+        # Add response to STM
+        assistant_message = Message(role="assistant", content=response.content)
+        self._context.stm_add(assistant_message)
+
+        # Record token usage
+        if response.usage:
+            tokens = response.usage.get("total_tokens", 0)
+            if tokens:
+                self._context.budget_use("tokens", tokens)
+
+        await self._log_event("simple.complete", {
+            "success": True,
+        })
+
+        return RunResult(
+            success=True,
+            output={"content": response.content},
+            errors=[],
+        )
 
     # =========================================================================
     # Session Loop (Layer 1)
