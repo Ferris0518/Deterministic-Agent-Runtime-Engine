@@ -5,7 +5,7 @@ from typing import Any
 
 from dare_framework.execution.impl.hooks.protocols import IHook
 from dare_framework.contracts import ComponentType
-from dare_framework.execution.types import HookPhase
+from dare_framework.execution.impl.hook.models import HookPhase
 
 
 class StdoutHook(IHook):

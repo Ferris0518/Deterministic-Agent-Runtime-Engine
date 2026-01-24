@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from dare_framework3_4.model.types import GenerateOptions, ModelResponse, Prompt
@@ -27,5 +27,10 @@ class IModelAdapter(Protocol):
         """
         ...
 
+class IModelAdapterManager(Protocol):
+    """Loads the model adapter implementation (single-select)."""
 
-__all__ = ["IModelAdapter"]
+    def load_model_adapter(self, *, config: Any | None = None) -> object | None: ...
+
+
+__all__ = ["IModelAdapter", "IModelAdapterManager"]

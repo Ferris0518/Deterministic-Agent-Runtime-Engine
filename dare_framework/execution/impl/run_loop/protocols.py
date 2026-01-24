@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from dare_framework.plan.results import RunResult
-from dare_framework.execution.types import RunLoopState, TickResult
+from dare_framework.execution.impl.run_loop.models import RunLoopState, TickResult
 
 
 class IRunLoop(Protocol):
@@ -19,4 +19,3 @@ class IRunLoop(Protocol):
 
     async def run(self, task: "Task") -> RunResult:
         """Drive execution until termination (internally calls tick repeatedly)."""
-
