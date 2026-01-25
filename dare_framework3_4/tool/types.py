@@ -5,7 +5,12 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, TypeAlias, TypedDict
+from typing import Any, Literal, TypedDict
+
+try:
+    from typing import TypeAlias
+except ImportError:
+    from typing_extensions import TypeAlias
 
 
 @dataclass
@@ -38,6 +43,33 @@ class ExecutionSignal(Enum):
     PAUSE_REQUESTED = "pause_requested"
     CANCEL_REQUESTED = "cancel_requested"
     HUMAN_APPROVAL_REQUIRED = "human_approval_required"
+
+
+class ToolType(Enum):
+    """Tool classification for execution semantics."""
+
+    ATOMIC = "atomic"  # Single-shot execution
+    WORK_UNIT = "work_unit"  # Envelope-bounded loop
+
+
+class ProviderStatus(Enum):
+    """Health status for capability providers."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNHEALTHY = "unhealthy"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class InvocationContext:
+    """Context for tracing and managing a single tool invocation."""
+
+    invocation_id: str
+    capability_id: str
+    parent_id: str | None = None
+    started_at: float = field(default_factory=time.time)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class CapabilityType(Enum):
@@ -99,7 +131,10 @@ __all__ = [
     "CapabilityType",
     "Evidence",
     "ExecutionSignal",
+    "InvocationContext",
+    "ProviderStatus",
     "RiskLevelName",
     "ToolDefinition",
     "ToolResult",
+    "ToolType",
 ]

@@ -10,7 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Generic, Protocol, Sequence, TypeVar, runtime_checkable
 
-from dare_framework3_4.tool.types import CapabilityDescriptor, ToolResult
+from dare_framework3_4.tool.types import (
+    CapabilityDescriptor,
+    ProviderStatus,
+    RiskLevelName,
+    ToolResult,
+    ToolType,
+)
 
 
 @runtime_checkable
@@ -33,6 +39,7 @@ class IToolProvider(Protocol):
         """
         ...
 
+
 TDeps = TypeVar("TDeps")
 
 
@@ -46,21 +53,95 @@ class RunContext(Generic[TDeps]):
 
 @runtime_checkable
 class ITool(Protocol):
-    """A callable tool implementation."""
+    """A callable tool implementation (V4 compliant).
+    
+    All metadata properties are trusted registry sources, not model output.
+    """
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """Unique tool identifier."""
+        ...
 
-    async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult: ...
+    @property
+    def description(self) -> str:
+        """Human-readable description."""
+        ...
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        """JSON schema for input validation."""
+        ...
+
+    @property
+    def output_schema(self) -> dict[str, Any]:
+        """JSON schema for output validation."""
+        ...
+
+    @property
+    def tool_type(self) -> ToolType:
+        """Tool classification (atomic or work unit)."""
+        ...
+
+    @property
+    def risk_level(self) -> RiskLevelName:
+        """Security risk classification (trusted registry source)."""
+        ...
+
+    @property
+    def requires_approval(self) -> bool:
+        """Whether human approval is required (trusted registry source)."""
+        ...
+
+    @property
+    def timeout_seconds(self) -> int:
+        """Execution timeout in seconds."""
+        ...
+
+    @property
+    def is_work_unit(self) -> bool:
+        """Whether this tool is a work unit (envelope-bounded loop)."""
+        ...
+
+    async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
+        """Execute the tool and return a ToolResult."""
+        ...
+
+
+@runtime_checkable
+class ISkill(Protocol):
+    """Pluggable skill capability for higher-level operations."""
+
+    @property
+    def name(self) -> str:
+        """Unique skill identifier."""
+        ...
+
+    @property
+    def description(self) -> str:
+        """Human-readable description."""
+        ...
+
+    async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
+        """Execute the skill and return a ToolResult."""
+        ...
 
 
 @runtime_checkable
 class ICapabilityProvider(Protocol):
     """A provider that exposes capabilities to a ToolGateway registry."""
 
-    async def list(self) -> list[CapabilityDescriptor]: ...
+    async def list(self) -> list[CapabilityDescriptor]:
+        """List available capabilities."""
+        ...
 
-    async def invoke(self, capability_id: str, params: dict[str, Any]) -> object: ...
+    async def invoke(self, capability_id: str, params: dict[str, Any]) -> object:
+        """Invoke a capability by id."""
+        ...
+
+    async def health_check(self) -> ProviderStatus:
+        """Check provider health status."""
+        ...
 
 
 @runtime_checkable
@@ -68,13 +149,21 @@ class IProtocolAdapter(Protocol):
     """Protocol adapter (e.g., MCP/A2A) translated into canonical capabilities."""
 
     @property
-    def protocol_name(self) -> str: ...
+    def protocol_name(self) -> str:
+        """Protocol name identifier."""
+        ...
 
-    async def connect(self, endpoint: str, config: dict[str, Any]) -> None: ...
+    async def connect(self, endpoint: str, config: dict[str, Any]) -> None:
+        """Connect to an external protocol endpoint."""
+        ...
 
-    async def disconnect(self) -> None: ...
+    async def disconnect(self) -> None:
+        """Disconnect from the protocol endpoint."""
+        ...
 
-    async def discover(self) -> Sequence[CapabilityDescriptor]: ...
+    async def discover(self) -> Sequence[CapabilityDescriptor]:
+        """Discover remote capabilities."""
+        ...
 
     async def invoke(
         self,
@@ -82,14 +171,18 @@ class IProtocolAdapter(Protocol):
         params: dict[str, Any],
         *,
         timeout: float | None = None,
-    ) -> Any: ...
+    ) -> Any:
+        """Invoke a remote capability."""
+        ...
 
 
 __all__ = [
     "ICapabilityProvider",
     "IProtocolAdapter",
+    "ISkill",
     "ITool",
     "IToolProvider",
     "RunContext",
     "ToolResult",
 ]
+
