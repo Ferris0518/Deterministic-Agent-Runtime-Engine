@@ -7,9 +7,15 @@ from pathlib import Path
 from typing import Any
 
 from dare_framework3_4.tool.interfaces import ITool
-from dare_framework3_4.tool._internal.file_utils import resolve_workspace_roots
-from dare_framework3_4.tool._internal.ids import generate_id
-from dare_framework3_4.tool.types import Evidence, RunContext, ToolResult, ToolType
+from dare_framework3_4.tool._internal.utils.file_utils import resolve_workspace_roots
+from dare_framework3_4.tool._internal.utils.ids import generate_id
+from dare_framework3_4.tool.types import (
+    CapabilityKind,
+    Evidence,
+    RunContext,
+    ToolResult,
+    ToolType,
+)
 
 
 class RunCommandTool(ITool):
@@ -69,6 +75,10 @@ class RunCommandTool(ITool):
     @property
     def is_work_unit(self) -> bool:
         return False
+
+    @property
+    def capability_kind(self) -> CapabilityKind:
+        return CapabilityKind.TOOL
 
     async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
         command = input.get("command")

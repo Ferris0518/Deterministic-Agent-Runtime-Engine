@@ -11,6 +11,7 @@ from typing import Any, Protocol, Sequence, runtime_checkable
 
 from dare_framework3_4.tool.types import (
     CapabilityDescriptor,
+    CapabilityKind,
     ProviderStatus,
     RiskLevelName,
     RunContext,
@@ -96,6 +97,11 @@ class ITool(Protocol):
     @property
     def is_work_unit(self) -> bool:
         """Whether this tool is a work unit (envelope-bounded loop)."""
+        ...
+
+    @property
+    def capability_kind(self) -> CapabilityKind:
+        """Capability kind for trusted registry metadata."""
         ...
 
     async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:

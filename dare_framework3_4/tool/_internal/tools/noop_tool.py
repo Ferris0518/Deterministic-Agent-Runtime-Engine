@@ -8,7 +8,13 @@ from __future__ import annotations
 from typing import Any
 
 from dare_framework3_4.tool.interfaces import ITool
-from dare_framework3_4.tool.types import RiskLevelName, RunContext, ToolResult, ToolType
+from dare_framework3_4.tool.types import (
+    CapabilityKind,
+    RiskLevelName,
+    RunContext,
+    ToolResult,
+    ToolType,
+)
 
 
 class NoopTool(ITool):
@@ -61,6 +67,10 @@ class NoopTool(ITool):
     @property
     def is_work_unit(self) -> bool:
         return False
+
+    @property
+    def capability_kind(self) -> CapabilityKind:
+        return CapabilityKind.TOOL
 
     async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
         """Execute the noop tool.

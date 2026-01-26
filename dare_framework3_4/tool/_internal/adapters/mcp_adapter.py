@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 from dare_framework3_4.tool.interfaces import IMCPClient, IProtocolAdapter
-from dare_framework3_4.tool.types import CapabilityDescriptor, CapabilityType, RunContext
+from dare_framework3_4.tool.types import (
+    CapabilityDescriptor,
+    CapabilityKind,
+    CapabilityType,
+    RunContext,
+)
 
 
 class MCPAdapter(IProtocolAdapter):
@@ -61,7 +66,7 @@ class MCPAdapter(IProtocolAdapter):
                             "requires_approval": bool(requires_approval),
                             "timeout_seconds": int(timeout_seconds),
                             "is_work_unit": bool(is_work_unit),
-                            "capability_kind": "tool",
+                            "capability_kind": CapabilityKind.TOOL,
                         },
                     )
                 )

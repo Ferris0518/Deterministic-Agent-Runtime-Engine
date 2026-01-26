@@ -6,6 +6,7 @@ Manages local ITool instances and exposes them as capabilities.
 from __future__ import annotations
 
 from typing import Any, Callable
+from enum import Enum
 
 from dare_framework3_4.tool.interfaces import ICapabilityProvider, ITool
 from dare_framework3_4.tool.types import (
@@ -99,17 +100,9 @@ class NativeToolProvider(ICapabilityProvider):
         capabilities: list[CapabilityDescriptor] = []
         
         for tool in self._tools.values():
-            risk_level = getattr(tool.risk_level, "value", tool.risk_level)
-            metadata = CapabilityMetadata(
-                risk_level=str(risk_level),
-                requires_approval=tool.requires_approval,
-                timeout_seconds=tool.timeout_seconds,
-                is_work_unit=tool.is_work_unit,
-                capability_kind=CapabilityKind.TOOL,
-            )
-            
+            metadata = _capability_metadata(tool)
             capability = CapabilityDescriptor(
-                id=f"{self._capability_prefix}{tool.name}",
+                id=_capability_id(self._capability_prefix, tool.name),
                 type=CapabilityType.TOOL,
                 name=tool.name,
                 description=tool.description,
@@ -158,20 +151,69 @@ class NativeToolProvider(ICapabilityProvider):
         
         Implements IToolProvider for BaseContext integration.
         """
-        tool_defs: list[dict[str, Any]] = []
-        
-        for tool in self._tools.values():
-            tool_def = {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                },
-            }
-            tool_defs.append(tool_def)
-        
-        return tool_defs
+        return [_tool_definition(self._capability_prefix, tool) for tool in self._tools.values()]
+
+
+def _capability_id(prefix: str, name: str) -> str:
+    return f"{prefix}{name}"
+
+
+def _capability_metadata(tool: ITool) -> CapabilityMetadata:
+    risk_level = getattr(tool.risk_level, "value", tool.risk_level)
+    capability_kind = _normalize_capability_kind(getattr(tool, "capability_kind", CapabilityKind.TOOL))
+    return CapabilityMetadata(
+        risk_level=str(risk_level),
+        requires_approval=tool.requires_approval,
+        timeout_seconds=tool.timeout_seconds,
+        is_work_unit=tool.is_work_unit,
+        capability_kind=capability_kind,
+    )
+
+
+def _tool_definition(prefix: str, tool: ITool) -> dict[str, Any]:
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.input_schema,
+        },
+        "capability_id": _capability_id(prefix, tool.name),
+    }
+    metadata = _normalize_metadata(dict(_capability_metadata(tool)))
+    if metadata:
+        tool_def["metadata"] = metadata
+    if tool.output_schema:
+        tool_def["output_schema"] = dict(tool.output_schema)
+    return tool_def
+
+
+def _normalize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        normalized[key] = _normalize_value(value)
+    return normalized
+
+
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {k: _normalize_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_value(item) for item in value]
+    return value
+
+
+def _normalize_capability_kind(value: Any) -> CapabilityKind:
+    if isinstance(value, CapabilityKind):
+        return value
+    if hasattr(value, "value"):
+        value = value.value
+    try:
+        return CapabilityKind(str(value))
+    except ValueError:
+        return CapabilityKind.TOOL
 
 
 __all__ = ["NativeToolProvider"]

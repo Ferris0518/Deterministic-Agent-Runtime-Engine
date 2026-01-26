@@ -6,7 +6,7 @@ from typing import Any
 
 from dare_framework3_4.tool.interfaces import ITool
 from dare_framework3_4.tool.errors import ToolError
-from dare_framework3_4.tool._internal.file_utils import (
+from dare_framework3_4.tool._internal.utils.file_utils import (
     DEFAULT_MAX_BYTES,
     atomic_write,
     coerce_int,
@@ -15,8 +15,14 @@ from dare_framework3_4.tool._internal.file_utils import (
     resolve_path,
     resolve_workspace_roots,
 )
-from dare_framework3_4.tool._internal.ids import generate_id
-from dare_framework3_4.tool.types import Evidence, RunContext, ToolResult, ToolType
+from dare_framework3_4.tool._internal.utils.ids import generate_id
+from dare_framework3_4.tool.types import (
+    CapabilityKind,
+    Evidence,
+    RunContext,
+    ToolResult,
+    ToolType,
+)
 
 
 class WriteFileTool(ITool):
@@ -76,6 +82,10 @@ class WriteFileTool(ITool):
     @property
     def is_work_unit(self) -> bool:
         return False
+
+    @property
+    def capability_kind(self) -> CapabilityKind:
+        return CapabilityKind.TOOL
 
     async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
         try:

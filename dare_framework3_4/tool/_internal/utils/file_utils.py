@@ -50,7 +50,7 @@ def coerce_list(value: Any, default: Iterable[str]) -> list[str]:
 
 
 def resolve_workspace_roots(context: RunContext[Any]) -> list[Path]:
-    """Resolve workspace roots from config or default to CWD."""
+    """Resolve workspace roots from config or default to project root."""
     config = getattr(context, "config", None)
     roots: list[str] | None = None
     if config is None:
@@ -62,11 +62,19 @@ def resolve_workspace_roots(context: RunContext[Any]) -> list[Path]:
         if isinstance(roots_value, list):
             roots = [str(item) for item in roots_value]
     if not roots:
-        roots = [str(Path.cwd().resolve())]
+        roots = [str(_default_workspace_root())]
     resolved: list[Path] = []
     for root in roots:
         resolved.append(Path(root).expanduser().resolve())
     return resolved
+
+
+def _default_workspace_root() -> Path:
+    cwd = Path.cwd().resolve()
+    for candidate in (cwd, *cwd.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return cwd
 
 
 def resolve_path(path_value: Any, roots: list[Path]) -> tuple[Path, Path]:
