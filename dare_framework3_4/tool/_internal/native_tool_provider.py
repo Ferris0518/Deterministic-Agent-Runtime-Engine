@@ -109,7 +109,7 @@ class NativeToolProvider(ICapabilityProvider):
             )
             
             capability = CapabilityDescriptor(
-                id=f\"{self._capability_prefix}{tool.name}\",
+                id=f"{self._capability_prefix}{tool.name}",
                 type=CapabilityType.TOOL,
                 name=tool.name,
                 description=tool.description,
