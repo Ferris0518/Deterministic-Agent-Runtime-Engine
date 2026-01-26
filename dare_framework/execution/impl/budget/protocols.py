@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from dare_framework.execution.types import Budget, ResourceType
+from dare_framework.execution.impl.budget.models import Budget, ResourceType
 
 
 class IResourceManager(Protocol):
@@ -20,4 +20,3 @@ class IResourceManager(Protocol):
 
     def check_limit(self, *, scope: str) -> None:
         """Raise ResourceExhausted if the scope is over budget."""
-

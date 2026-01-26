@@ -1,6 +1,6 @@
 """tool domain facade."""
 
-from dare_framework3_4.tool.interfaces import IToolProvider
+from dare_framework3_4.tool.interfaces import IToolManager, IToolProvider
 from dare_framework3_4.tool.kernel import IExecutionControl, IToolGateway
 from dare_framework3_4.tool.types import (
     CapabilityDescriptor,
@@ -19,6 +19,7 @@ __all__ = [
     "CapabilityKind",
     "CapabilityMetadata",
     "CapabilityType",
+    "IToolManager",
     "IToolProvider",
     "IToolGateway",
     "IExecutionControl",

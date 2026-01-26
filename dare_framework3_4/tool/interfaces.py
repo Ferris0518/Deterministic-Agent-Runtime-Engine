@@ -33,6 +33,13 @@ class IToolProvider(Protocol):
         """
         ...
 
+
+class IToolManager(Protocol):
+    """Loads tool capability implementations."""
+
+    def load_tools(self, *, config: Any | None = None) -> list[object]: ...
+
+
 TDeps = TypeVar("TDeps")
 
 
@@ -88,6 +95,7 @@ class IProtocolAdapter(Protocol):
 __all__ = [
     "ICapabilityProvider",
     "IProtocolAdapter",
+    "IToolManager",
     "ITool",
     "IToolProvider",
     "RunContext",

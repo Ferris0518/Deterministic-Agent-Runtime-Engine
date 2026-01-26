@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from dare_framework.execution.types import HookPhase
+from dare_framework.execution.impl.hook.models import HookPhase
 from dare_framework.builder.plugin_system.configurable_component import IConfigurableComponent
 
 

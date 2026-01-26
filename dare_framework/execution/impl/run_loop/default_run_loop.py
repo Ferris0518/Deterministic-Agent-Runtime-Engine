@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from dare_framework.plan.results import RunResult
 from dare_framework.plan.task import Task
-from dare_framework.execution.kernel import ILoopOrchestrator
-from dare_framework.execution.types import RunLoopState, TickResult
-from dare_framework.execution.kernel import IRunLoop
+from dare_framework.execution.impl.run_loop.models import RunLoopState, TickResult
+from dare_framework.execution.impl.run_loop.protocols import IRunLoop
+
+if TYPE_CHECKING:
+    from dare_framework.execution.impl.orchestrator.protocols import ILoopOrchestrator
 
 
 class DefaultRunLoop(IRunLoop):
     """A minimal tick-based run loop wrapping the orchestrator (v2.0 MVP)."""
 
-    def __init__(self, orchestrator: ILoopOrchestrator) -> None:
+    def __init__(self, orchestrator: "ILoopOrchestrator") -> None:
         self._orchestrator = orchestrator
         self._state = RunLoopState.IDLE
         self._pending_task: Task | None = None

@@ -9,15 +9,15 @@ from dare_framework.model.components import IModelAdapter
 from dare_framework.model.types import Message
 from dare_framework.contracts.risk import RiskLevel
 from dare_framework.contracts.tool import ToolDefinition, ToolResult, ToolType
-from dare_framework.execution.types import ResourceType
+from dare_framework.execution.impl.budget.models import ResourceType
 from dare_framework.context.types import ContextStage, RuntimeStateView
 from dare_framework.context.kernel import IContextManager
-from dare_framework.execution.kernel import IExecutionControl
-from dare_framework.execution.kernel import IEventLog
-from dare_framework.execution.kernel import IExtensionPoint
-from dare_framework.execution.kernel import ILoopOrchestrator
-from dare_framework.execution.kernel import IResourceManager
-from dare_framework.execution.types import HookPhase
+from dare_framework.execution.impl.execution_control.protocols import IExecutionControl
+from dare_framework.execution.impl.event.protocols import IEventLog
+from dare_framework.execution.impl.hook.protocols import IExtensionPoint
+from dare_framework.execution.impl.orchestrator.protocols import ILoopOrchestrator
+from dare_framework.execution.impl.budget.protocols import IResourceManager
+from dare_framework.execution.impl.hook.models import HookPhase
 from dare_framework.plan.envelope import DonePredicate, Envelope, ToolLoopRequest
 from dare_framework.plan.planning import ProposedPlan, ValidatedPlan
 from dare_framework.plan.results import (
