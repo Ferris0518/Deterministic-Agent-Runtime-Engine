@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from dare_framework3_4.agent import FiveLayerAgent
-from dare_framework3_4.context import Budget, Context, Message
-from dare_framework3_4.model.types import ModelResponse, Prompt
+from dare_framework.agent import FiveLayerAgent
+from dare_framework.context import Budget, Context, Message
+from dare_framework.model.types import ModelResponse, Prompt
 
 
 # =============================================================================
@@ -45,7 +45,7 @@ class MockPlanner:
 
     async def plan(self, ctx: Any) -> Any:
         self.plan_calls.append(ctx)
-        from dare_framework3_4.plan.types import ProposedPlan
+        from dare_framework.plan.types import ProposedPlan
         return ProposedPlan(
             plan_description="Mock plan",
             steps=[],
@@ -64,7 +64,7 @@ class MockValidator:
 
     async def validate_plan(self, plan: Any, ctx: Any) -> Any:
         self.validate_calls.append((plan, ctx))
-        from dare_framework3_4.plan.types import ValidatedPlan
+        from dare_framework.plan.types import ValidatedPlan
         return ValidatedPlan(
             success=self.validate_success,
             plan_description=plan.plan_description,
@@ -74,7 +74,7 @@ class MockValidator:
 
     async def verify_milestone(self, result: Any, ctx: Any) -> Any:
         self.verify_calls.append((result, ctx))
-        from dare_framework3_4.plan.types import VerifyResult
+        from dare_framework.plan.types import VerifyResult
         return VerifyResult(
             success=self.verify_success,
             errors=[] if self.verify_success else ["verification failed"],
@@ -161,7 +161,7 @@ class TestFiveLayerAgentInit:
 
     def test_implements_orchestration_interface(self) -> None:
         """Agent implements IAgentOrchestration interface."""
-        from dare_framework3_4.agent.interfaces import IAgentOrchestration
+        from dare_framework.agent.interfaces import IAgentOrchestration
 
         model = MockModelAdapter()
         agent = FiveLayerAgent(name="test-agent", model=model)

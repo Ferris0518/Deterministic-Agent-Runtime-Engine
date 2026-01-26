@@ -721,7 +721,7 @@ class FiveLayerAgent(BaseAgent):
 
         # TODO: Need to convert execute_result to proper type
         # For now, create a minimal RunResult
-        from dare_framework3_4.plan.types import RunResult as PlanRunResult
+        from dare_framework.plan.types import RunResult as PlanRunResult
 
         run_result = PlanRunResult(
             success=execute_result.get("success", False),
