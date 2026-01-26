@@ -1,19 +1,34 @@
 """Tool Management Example.
 
 This example demonstrates the tool management capabilities of dare_framework3_4.
+Aligned with the v4 tool runtime configuration used in examples/base_tool.
 """
 
-import asyncio
+from __future__ import annotations
 
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+# Add project root to path for local development
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from dare_framework3_4.plan import Envelope
 from dare_framework3_4.tool import (
-    DefaultToolGateway,
     DefaultExecutionControl,
+    DefaultToolGateway,
+    EchoTool,
+    GatewayToolProvider,
     NativeToolProvider,
     NoopTool,
-    EchoTool,
-    ProviderStatus,
+    RunContextState,
 )
-from dare_framework3_4.plan.types import Envelope
+
+# Configuration (consistent with examples/base_tool)
+WORKSPACE_ROOT = os.getenv("TOOL_WORKSPACE_ROOT", ".")
 
 
 async def main():
@@ -25,14 +40,19 @@ async def main():
     
     # 1. Create components
     print("\n[1] Creating components...")
+    run_context = RunContextState(
+        config={
+            "workspace_roots": [WORKSPACE_ROOT],
+        }
+    )
+
     gateway = DefaultToolGateway()
     execution_control = DefaultExecutionControl()
-    provider = NativeToolProvider()
+    tools = [NoopTool(), EchoTool()]
+    provider = NativeToolProvider(tools=tools, context_factory=run_context.build)
     
     # 2. Register tools with the provider
     print("\n[2] Registering tools...")
-    provider.register_tool(NoopTool())
-    provider.register_tool(EchoTool())
     print(f"    Registered tools: noop, echo")
     
     # 3. Register provider with gateway
@@ -58,24 +78,24 @@ async def main():
     print("\n[6] Invoking tools...")
     
     # Create an envelope (execution boundary)
-    envelope = Envelope(allowed_capability_ids=["noop", "echo"])
+    envelope = Envelope(allowed_capability_ids=["tool:noop", "tool:echo"])
     
     # Invoke noop tool
     print("\n    Invoking 'noop'...")
-    result = await gateway.invoke("noop", {}, envelope=envelope)
+    result = await gateway.invoke("tool:noop", {}, envelope=envelope)
     print(f"    Result: success={result.success}, output={result.output}")
     
     # Invoke echo tool
     print("\n    Invoking 'echo' with message='Hello, DARE!'...")
-    result = await gateway.invoke("echo", {"message": "Hello, DARE!"}, envelope=envelope)
+    result = await gateway.invoke("tool:echo", {"message": "Hello, DARE!"}, envelope=envelope)
     print(f"    Result: success={result.success}, output={result.output}")
     
     # 7. Demonstrate envelope restrictions
     print("\n[7] Demonstrating envelope restrictions...")
-    restricted_envelope = Envelope(allowed_capability_ids=["noop"])  # echo not allowed
+    restricted_envelope = Envelope(allowed_capability_ids=["tool:noop"])  # echo not allowed
     
     try:
-        await gateway.invoke("echo", {"message": "test"}, envelope=restricted_envelope)
+        await gateway.invoke("tool:echo", {"message": "test"}, envelope=restricted_envelope)
     except PermissionError as e:
         print(f"    Expected error: {e}")
     
@@ -97,7 +117,9 @@ async def main():
     
     # 9. Get LLM-compatible tool definitions
     print("\n[9] Getting LLM-compatible tool definitions...")
-    tool_defs = provider.list_tools()
+    tool_provider = GatewayToolProvider(gateway)
+    await tool_provider.refresh()
+    tool_defs = tool_provider.list_tools()
     for tool_def in tool_defs:
         func = tool_def["function"]
         print(f"    - {func['name']}: {func['description'][:50]}...")
