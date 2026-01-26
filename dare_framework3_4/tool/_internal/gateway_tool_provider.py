@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from dare_framework3_4.tool.interfaces import IToolProvider
@@ -45,7 +46,24 @@ def _tool_definition(capability: CapabilityDescriptor) -> dict[str, Any]:
         "capability_id": capability.id,
     }
     if capability.metadata:
-        tool_def["metadata"] = dict(capability.metadata)
+        tool_def["metadata"] = _normalize_metadata(dict(capability.metadata))
     if capability.output_schema is not None:
         tool_def["output_schema"] = dict(capability.output_schema)
     return tool_def
+
+
+def _normalize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        normalized[key] = _normalize_value(value)
+    return normalized
+
+
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {k: _normalize_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_value(item) for item in value]
+    return value
