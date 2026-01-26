@@ -1,6 +1,6 @@
 import pytest
 
-from dare_framework3_4.tool import EditLineTool, ReadFileTool, SearchCodeTool, WriteFileTool, RunContext
+from dare_framework.tool import EditLineTool, ReadFileTool, SearchCodeTool, WriteFileTool, RunContext
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-"""V4 tooling example using dare_framework3_4.
+"""V4 tooling example using dare_framework.
 
 Demonstrates the v4.0 tool runtime with:
 - Built-in file tools
@@ -19,8 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dare_framework3_4.plan import Envelope
-from dare_framework3_4.tool import (
+from dare_framework.plan import Envelope
+from dare_framework.tool import (
     DefaultToolGateway,
     EditLineTool,
     GatewayToolProvider,

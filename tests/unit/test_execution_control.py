@@ -1,10 +1,10 @@
-"""Unit tests for dare_framework3_4.tool ExecutionControl."""
+"""Unit tests for dare_framework.tool ExecutionControl."""
 
 import asyncio
 
 import pytest
 
-from dare_framework3_4.tool import (
+from dare_framework.tool import (
     DefaultExecutionControl,
     Checkpoint,
     ExecutionSignal,

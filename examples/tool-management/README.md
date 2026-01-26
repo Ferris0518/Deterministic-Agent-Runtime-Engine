@@ -1,6 +1,6 @@
 # Tool Management Example
 
-This example demonstrates the tool management capabilities of `dare_framework3_4`.
+This example demonstrates the tool management capabilities of `dare_framework`.
 
 ## Features Demonstrated
 

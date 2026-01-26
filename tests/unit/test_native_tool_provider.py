@@ -1,8 +1,8 @@
-"""Unit tests for dare_framework3_4.tool NativeToolProvider."""
+"""Unit tests for dare_framework.tool NativeToolProvider."""
 
 import pytest
 
-from dare_framework3_4.tool import (
+from dare_framework.tool import (
     NativeToolProvider,
     NoopTool,
     EchoTool,

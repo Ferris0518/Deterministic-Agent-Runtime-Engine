@@ -1,10 +1,10 @@
-"""Unit tests for dare_framework3_4.tool types."""
+"""Unit tests for dare_framework.tool types."""
 
 import time
 
 import pytest
 
-from dare_framework3_4.tool.types import (
+from dare_framework.tool.types import (
     CapabilityDescriptor,
     CapabilityKind,
     CapabilityMetadata,

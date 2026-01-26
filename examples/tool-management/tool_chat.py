@@ -18,11 +18,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dare_framework3_4.context import Budget, Context, Message
-from dare_framework3_4.memory import InMemorySTM
-from dare_framework3_4.model import OpenAIModelAdapter, Prompt
-from dare_framework3_4.plan import Envelope
-from dare_framework3_4.tool import (
+from dare_framework.context import Budget, Context, Message
+from dare_framework.memory import InMemorySTM
+from dare_framework.model import OpenAIModelAdapter, Prompt
+from dare_framework.plan import Envelope
+from dare_framework.tool import (
     DefaultToolGateway,
     EditLineTool,
     GatewayToolProvider,

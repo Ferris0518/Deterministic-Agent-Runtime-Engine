@@ -1,10 +1,10 @@
-"""Unit tests for dare_framework3_4.tool gateway."""
+"""Unit tests for dare_framework.tool gateway."""
 
 import asyncio
 
 import pytest
 
-from dare_framework3_4.tool import (
+from dare_framework.tool import (
     DefaultToolGateway,
     NativeToolProvider,
     NoopTool,
@@ -13,7 +13,7 @@ from dare_framework3_4.tool import (
     CapabilityType,
     ProviderStatus,
 )
-from dare_framework3_4.plan.types import Envelope
+from dare_framework.plan.types import Envelope
 
 
 class TestDefaultToolGateway:
