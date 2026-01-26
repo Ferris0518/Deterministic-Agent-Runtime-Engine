@@ -6,6 +6,7 @@ from dare_framework3_4.tool.interfaces import (
     IMCPClient,
     ISkill,
     ITool,
+    IToolManager,
     IToolProvider,
 )
 from dare_framework3_4.tool.kernel import IExecutionControl, IToolGateway
@@ -88,6 +89,7 @@ __all__ = [
     "IMCPClient",
     "ISkill",
     "ITool",
+    "IToolManager",
     "IToolProvider",
     # Default implementations
     "Checkpoint",

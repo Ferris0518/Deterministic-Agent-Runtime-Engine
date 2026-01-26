@@ -4,8 +4,8 @@ import time
 from dataclasses import dataclass, field
 
 from dare_framework.execution.impl.budget.errors import ResourceExhausted
-from dare_framework.execution.types import Budget, ResourceType
-from dare_framework.execution.kernel import IResourceManager
+from dare_framework.execution.impl.budget.models import Budget, ResourceType
+from dare_framework.execution.impl.budget.protocols import IResourceManager
 
 
 @dataclass

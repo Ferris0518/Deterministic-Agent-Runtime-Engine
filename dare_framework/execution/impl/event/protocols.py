@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, Sequence
 
-from dare_framework.execution.types import Event, RuntimeSnapshot
+from dare_framework.execution.impl.event.models import Event, RuntimeSnapshot
 
 
 class IEventLog(Protocol):
@@ -17,4 +17,3 @@ class IEventLog(Protocol):
     async def replay(self, *, from_event_id: str) -> RuntimeSnapshot: ...
 
     async def verify_chain(self) -> bool: ...
-

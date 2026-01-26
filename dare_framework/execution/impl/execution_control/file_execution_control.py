@@ -6,10 +6,10 @@ from pathlib import Path
 from time import time
 from uuid import uuid4
 
-from dare_framework.execution.kernel import IEventLog
+from dare_framework.execution.impl.event.protocols import IEventLog
 from dare_framework.execution.impl.execution_control.errors import CancelRequested, HumanApprovalRequired, PauseRequested
-from dare_framework.execution.types import ExecutionSignal
-from dare_framework.execution.kernel import IExecutionControl
+from dare_framework.execution.impl.execution_control.models import ExecutionSignal
+from dare_framework.execution.impl.execution_control.protocols import IExecutionControl
 
 
 @dataclass(frozen=True)

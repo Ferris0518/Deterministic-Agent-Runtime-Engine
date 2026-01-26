@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Callable
 
-from dare_framework.execution.types import HookPhase
-from dare_framework.execution.kernel import IExtensionPoint
+from dare_framework.execution.impl.hook.models import HookPhase
+from dare_framework.execution.impl.hook.protocols import IExtensionPoint
 
 
 class DefaultExtensionPoint(IExtensionPoint):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from dare_framework.execution.types import ExecutionSignal
+from dare_framework.execution.impl.execution_control.models import ExecutionSignal
 
 
 class IExecutionControl(Protocol):
@@ -32,4 +32,3 @@ class IExecutionControl(Protocol):
         recording an audit event and returning immediately) as long as the interface
         exists and the orchestrator wires it into approval-required paths.
         """
-
