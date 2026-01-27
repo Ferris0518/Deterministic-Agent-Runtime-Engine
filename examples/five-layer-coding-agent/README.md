@@ -1,6 +1,8 @@
 # Five-Layer Coding Agent Example
 
-This example demonstrates the complete five-layer loop architecture using `FiveLayerAgent` from the DARE Framework.
+一个完整的五层循环 Coding Agent 示例，演示 DARE Framework 的核心架构。
+
+> **快速开始**: 直接运行 `python scenarios.py all` 查看所有演示场景！
 
 ## Architecture
 
@@ -58,22 +60,65 @@ The example uses built-in tools from `dare_framework.tool`:
 - **RunCommandTool** - Execute commands (NON_IDEMPOTENT_EFFECT risk level)
 - **EditLineTool** - Edit specific lines (IDEMPOTENT_WRITE risk level)
 
-## Running the Example
+## 🚀 快速开始
 
-### Deterministic Mode (No Model Calls)
+### 方式 1: 运行演示场景（推荐）
 
-Perfect for testing and CI environments:
+最简单的方式，无需配置 API key：
 
 ```bash
-# From project root
+# 从项目根目录
+cd examples/five-layer-coding-agent
+
+# 运行所有场景
+PYTHONPATH=../.. python scenarios.py all
+
+# 或运行单个场景
+PYTHONPATH=../.. python scenarios.py read-and-search
+PYTHONPATH=../.. python scenarios.py find-todos
+PYTHONPATH=../.. python scenarios.py analyze-code
+```
+
+**输出示例**：
+```
+======================================================================
+📖 Scenario 1: Read and Search
+======================================================================
+Task: Read sample.py and find TODO comments
+
+✓ Result: Success=True
+```
+
+### 方式 2: 确定性模式（Deterministic Mode）
+
+使用预定义计划，适合测试和 CI：
+
+```bash
+# 从项目根目录
 PYTHONPATH=. python examples/five-layer-coding-agent/deterministic_agent.py
 ```
 
-This mode uses a predefined plan and doesn't require an API key.
+**特点**：
+- ✅ 无需 API key
+- ✅ 可预测的行为
+- ✅ 适合自动化测试
 
-### OpenRouter Mode (Real Model)
+**输出示例**：
+```
+=== Running Deterministic Agent ===
+Task: Read sample.py and find TODO comments
+Plan: Read sample.py and search for TODO comments
+Steps: 2
 
-Uses OpenRouter API with free models:
+[DEBUG] Verifying milestone...
+
+=== Result ===
+Success: True
+```
+
+### 方式 3: OpenRouter 模式（真实模型）
+
+使用 OpenRouter API 和免费模型，体验真实的 LLM 驱动 Agent：
 
 #### 1. Setup Environment
 
@@ -103,11 +148,32 @@ OPENROUTER_MODEL=xiaomi/mimo-v2-flash:free
 pip install openai python-dotenv
 ```
 
-#### 3. Run OpenRouter Agent
+#### 3. 运行 OpenRouter Agent
 
 ```bash
-# From project root
-PYTHONPATH=. python examples/five-layer-coding-agent/openrouter_agent.py
+# 从项目根目录
+cd examples/five-layer-coding-agent
+PYTHONPATH=../.. python openrouter_agent.py
+```
+
+**输出示例**：
+```
+Workspace: /path/to/workspace
+✓ Using OpenRouter API
+✓ Model: xiaomi/mimo-v2-flash:free
+
+======================================================================
+🚀 Running OpenRouter Agent
+======================================================================
+Task: Read sample.py and find all TODO comments
+Plan: Read sample.py and search for TODO comments
+Steps: 2
+
+======================================================================
+📊 Result
+======================================================================
+Success: ✓ True
+Output: <tool results>
 ```
 
 ## Recommended Free Models
@@ -120,16 +186,67 @@ OpenRouter provides several free models for testing:
 
 Update `OPENROUTER_MODEL` in your `.env` file to try different models.
 
-## Example Task Scenarios
+## 📋 示例场景详解
 
-### Scenario 1: Code Search
-Read a file and search for TODO comments.
+### Scenario 1: Read and Search (读取和搜索)
+**任务**：读取 `sample.py` 并搜索 TODO 注释
 
-### Scenario 2: Test Execution
-Run pytest tests and report results.
+**使用的工具**：
+- `read_file` - 读取文件内容
+- `search_code` - 搜索代码模式
 
-### Scenario 3: Code Modification
-Edit a file to implement a missing function.
+**执行流程**：
+1. Session Loop 初始化任务
+2. Milestone Loop 分解为单个里程碑
+3. Plan Loop 验证预定义计划
+4. Execute Loop 按序执行两个工具
+5. Tool Loop 执行每个工具调用
+
+**运行**：
+```bash
+PYTHONPATH=../.. python scenarios.py read-and-search
+```
+
+### Scenario 2: Find TODOs (查找所有 TODO)
+**任务**：在整个工作空间搜索 TODO 注释
+
+**使用的工具**：
+- `search_code` - 搜索所有 Python 文件
+
+**特点**：
+- 单步操作
+- 演示简单的 Tool Loop
+- 快速执行
+
+**运行**：
+```bash
+PYTHONPATH=../.. python scenarios.py find-todos
+```
+
+### Scenario 3: Analyze Code (分析代码结构)
+**任务**：读取文件并查找函数定义
+
+**使用的工具**：
+- `read_file` - 读取源码
+- `search_code` - 使用正则搜索函数定义
+
+**特点**：
+- 演示正则表达式搜索
+- 多步骤执行
+- 结构化代码分析
+
+**运行**：
+```bash
+PYTHONPATH=../.. python scenarios.py analyze-code
+```
+
+### 运行所有场景
+
+```bash
+PYTHONPATH=../.. python scenarios.py all
+```
+
+这会依次执行所有场景，展示完整的五层循环工作流程。
 
 ## Known Limitations
 
@@ -175,9 +292,134 @@ To modify this example:
 3. Add more tools to extend capabilities
 4. Modify agents to change task scenarios
 
-## References
+## 🎯 实际使用示例
 
-- [DARE Framework Documentation](../../doc/design/)
-- [Five-Layer Loop Design](../../doc/design/Architecture.md)
+### 作为库使用
+
+你可以在自己的代码中使用这个 agent：
+
+```python
+from pathlib import Path
+from dare_framework.agent import FiveLayerAgent
+from dare_framework.plan.types import ProposedPlan, ProposedStep, Task
+from dare_framework.tool import ReadFileTool, SearchCodeTool, NativeToolProvider, DefaultToolGateway
+from examples.five_layer_coding_agent.planners import DeterministicPlanner
+from examples.five_layer_coding_agent.validators import SimpleValidator
+
+# 创建工具
+tools = NativeToolProvider(tools=[ReadFileTool(), SearchCodeTool()])
+gateway = DefaultToolGateway()
+gateway.register_provider(tools)
+
+# 创建计划
+plan = ProposedPlan(
+    plan_description="Your task description",
+    steps=[
+        ProposedStep(
+            step_id="step1",
+            capability_id="read_file",
+            params={"path": "/path/to/file.py"},
+        ),
+    ],
+)
+
+# 创建 agent
+agent = FiveLayerAgent(
+    name="my-agent",
+    model=your_model_adapter,  # 你的 ModelAdapter
+    tools=tools,
+    tool_gateway=gateway,
+    planner=DeterministicPlanner(plan),
+    validator=SimpleValidator(),
+)
+
+# 运行任务
+result = await agent.run(Task(description="My task"))
+print(f"Success: {result.success}")
+```
+
+### 自定义场景
+
+复制 `scenarios.py` 并修改：
+
+```python
+# my_scenario.py
+from scenarios import create_agent
+from dare_framework.plan.types import ProposedPlan, ProposedStep, Task
+
+async def my_custom_scenario():
+    plan = ProposedPlan(
+        plan_description="My custom task",
+        steps=[
+            # 添加你的步骤...
+        ],
+    )
+
+    agent = create_agent(plan)
+    task = Task(description="Custom task", task_id="custom-1")
+    result = await agent.run(task)
+
+    print(f"Result: {result.success}")
+
+# 运行
+import asyncio
+asyncio.run(my_custom_scenario())
+```
+
+## 🔧 扩展和定制
+
+### 添加新工具
+
+1. 使用 framework 的工具：
+```python
+from dare_framework.tool import RunCommandTool, EditLineTool
+tools_list = [ReadFileTool(), RunCommandTool(), EditLineTool()]
+```
+
+2. 或实现自己的工具（实现 `ITool` 接口）
+
+### 自定义 Planner
+
+实现 `IPlanner` 接口：
+
+```python
+class MyPlanner:
+    @property
+    def component_type(self):
+        return ComponentType.PLANNER
+
+    async def plan(self, ctx: IContext) -> ProposedPlan:
+        # 你的计划生成逻辑
+        return ProposedPlan(...)
+```
+
+### 自定义 Validator
+
+实现 `IValidator` 接口：
+
+```python
+class MyValidator:
+    @property
+    def component_type(self):
+        return ComponentType.VALIDATOR
+
+    async def validate_plan(self, plan, ctx) -> ValidatedPlan:
+        # 计划验证逻辑
+        ...
+
+    async def verify_milestone(self, result, ctx) -> VerifyResult:
+        # 里程碑验证逻辑
+        ...
+```
+
+## 📚 参考资料
+
+- [DARE Framework 文档](../../doc/design/)
+- [五层循环架构设计](../../doc/design/Architecture.md)
 - [OpenSpec Proposal](../../openspec/changes/add-five-layer-example/)
 - [OpenRouter API](https://openrouter.ai/)
+- [FiveLayerAgent 源码](../../dare_framework/agent/_internal/five_layer.py)
+
+## 🤝 贡献
+
+发现问题或有改进建议？欢迎提 Issue 或 PR！
