@@ -168,7 +168,7 @@ def test_simple_chat_builder_tools_extend_and_config_boundary() -> None:
     )
 
     tool_defs = agent.context.listing_tools()
-    names = {tool_def["name"] for tool_def in tool_defs}
+    names = {tool_def["function"]["name"] for tool_def in tool_defs}
     assert "explicit_tool" in names
     assert "enabled_tool" in names
     assert "disabled_tool" not in names
