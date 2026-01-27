@@ -7,8 +7,10 @@ Concrete implementations (native tools, protocol adapters, gateways) live under
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Literal, Protocol, Sequence, runtime_checkable
 
+from dare_framework.config.types import Config
+from dare_framework.infra.component import ComponentType, IComponent
 from dare_framework.tool.types import (
     CapabilityDescriptor,
     CapabilityKind,
@@ -41,9 +43,8 @@ class IToolProvider(Protocol):
         """
         ...
 
-
 @runtime_checkable
-class ITool(Protocol):
+class ITool(IComponent, Protocol):
     """A callable tool implementation (V4 compliant).
 
     All metadata properties are trusted registry sources, not model output.
@@ -52,6 +53,11 @@ class ITool(Protocol):
     @property
     def name(self) -> str:
         """Unique tool identifier."""
+        ...
+
+    @property
+    def component_type(self) -> Literal[ComponentType.TOOL]:
+        """Component category used for config scoping."""
         ...
 
     @property
@@ -104,9 +110,12 @@ class ITool(Protocol):
         ...
 
 
-@runtime_checkable
 class IToolManager(Protocol):
-    """Trusted tool registry and provider aggregation interface."""
+    """Tool manager for discovery and trusted registry operations."""
+
+    def load_tools(self, *, config: Config | None = None) -> list[ITool]:
+        """Load tool implementations from configuration."""
+        ...
 
     def register_tool(
         self,
@@ -171,12 +180,17 @@ class IToolManager(Protocol):
 
 
 @runtime_checkable
-class ISkill(Protocol):
+class ISkill(IComponent, Protocol):
     """Pluggable skill capability for higher-level operations."""
 
     @property
     def name(self) -> str:
         """Unique skill identifier."""
+        ...
+
+    @property
+    def component_type(self) -> Literal[ComponentType.SKILL]:
+        """Component category used for config scoping."""
         ...
 
     @property
@@ -207,12 +221,17 @@ class ICapabilityProvider(Protocol):
 
 
 @runtime_checkable
-class IProtocolAdapter(Protocol):
+class IProtocolAdapter(IComponent, Protocol):
     """Protocol adapter (e.g., MCP/A2A) translated into canonical capabilities."""
 
     @property
     def protocol_name(self) -> str:
         """Protocol name identifier."""
+        ...
+
+    @property
+    def component_type(self) -> Literal[ComponentType.MCP]:
+        """Component category used for config scoping."""
         ...
 
     async def connect(self, endpoint: str, config: dict[str, Any]) -> None:

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from dare_framework.config.types import Config
 from dare_framework.tool.interfaces import ICapabilityProvider, ITool, IToolManager, IToolProvider
 from dare_framework.tool.types import (
     CapabilityDescriptor,
@@ -24,6 +25,7 @@ class _registry_entry:
     descriptor: CapabilityDescriptor
     enabled: bool
     source: object
+    tool: ITool | None = None
 
 
 class ToolManager(IToolManager, IToolProvider):
@@ -47,13 +49,19 @@ class ToolManager(IToolManager, IToolProvider):
             tool.name,
             version,
         )
-        if capability_id in self._registry:
-            raise ValueError(f"Capability already registered: {capability_id}")
+        entry = self._registry.get(capability_id)
+        if entry is not None:
+            if entry.source is not _TOOL_SOURCE:
+                raise ValueError(f"Capability already registered: {capability_id}")
+            entry.descriptor = _descriptor_from_tool(tool, capability_id)
+            entry.tool = tool
+            return entry.descriptor
         descriptor = _descriptor_from_tool(tool, capability_id)
         self._registry[capability_id] = _registry_entry(
             descriptor=descriptor,
             enabled=True,
             source=_TOOL_SOURCE,
+            tool=tool,
         )
         return descriptor
 
@@ -80,6 +88,7 @@ class ToolManager(IToolManager, IToolProvider):
             raise ValueError("Cannot update provider-owned capability")
         descriptor = _descriptor_from_tool(tool, capability_id)
         entry.descriptor = descriptor
+        entry.tool = tool
         if enabled is not None:
             entry.enabled = enabled
         return descriptor
@@ -114,6 +123,14 @@ class ToolManager(IToolManager, IToolProvider):
             capabilities = list(await provider.list())
             self._sync_provider_capabilities(provider, capabilities)
         return self.list_capabilities(include_disabled=True)
+
+    def load_tools(self, *, config: Config | None = None) -> list[ITool]:
+        tools: list[ITool] = []
+        for entry in self._registry.values():
+            if not entry.enabled or entry.tool is None:
+                continue
+            tools.append(entry.tool)
+        return tools
 
     def list_capabilities(self, *, include_disabled: bool = False) -> list[CapabilityDescriptor]:
         descriptors: list[CapabilityDescriptor] = []
@@ -181,6 +198,7 @@ class ToolManager(IToolManager, IToolProvider):
                 descriptor=capability,
                 enabled=enabled,
                 source=provider,
+                tool=None,
             )
         # Remove capabilities that disappeared from the provider during refresh.
         for capability_id in existing_ids - incoming_ids:

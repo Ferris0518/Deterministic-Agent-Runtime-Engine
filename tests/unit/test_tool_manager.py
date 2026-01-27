@@ -12,6 +12,7 @@ from dare_framework.tool import (
     ToolManager,
     ToolType,
 )
+from dare_framework.infra.component import ComponentType
 
 
 class DummyTool:
@@ -22,6 +23,10 @@ class DummyTool:
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def component_type(self) -> ComponentType:
+        return ComponentType.TOOL
 
     @property
     def description(self) -> str:
