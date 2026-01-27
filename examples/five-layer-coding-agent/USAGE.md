@@ -11,15 +11,62 @@ PYTHONPATH=../.. python scenarios.py all
 
 这会展示三个完整的场景，演示五层循环的工作流程。
 
-## 📖 三种使用方式对比
+## 📖 四种使用方式对比
 
 | 模式 | API Key | 用途 | 适合人群 |
 |------|---------|------|----------|
+| **interactive_cli.py** | ❌ 不需要 | 交互式演示，可视化流程 | 🎭 演示、教学 |
 | **scenarios.py** | ❌ 不需要 | 快速演示，多场景 | 👥 所有用户 |
 | **deterministic_agent.py** | ❌ 不需要 | 单任务测试 | 🧪 开发者 |
 | **openrouter_agent.py** | ✅ 需要 | 真实模型体验 | 🚀 高级用户 |
 
 ## 详细使用说明
+
+### 0. 交互式 CLI（最适合演示）
+
+**优点**：
+- 可视化五层循环执行流程
+- 实时显示 Agent "思考"过程
+- 彩色输出，清晰直观
+- 适合演示给领导或团队
+- 支持连续多轮对话
+
+**运行方式**：
+
+```bash
+# 确定性模式（推荐用于演示）
+PYTHONPATH=../.. python interactive_cli.py
+
+# OpenRouter 模式（需要 API key）
+PYTHONPATH=../.. python interactive_cli.py --openrouter
+```
+
+**交互示例**：
+```
+Enter your task (or 'quit' to exit):
+You: Find all TODO comments
+
+🚀 Agent Execution
+💭 Agent: Analyzing task: Find all TODO comments
+💭 Agent: Planning to read and search files...
+✓ Plan generated!
+
+Plan Steps:
+  1. Search for TODO comments in Python files
+     Tool: search_code
+
+🔍 Validating plan...
+✓ Plan validation passed
+✅ Verifying milestone completion...
+✓ Milestone verified successfully!
+
+✓ Task completed successfully!
+```
+
+**演示技巧**：
+1. 先演示简单任务，如 "Find all TODO comments"
+2. 再演示复杂任务，如 "Read sample.py and search for functions"
+3. 展示不同关键词如何触发不同的计划生成
 
 ### 1. 场景演示模式（推荐）
 

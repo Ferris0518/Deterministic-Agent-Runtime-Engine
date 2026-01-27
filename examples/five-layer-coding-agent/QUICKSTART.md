@@ -58,6 +58,16 @@ Task: Read sample.py and find TODO comments
 
 ## 下一步？
 
+### 想体验交互式对话？
+
+最适合演示和理解 Agent 工作流程：
+
+```bash
+PYTHONPATH=../.. python interactive_cli.py
+```
+
+输入任务，看 Agent 实时规划和执行！
+
 ### 想体验真实 LLM？
 
 ```bash

@@ -186,6 +186,63 @@ OpenRouter provides several free models for testing:
 
 Update `OPENROUTER_MODEL` in your `.env` file to try different models.
 
+## 🎭 交互式演示（适合演示给领导看）
+
+如果需要展示 Agent 的交互过程和工作流程，可以使用交互式 CLI：
+
+```bash
+# 确定性模式（无需 API key）
+PYTHONPATH=../.. python interactive_cli.py
+
+# 或使用真实模型
+PYTHONPATH=../.. python interactive_cli.py --openrouter
+```
+
+**演示效果**：
+```
+🤖 Five-Layer Coding Agent - Interactive Demo
+======================================================================
+
+Enter your task (or 'quit' to exit):
+You: Find all TODO comments
+
+🚀 Agent Execution
+======================================================================
+1️⃣ Session Loop - Starting task execution
+2️⃣ Milestone Loop - Breaking into milestones
+3️⃣ Plan Loop - Generating execution plan
+
+💭 Agent: Analyzing task: Find all TODO comments
+💭 Agent: Planning to read and search files...
+✓ Plan generated!
+
+Plan Steps:
+  1. Search for TODO comments in Python files
+     Tool: search_code
+     Params: {'pattern': 'TODO', 'file_pattern': '*.py'}
+
+🔍 Validating plan...
+✓ Plan validation passed
+✅ Verifying milestone completion...
+✓ Milestone verified successfully!
+
+📊 Execution Result
+======================================================================
+✓ Task completed successfully!
+```
+
+**特点**：
+- ✅ **可视化执行流程** - 清晰展示五层循环的每一层
+- ✅ **实时反馈** - 显示 Agent 的"思考"过程
+- ✅ **彩色输出** - 使用 ANSI 颜色码，更直观
+- ✅ **交互式输入** - 可以连续输入多个任务
+- ✅ **适合演示** - 非常适合给领导或团队演示
+
+**演示建议**：
+1. 先运行一个简单任务："Find all TODO comments"
+2. 再试一个稍复杂的："Read sample.py and search for functions"
+3. 展示不同的工具组合和计划生成过程
+
 ## 📋 示例场景详解
 
 ### Scenario 1: Read and Search (读取和搜索)
