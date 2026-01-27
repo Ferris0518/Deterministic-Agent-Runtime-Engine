@@ -4,7 +4,13 @@ from pathlib import Path
 
 from dare_framework.agent import FiveLayerAgent
 from dare_framework.plan.types import ProposedPlan, ProposedStep, Task
-from dare_framework.tool import ReadFileTool, WriteFileTool, SearchCodeTool, NativeToolProvider
+from dare_framework.tool import (
+    ReadFileTool,
+    WriteFileTool,
+    SearchCodeTool,
+    NativeToolProvider,
+    DefaultToolGateway,
+)
 
 from planners import DeterministicPlanner
 from validators import SimpleValidator
@@ -25,6 +31,10 @@ async def main():
 
     # Wrap in tool provider
     tool_provider = NativeToolProvider(tools=tools_list)
+
+    # Create tool gateway and register provider
+    tool_gateway = DefaultToolGateway()
+    tool_gateway.register_provider(tool_provider)
 
     # Create a predefined plan
     plan = ProposedPlan(
@@ -57,6 +67,7 @@ async def main():
         name="deterministic-coding-agent",
         model=mock_model,
         tools=tool_provider,
+        tool_gateway=tool_gateway,
         planner=planner,
         validator=validator,
     )
