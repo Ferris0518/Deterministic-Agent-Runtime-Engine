@@ -19,7 +19,7 @@ class OpenRouterModelAdapter:
             base_url: API base URL (defaults to OPENROUTER_BASE_URL env var).
         """
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
-        self.model_name = model or os.getenv("OPENROUTER_MODEL", "xiaomi/mimo-v2-flash:free")
+        self.model_name = model or os.getenv("OPENROUTER_MODEL", "qwen/qwen3-coder:free")
         self.base_url = base_url or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
         if not self.api_key:

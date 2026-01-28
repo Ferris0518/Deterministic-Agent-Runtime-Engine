@@ -41,7 +41,7 @@ async def main():
         print("  # Edit .env and add your OPENROUTER_API_KEY")
         return
 
-    model_name = os.getenv("OPENROUTER_MODEL", "xiaomi/mimo-v2-flash:free")
+    model_name = os.getenv("OPENROUTER_MODEL", "qwen/qwen3-coder:free")
     print(f"✓ Using OpenRouter API")
     print(f"✓ Model: {model_name}")
     print()

@@ -159,7 +159,7 @@ nano .env
 
 # 添加你的 API key：
 # OPENROUTER_API_KEY=sk-or-v1-your_key_here
-# OPENROUTER_MODEL=xiaomi/mimo-v2-flash:free
+# OPENROUTER_MODEL=qwen/qwen3-coder:free
 
 # 3. 运行
 PYTHONPATH=../.. python openrouter_agent.py
@@ -169,7 +169,7 @@ PYTHONPATH=../.. python openrouter_agent.py
 ```
 Workspace: /path/to/workspace
 ✓ Using OpenRouter API
-✓ Model: xiaomi/mimo-v2-flash:free
+✓ Model: qwen/qwen3-coder:free
 
 ======================================================================
 🚀 Running OpenRouter Agent

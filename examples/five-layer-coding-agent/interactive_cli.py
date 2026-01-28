@@ -282,8 +282,13 @@ async def run_interactive_cli(use_real_model: bool = False):
 
             print_header("🚀 Agent Execution")
 
-            # Create agent with interactive planner
-            planner = InteractivePlanner(workspace, user_input)
+            # Create appropriate planner based on mode
+            if use_real_model:
+                from planners.llm_planner import LLMPlanner
+                planner = LLMPlanner(model, workspace, verbose=True)
+            else:
+                planner = InteractivePlanner(workspace, user_input)
+
             validator = VerboseValidator()
 
             agent = FiveLayerAgent(

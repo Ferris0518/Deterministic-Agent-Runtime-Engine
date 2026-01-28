@@ -134,7 +134,7 @@ Your `.env` should look like:
 ```bash
 OPENROUTER_API_KEY=sk-or-v1-your_key_here
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=xiaomi/mimo-v2-flash:free
+OPENROUTER_MODEL=qwen/qwen3-coder:free
 ```
 
 **⚠️ IMPORTANT SECURITY NOTE:**
@@ -160,7 +160,7 @@ PYTHONPATH=../.. python openrouter_agent.py
 ```
 Workspace: /path/to/workspace
 ✓ Using OpenRouter API
-✓ Model: xiaomi/mimo-v2-flash:free
+✓ Model: qwen/qwen3-coder:free
 
 ======================================================================
 🚀 Running OpenRouter Agent
@@ -180,7 +180,7 @@ Output: <tool results>
 
 OpenRouter provides several free models for testing:
 
-- `xiaomi/mimo-v2-flash:free` - Fast, good for testing (recommended)
+- `qwen/qwen3-coder:free` - Fast, good for coding tasks (recommended)
 - `google/gemini-flash-1.5-8b-exp-0827:free` - Good quality
 - `meta-llama/llama-3.2-3b-instruct:free` - Smaller model
 
