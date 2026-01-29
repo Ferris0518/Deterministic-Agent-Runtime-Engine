@@ -1,8 +1,12 @@
 # Five-Layer Coding Agent Example
 
-一个完整的五层循环 Coding Agent 示例，演示 DARE Framework 的核心架构。
+一个完整的五层循环 Coding Agent 示例，演示 DARE Framework 的核心架构 + Evidence-Based Planning 系统。
 
 > **快速开始**: 直接运行 `python scenarios.py all` 查看所有演示场景！
+>
+> **交互式 CLI**: 运行 `PYTHONPATH=../.. python interactive_cli.py --openrouter` 体验完整的证据驱动规划流程
+>
+> **⚠️ 重要提示**: 免费模型对 function calling 的支持不稳定，建议使用付费模型或本地 Ollama。详见 [STATUS.md](STATUS.md)
 
 ## Architecture
 
@@ -24,30 +28,62 @@ The agent implements the full five-layer orchestration loop:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## 📊 Implementation Status
+
+**详见 [STATUS.md](STATUS.md)** 查看完整的实现状态、已知问题和未来计划。
+
+**核心更新**（2025-01-29）:
+- ✅ 证据驱动规划系统（Evidence-Based Planning）
+- ✅ 增强的 Execute Loop（添加系统消息指导模型使用工具）
+- ✅ Milestone Loop 重试机制（验证失败 → 反思 → 重试）
+- ⚠️ 免费模型不稳定（建议使用付费模型）
+
 ## Directory Structure
 
 ```
 five-layer-coding-agent/
-├── README.md                    # This file
+├── README.md                    # 主文档（你正在看的）
+├── STATUS.md                    # 实现状态和已知问题
 ├── __init__.py
-├── .env                         # Environment variables (DO NOT COMMIT)
-├── .env.example                 # Environment template (safe to commit)
-├── tools/                       # Tool imports from dare_framework
+├── .env                         # 环境变量（不要提交！）
+├── .env.example                 # 环境变量模板
+│
+├── Core Components (核心组件)
+├── interactive_cli.py           # 交互式 CLI（推荐入口）
+├── enhanced_agent.py            # 增强的 Agent（修复工具调用）
+├── cli_commands.py              # 命令解析器
+├── cli_display.py               # 显示格式化
+├── evidence_tracker.py          # 证据提取逻辑
+├── scenarios.py                 # 示例场景
+├── deterministic_agent.py       # 确定性模式
+├── openrouter_agent.py          # OpenRouter 模式
+│
+├── planners/                    # Planner 实现
+│   ├── llm_planner.py          # LLM 证据规划器
+│   ├── deterministic_planner.py
 │   └── __init__.py
-├── planners/                    # Planner implementations
-│   ├── deterministic.py         # For testing without model calls
+│
+├── validators/                  # Validator 实现
+│   ├── simple_validator.py     # 修复后的验证器
 │   └── __init__.py
-├── validators/                  # Validator implementations
-│   ├── simple_validator.py     # Basic validation logic
+│
+├── model_adapters/              # 模型适配器
+│   ├── openrouter.py            # OpenRouter 适配器（支持工具调用）
 │   └── __init__.py
-├── model_adapters/              # Model adapters
-│   ├── openrouter.py            # OpenRouter API adapter
-│   └── __init__.py
-├── deterministic_agent.py       # Deterministic mode entry point
-├── openrouter_agent.py          # OpenRouter mode entry point (TODO)
-└── workspace/                   # Test workspace
-    ├── sample.py                # Sample Python file
-    └── sample_test.py           # Sample test file
+│
+├── tests/                       # 测试文件（已整理）
+│   ├── test_milestone_retry.py # 测试重试机制
+│   ├── test_tool_use.py        # 测试工具调用
+│   └── ...
+│
+├── docs/                        # 文档（已整理）
+│   ├── FIXES_SUMMARY.md        # Execute Loop 修复总结
+│   ├── MILESTONE_LOOP_DIAGNOSIS.md
+│   └── ...
+│
+└── workspace/                   # 测试工作区
+    ├── sample.py
+    └── sample_test.py
 ```
 
 ## Tools

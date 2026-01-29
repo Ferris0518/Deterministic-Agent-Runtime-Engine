@@ -1,6 +1,7 @@
 """OpenRouter model adapter using OpenAI SDK."""
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -38,6 +39,37 @@ class OpenRouterModelAdapter:
             base_url=self.base_url,
         )
 
+    def _extract_tool_calls(self, message: Any) -> list[dict[str, Any]]:
+        """Extract tool calls from OpenAI message format.
+
+        Args:
+            message: OpenAI message object with tool_calls attribute
+
+        Returns:
+            List of normalized tool calls: [{"id": str, "name": str, "arguments": dict}]
+        """
+        if not hasattr(message, "tool_calls") or not message.tool_calls:
+            return []
+
+        result = []
+        for tc in message.tool_calls:
+            try:
+                # OpenAI format: {id, type, function: {name, arguments(JSON string)}}
+                # Parse JSON string to dict
+                arguments_dict = json.loads(tc.function.arguments)
+
+                result.append({
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": arguments_dict
+                })
+            except (json.JSONDecodeError, AttributeError) as e:
+                # Skip invalid tool calls - don't crash
+                print(f"[WARN] Failed to parse tool call: {e}")
+                continue
+
+        return result
+
     async def generate(self, prompt: Prompt, **kwargs: Any) -> ModelResponse:
         """Generate a response using OpenRouter.
 
@@ -56,18 +88,43 @@ class OpenRouterModelAdapter:
                 "content": msg.content,
             })
 
-        # Call OpenRouter API
-        response = await self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            **kwargs
-        )
+        # Prepare API call parameters
+        api_params = {
+            "model": self.model_name,
+            "messages": messages,
+        }
 
-        # Extract response
-        content = response.choices[0].message.content or ""
+        # Add tools if available (for function calling)
+        if prompt.tools:
+            api_params["tools"] = prompt.tools
+
+        # Merge with additional kwargs
+        api_params.update(kwargs)
+
+        # Call OpenRouter API
+        response = await self.client.chat.completions.create(**api_params)
+
+        # Extract message content and tool calls
+        message = response.choices[0].message
+        content = message.content or ""
+
+        # Extract tool_calls from the message
+        tool_calls = self._extract_tool_calls(message)
+
+        # Debug: log tool calls extraction
+        if hasattr(message, "tool_calls") and message.tool_calls:
+            print(f"[DEBUG] Model returned {len(message.tool_calls)} tool calls")
+            for tc in message.tool_calls:
+                print(f"  - {tc.function.name}")
+        else:
+            print(f"[DEBUG] Model returned NO tool calls (finish_reason: {response.choices[0].finish_reason})")
+            if prompt.tools:
+                print(f"[DEBUG] Tools were provided to model: {len(prompt.tools)} tools")
+                print(f"[DEBUG] Model may not support function calling")
 
         return ModelResponse(
             content=content,
+            tool_calls=tool_calls,
             usage={
                 "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
                 "completion_tokens": response.usage.completion_tokens if response.usage else 0,

@@ -41,7 +41,89 @@ PYTHONPATH=../.. python interactive_cli.py
 PYTHONPATH=../.. python interactive_cli.py --openrouter
 ```
 
-**交互示例**：
+**🆕 新功能: 命令系统和计划模式**
+
+交互式 CLI 现在支持两种执行模式和多个命令：
+
+**执行模式**：
+- **Plan Mode（默认）**: 生成计划 → 审核 → 批准 → 执行（带证据追踪）
+- **Execute Mode**: 直接执行（ReAct 模式）
+
+**可用命令**：
+```bash
+/mode [plan|execute]  # 切换执行模式
+/approve              # 执行待批准的计划
+/reject               # 取消待批准的计划
+/status               # 显示会话状态
+/help                 # 显示帮助信息
+/quit (或 /exit)      # 退出 CLI
+```
+
+**Plan Mode 示例**（推荐用于演示）：
+```
+🤖 Five-Layer Coding Agent CLI
+Mode: plan
+
+> Find all TODO comments
+
+💭 Agent: Generating plan...
+✓ Plan generated!
+
+============================================================
+PROPOSED EXECUTION PLAN
+============================================================
+
+Goal: Search for TODO comments in Python files
+
+Steps (1):
+
+1. search_code
+   Description: Search for TODO in all Python files
+   Params: {'pattern': 'TODO', 'file_pattern': '*.py'}
+
+============================================================
+Type /approve to execute, /reject to cancel
+
+> /approve
+
+💭 Agent: Executing plan...
+
+📊 Execution Result
+============================================================
+PROPOSED EXECUTION PLAN
+============================================================
+
+Goal: Search for TODO comments in Python files
+
+Steps (1):
+
+1. search_code ✓
+   Description: Search for TODO in all Python files
+   Params: {'pattern': 'TODO', 'file_pattern': '*.py'}
+
+============================================================
+
+✓ Task completed successfully!
+```
+
+**Execute Mode 示例**：
+```
+> /mode execute
+✓ Switched to EXECUTE mode
+
+> Find all TODO comments
+💭 Agent: Executing (ReAct mode)...
+
+🚀 Agent Execution
+1️⃣ Session Loop - Starting task execution
+2️⃣ Milestone Loop - Breaking into milestones
+3️⃣ Plan Loop - Generating execution plan
+
+📊 Execution Result
+✓ Task completed successfully!
+```
+
+**旧版交互示例**（仍然支持，兼容模式）：
 ```
 Enter your task (or 'quit' to exit):
 You: Find all TODO comments

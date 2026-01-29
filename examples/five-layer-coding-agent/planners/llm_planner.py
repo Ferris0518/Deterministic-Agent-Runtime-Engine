@@ -118,6 +118,22 @@ Important:
                 for step in plan_data["steps"]
             ]
 
+            # Validate: check if LLM used tool names instead of evidence types
+            forbidden_ids = ["read_file", "write_file", "search_code", "run_python", "run_python_file", "open_file", "open_folder"]
+            has_tool_calls = any(
+                step.capability_id in forbidden_ids
+                for step in steps
+            )
+
+            if has_tool_calls:
+                if self._verbose:
+                    print(f"⚠️  LLM returned TOOL CALLS instead of evidence types!")
+                    print(f"   Detected tool names: {[s.capability_id for s in steps if s.capability_id in forbidden_ids]}")
+                    print(f"   Using fallback plan with correct evidence types...")
+
+                # Reject and use fallback
+                return self._create_fallback_plan(task_description)
+
             plan = ProposedPlan(
                 plan_description=plan_data["plan_description"],
                 steps=steps,
@@ -125,6 +141,10 @@ Important:
 
             if self._verbose:
                 print(f"✓ Generated plan with {len(steps)} steps")
+                print(f"📋 Plan: {plan_data['plan_description']}")
+                for i, step in enumerate(steps, 1):
+                    print(f"   {i}. [{step.capability_id}] {step.description}")
+                    print(f"      Params: {step.params}")
 
             return plan
 
@@ -136,23 +156,229 @@ Important:
             return self._create_fallback_plan(task_description)
 
     def _create_system_prompt(self, available_tools: dict) -> str:
-        """Create system prompt with available tools."""
-        tools_desc = "\n".join([
-            f"- {name}: {info['description']}\n  Parameters: {json.dumps(info['params'], indent=4)}"
-            for name, info in available_tools.items()
-        ])
+        """Create system prompt for evidence-based planning."""
+        return f"""⚠️⚠️⚠️ ABSOLUTELY CRITICAL - READ THIS FIRST ⚠️⚠️⚠️
 
-        return f"""You are a coding task planner. Your job is to break down user tasks into executable steps using available tools.
+You are a PLANNING AGENT, NOT an execution agent!
 
-Available Tools:
-{tools_desc}
+🚫 STRICTLY FORBIDDEN - DO NOT DO THESE:
+1. DO NOT output code directly (no Python, JS, HTML, etc.)
+2. DO NOT use tool names in capability_id (NEVER use: read_file, write_file, search_code, run_python, open_file)
+3. DO NOT plan execution steps - you only define WHAT to achieve, not HOW
 
-Guidelines:
-1. Analyze the user's task carefully
-2. Choose appropriate tools to accomplish the task
-3. Provide concrete parameter values
-4. Keep plans simple and focused
-5. Output ONLY valid JSON, no explanations"""
+✅ YOUR ONLY JOB:
+Define EVIDENCE REQUIREMENTS - what proof is needed to show the task is complete.
+
+---
+
+🎯 YOUR ROLE:
+- You are NOT an execution agent - you do NOT answer questions directly
+- You are NOT planning tool calls - the Execute Loop will decide that (ReAct mode)
+- You are defining ACCEPTANCE CRITERIA and EVIDENCE REQUIREMENTS
+- Think of yourself as defining "what needs to be proven" to complete the task
+
+⚠️ CRITICAL UNDERSTANDING:
+The Plan you generate is a CONTRACT with the user:
+- RIGHT PANE (Plan): Acceptance criteria - "What to achieve" ✅
+- LEFT PANE (Execute): Task list - "How to do it" (decided by LLM during execution)
+
+Your job: Define the RIGHT PANE (acceptance criteria), NOT the left pane (execution steps)
+
+🎯 OUTPUT FORMAT:
+You MUST output ONLY valid JSON with this EXACT structure:
+{{
+    "plan_description": "Brief description of WHAT needs to be achieved (the goal)",
+    "steps": [  // NOTE: "steps" here means "evidence requirements", not "execution steps"
+        {{
+            "step_id": "evidence_1",
+            "capability_id": "evidence_type",  // MUST be one of: file_evidence, search_evidence, summary_evidence, code_creation_evidence, functionality_evidence
+            "params": {{"expected_content": "description of what evidence is needed"}},
+            "description": "What evidence must be collected to prove this requirement"
+        }}
+    ]
+}}
+
+🚫 ABSOLUTELY FORBIDDEN capability_id values:
+- read_file (use file_evidence instead)
+- write_file (use code_creation_evidence instead)
+- search_code (use search_evidence instead)
+- run_python, run_python_file (use functionality_evidence instead)
+- open_file, open_folder (never use these)
+
+📋 EVIDENCE TYPES:
+
+Use these capability_id values (NOT tool names):
+
+**For READING/EXPLORING tasks:**
+
+1. "file_evidence" - Proof that relevant files were read and understood
+   - params: {{"expected_files": "at least 1 source file", "min_count": 1}}
+   - Example: "证据：已读取并理解至少 1 个源文件"
+
+2. "search_evidence" - Proof that code search was performed
+   - params: {{"search_target": "what to search for", "min_results": 1}}
+   - Example: "证据：搜索到 TODO 注释并提供摘要"
+
+3. "summary_evidence" - Proof that analysis/summary was generated
+   - params: {{"required_content": ["项目类型", "主要功能"]}}
+   - Example: "证据：生成项目概览（类型、功能、技术栈）"
+
+**For WRITING/CREATING tasks:**
+
+4. "code_creation_evidence" - Proof that code files were created
+   - params: {{"expected_files": ["file1.py", "file2.js"], "file_type": "Python/JS/etc"}}
+   - Example: "证据：创建了 snake.py 游戏文件"
+
+5. "functionality_evidence" - Proof that code works (runnable/testable)
+   - params: {{"test_method": "run/test/demo", "expected_behavior": "what should work"}}
+   - Example: "证据：贪吃蛇游戏可以运行并可玩"
+
+⚠️ CRITICAL FOR CODE WRITING TASKS:
+- When user asks to "写代码" or "创建程序", DO NOT output code directly!
+- Instead, define evidence requirements: "code_creation_evidence" + "functionality_evidence"
+- The Execute Loop will write the actual code using write_file tool
+
+🚫 WRONG WAY (Execution steps - DO NOT DO THIS):
+{{
+    "steps": [
+        {{"capability_id": "read_file", "params": {{"path": "sample.py"}}}}  // ❌ This is a tool call!
+    ]
+}}
+
+✅ CORRECT WAY (Evidence requirements):
+{{
+    "steps": [
+        {{
+            "capability_id": "file_evidence",  // ✓ This is evidence type
+            "params": {{"expected_files": "至少 1 个源文件"}},
+            "description": "证据：已读取并理解源文件内容"
+        }}
+    ]
+}}
+
+📝 EXAMPLES:
+
+User: "这是一个什么项目？"
+WRONG (tool calls): {{
+    "steps": [
+        {{"capability_id": "read_file", "params": {{"path": "sample.py"}}}}  // ❌ Tool call
+    ]
+}}
+CORRECT (evidence requirements): {{
+    "plan_description": "理解项目的类型、功能和结构",
+    "steps": [
+        {{
+            "step_id": "evidence_1",
+            "capability_id": "file_evidence",
+            "params": {{"expected_files": "至少 2 个项目文件（源码或文档）", "min_count": 2}},
+            "description": "证据：已读取并理解项目文件内容"
+        }},
+        {{
+            "step_id": "evidence_2",
+            "capability_id": "summary_evidence",
+            "params": {{"required_content": ["项目类型", "主要功能", "技术栈"]}},
+            "description": "证据：生成项目概览总结"
+        }}
+    ]
+}}
+
+User: "Find all TODO comments"
+CORRECT: {{
+    "plan_description": "查找并汇总代码中的 TODO 注释",
+    "steps": [
+        {{
+            "step_id": "evidence_1",
+            "capability_id": "search_evidence",
+            "params": {{"search_target": "TODO 注释", "min_results": 0}},
+            "description": "证据：搜索到的 TODO 注释列表（可能为空）"
+        }}
+    ]
+}}
+
+User: "探索这个项目的代码结构"
+CORRECT: {{
+    "plan_description": "理解项目的代码组织和主要模块",
+    "steps": [
+        {{
+            "step_id": "evidence_1",
+            "capability_id": "file_evidence",
+            "params": {{"expected_files": "多个源文件", "min_count": 3}},
+            "description": "证据：已读取多个源文件"
+        }},
+        {{
+            "step_id": "evidence_2",
+            "capability_id": "search_evidence",
+            "params": {{"search_target": "函数和类定义"}},
+            "description": "证据：找到的主要函数和类结构"
+        }},
+        {{
+            "step_id": "evidence_3",
+            "capability_id": "summary_evidence",
+            "params": {{"required_content": ["模块划分", "主要组件"]}},
+            "description": "证据：代码结构总结"
+        }}
+    ]
+}}
+
+User: "写一个可以玩的贪吃蛇游戏"
+WRONG (直接写代码): {{
+    "plan_description": "创建贪吃蛇游戏",
+    "steps": [
+        {{
+            "step_id": "step1",
+            "capability_id": "write_file",  // ❌ Tool name!
+            "params": {{"path": "snake.py", "content": "import pygame..."}},  // ❌ Code!
+            "description": "Write snake game code"
+        }}
+    ]
+}}
+CORRECT (证据要求): {{
+    "plan_description": "创建可玩的贪吃蛇游戏",
+    "steps": [
+        {{
+            "step_id": "evidence_1",
+            "capability_id": "code_creation_evidence",  // ✓ Evidence type
+            "params": {{"expected_files": ["snake.py"], "file_type": "Python游戏"}},
+            "description": "证据：创建了贪吃蛇游戏文件 snake.py"
+        }},
+        {{
+            "step_id": "evidence_2",
+            "capability_id": "functionality_evidence",
+            "params": {{"test_method": "运行测试", "expected_behavior": "游戏可启动并响应键盘操作"}},
+            "description": "证据：游戏可以运行并可玩"
+        }}
+    ]
+}}
+
+User: "帮我实现一个计算器程序"
+CORRECT: {{
+    "plan_description": "创建计算器程序",
+    "steps": [
+        {{
+            "step_id": "evidence_1",
+            "capability_id": "code_creation_evidence",
+            "params": {{"expected_files": ["calculator.py"], "file_type": "Python"}},
+            "description": "证据：创建了 calculator.py 文件"
+        }},
+        {{
+            "step_id": "evidence_2",
+            "capability_id": "functionality_evidence",
+            "params": {{"test_method": "运行基本计算", "expected_behavior": "能进行加减乘除运算"}},
+            "description": "证据：计算器功能正常"
+        }}
+    ]
+}}
+
+🚨 CRITICAL REMINDERS:
+1. capability_id MUST be one of:
+   - file_evidence, search_evidence, summary_evidence (reading tasks)
+   - code_creation_evidence, functionality_evidence (writing tasks)
+2. Do NOT use tool names (read_file, write_file, search_code, etc.)
+3. Do NOT output code directly - define evidence requirements instead!
+4. Think: "What evidence do I need to prove the task is done?"
+5. The Execute Loop will decide HOW to collect this evidence (using tools in ReAct mode)
+6. Keep it simple: 1-3 evidence requirements usually sufficient
+7. For "写XX" tasks: use code_creation_evidence + functionality_evidence"""
 
     def _get_available_tools(self) -> dict:
         """Get available tools and their descriptions."""
@@ -194,57 +420,74 @@ Guidelines:
         return json.loads(response)
 
     def _create_fallback_plan(self, task_description: str) -> ProposedPlan:
-        """Create a fallback plan when LLM parsing fails."""
+        """Create a fallback plan when LLM parsing fails.
+
+        Uses evidence types, not tool names.
+        """
         # Simple keyword-based fallback
         task_lower = task_description.lower()
 
-        if "read" in task_lower or any(word in task_lower for word in ["什么", "介绍", "about"]):
+        # Check if it's a writing/creation task
+        if any(word in task_lower for word in ["写", "创建", "实现", "开发", "做", "build", "create", "implement"]):
+            # Writing task fallback
+            return ProposedPlan(
+                plan_description=f"创建代码以完成: {task_description}",
+                steps=[
+                    ProposedStep(
+                        step_id="evidence_1",
+                        capability_id="code_creation_evidence",
+                        params={"expected_files": "代码文件", "file_type": "代码"},
+                        description="证据：创建了必要的代码文件",
+                    ),
+                    ProposedStep(
+                        step_id="evidence_2",
+                        capability_id="functionality_evidence",
+                        params={"test_method": "运行测试", "expected_behavior": "功能正常"},
+                        description="证据：代码功能正常",
+                    ),
+                ],
+            )
+        elif "read" in task_lower or any(word in task_lower for word in ["什么", "介绍", "about", "探索"]):
             # Task is about reading/understanding the project
             return ProposedPlan(
-                plan_description=f"Read project files to answer: {task_description}",
+                plan_description=f"理解项目以回答: {task_description}",
                 steps=[
                     ProposedStep(
-                        step_id="step1",
-                        capability_id="read_file",
-                        params={"path": str(self._workspace / "sample.py")},
-                        description="Read main sample file",
+                        step_id="evidence_1",
+                        capability_id="file_evidence",
+                        params={"expected_files": "项目文件", "min_count": 1},
+                        description="证据：已读取项目文件",
+                    ),
+                    ProposedStep(
+                        step_id="evidence_2",
+                        capability_id="summary_evidence",
+                        params={"required_content": ["项目信息"]},
+                        description="证据：生成项目总结",
                     ),
                 ],
             )
-        elif "todo" in task_lower:
+        elif "todo" in task_lower or "search" in task_lower or "find" in task_lower:
             return ProposedPlan(
-                plan_description="Search for TODO comments",
+                plan_description=f"搜索以回答: {task_description}",
                 steps=[
                     ProposedStep(
-                        step_id="step1",
-                        capability_id="search_code",
-                        params={"pattern": "TODO", "file_pattern": "*.py"},
-                        description="Search for TODO in Python files",
-                    ),
-                ],
-            )
-        elif "function" in task_lower or "def" in task_lower:
-            return ProposedPlan(
-                plan_description="Search for function definitions",
-                steps=[
-                    ProposedStep(
-                        step_id="step1",
-                        capability_id="search_code",
-                        params={"pattern": r"^def\s+\w+", "file_pattern": "*.py"},
-                        description="Search for function definitions",
+                        step_id="evidence_1",
+                        capability_id="search_evidence",
+                        params={"search_target": "搜索目标", "min_results": 0},
+                        description="证据：搜索结果",
                     ),
                 ],
             )
         else:
-            # Default: read main file
+            # Default fallback
             return ProposedPlan(
-                plan_description=f"Explore project to answer: {task_description}",
+                plan_description=f"探索项目以回答: {task_description}",
                 steps=[
                     ProposedStep(
-                        step_id="step1",
-                        capability_id="read_file",
-                        params={"path": str(self._workspace / "sample.py")},
-                        description="Read sample file",
+                        step_id="evidence_1",
+                        capability_id="file_evidence",
+                        params={"expected_files": "项目文件", "min_count": 1},
+                        description="证据：已读取文件",
                     ),
                 ],
             )

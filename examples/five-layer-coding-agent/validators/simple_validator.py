@@ -61,7 +61,8 @@ class SimpleValidator:
     async def verify_milestone(self, result: RunResult, ctx: IContext) -> VerifyResult:
         """Verify milestone completion.
 
-        Simple verification: checks if the result succeeded and has no errors.
+        Actually checks if execution succeeded AND produced meaningful output.
+        This enables the Milestone Loop to retry if verification fails.
 
         Args:
             result: The execution result to verify.
@@ -77,20 +78,39 @@ class SimpleValidator:
         print(f"  - result.output: {result.output}")
         print(f"  - result.errors: {result.errors}")
 
-        # Basic check: did the execution succeed?
+        # Check 1: Did the execution succeed?
         if not result.success:
             errors.append("Execution did not complete successfully")
 
-        # Check for errors in result
+        # Check 2: Are there errors in result?
         if result.errors:
             errors.extend(result.errors)
 
+        # Check 3: Was any output produced?
+        # If output is just text (no tool calls), it's likely the model didn't do anything
+        if result.output:
+            output_dict = result.output if isinstance(result.output, dict) else {}
+
+            # If output is just {'content': '...'}, the model only returned text
+            # This means no tools were called, so task probably wasn't completed
+            if isinstance(output_dict, dict) and list(output_dict.keys()) == ['content']:
+                content = output_dict.get('content', '')
+                # If content is empty or very short, likely nothing was done
+                if len(content) < 10:
+                    errors.append("No meaningful output produced (only empty/short text response)")
+                else:
+                    # Model returned explanatory text without calling tools
+                    errors.append(f"Model returned text instead of calling tools: {content[:100]}...")
+        else:
+            errors.append("No output produced")
+
         print(f"[DEBUG] Verification errors: {errors}")
 
-        # TODO: For testing, always return success
-        # In production, should check actual errors
+        # Return actual verification result (not always True!)
+        success = len(errors) == 0
+
         return VerifyResult(
-            success=True,  # Always succeed for testing
-            errors=[],
+            success=success,
+            errors=errors,
             metadata=result.metadata,
         )

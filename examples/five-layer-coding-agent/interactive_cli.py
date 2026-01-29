@@ -18,7 +18,6 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from dare_framework.agent import FiveLayerAgent
 from dare_framework.context import IContext
 from dare_framework.plan.types import (
     ProposedPlan,
@@ -28,6 +27,7 @@ from dare_framework.plan.types import (
     VerifyResult,
     RunResult,
 )
+from enhanced_agent import EnhancedFiveLayerAgent
 from dare_framework.tool import (
     ReadFileTool,
     SearchCodeTool,
@@ -38,6 +38,12 @@ from dare_framework.tool import (
 from dare_framework.infra.component import ComponentType
 
 from validators import SimpleValidator
+from cli_commands import (
+    parse_command, Command, CommandType,
+    CLISessionState, ExecutionMode, SessionStatus
+)
+from cli_display import CLIDisplay
+from evidence_tracker import extract_evidence_from_agent
 
 # ANSI color codes for terminal output
 class Colors:
@@ -222,6 +228,137 @@ class VerboseValidator(SimpleValidator):
         return verify_result
 
 
+async def handle_mode_command(cmd: Command, state: CLISessionState) -> None:
+    """Handle /mode command."""
+    if not cmd.args:
+        print(f"Current mode: {state.mode.value}")
+        print("Usage: /mode [plan|execute]")
+        return
+
+    mode_str = cmd.args[0].lower()
+    if mode_str == "plan":
+        state.mode = ExecutionMode.PLAN
+        print_success("Switched to PLAN mode")
+    elif mode_str == "execute":
+        state.mode = ExecutionMode.EXECUTE
+        print_success("Switched to EXECUTE mode")
+    else:
+        print_error(f"Unknown mode: {mode_str}")
+
+
+def handle_reject_command(state: CLISessionState) -> None:
+    """Cancel pending plan."""
+    if state.status != SessionStatus.AWAITING_APPROVAL:
+        print_info("No plan awaiting approval")
+        return
+
+    print_info("Plan rejected")
+    state.reset_task()
+
+
+async def run_plan_mode(task_text: str, state: CLISessionState, agent, planner, display: CLIDisplay) -> None:
+    """Run in Plan Mode: generate → display → await approval."""
+    print_thinking("Generating plan...")
+    state.status = SessionStatus.RUNNING
+
+    # Build minimal context
+    from dare_framework.context import Message
+    agent._context.stm_add(Message(role="user", content=task_text))
+
+    # Generate plan using planner
+    try:
+        plan = await planner.plan(agent._context)
+    except Exception as e:
+        print_error(f"Failed to generate plan: {e}")
+        state.reset_task()
+        return
+
+    # Store and display
+    state.pending_plan = plan
+    state.pending_task_description = task_text
+    state.status = SessionStatus.AWAITING_APPROVAL
+
+    display.show_plan(plan)
+
+
+async def handle_approve_command(state: CLISessionState, agent, display: CLIDisplay) -> None:
+    """Execute approved plan."""
+    if state.status != SessionStatus.AWAITING_APPROVAL:
+        print_info("No plan awaiting approval")
+        return
+
+    print_thinking("Executing plan...")
+    state.status = SessionStatus.RUNNING
+
+    # Create task and run agent
+    task = Task(
+        description=state.pending_task_description,
+        task_id=f"task-{id(state.pending_task_description)}"
+    )
+
+    result = await agent.run(task)
+
+    # Extract evidence from event log
+    evidence = await extract_evidence_from_agent(agent, state.pending_plan)
+
+    # Display result
+    print_header("📊 Execution Result")
+
+    # Display plan with evidence marks
+    display.show_plan(state.pending_plan, evidence=evidence)
+
+    if result.success:
+        print_success("Task completed successfully!")
+    else:
+        print_error("Task failed")
+
+    if result.output:
+        print(f"\n{Colors.BOLD}Output:{Colors.ENDC}")
+        print(result.output)
+
+    if result.errors:
+        print(f"\n{Colors.BOLD}Errors:{Colors.ENDC}")
+        for error in result.errors:
+            print(f"  - {error}")
+
+    print()
+    state.reset_task()
+
+
+async def run_execute_mode(task_text: str, agent) -> None:
+    """Run in Execute Mode: direct ReAct."""
+    print_thinking("Executing (ReAct mode)...")
+
+    task = Task(description=task_text, task_id=f"task-{id(task_text)}")
+
+    print_header("🚀 Agent Execution")
+    print_step("1️⃣", "Session Loop - Starting task execution")
+    print_step("2️⃣", "Milestone Loop - Breaking into milestones")
+    print_step("3️⃣", "Plan Loop - Generating execution plan")
+    print()
+
+    result = await agent.run(task)
+
+    # Display result
+    print_header("📊 Execution Result")
+
+    if result.success:
+        print_success("Task completed successfully!")
+    else:
+        print_error("Task failed")
+
+    if result.output:
+        print(f"\n{Colors.BOLD}Output:{Colors.ENDC}")
+        print(result.output)
+
+    if result.errors:
+        print(f"\n{Colors.BOLD}Errors:{Colors.ENDC}")
+        for error in result.errors:
+            print(f"  - {error}")
+
+    print()
+
+
 async def run_interactive_cli(use_real_model: bool = False):
     """Run the interactive CLI."""
     load_dotenv()
@@ -257,80 +394,92 @@ async def run_interactive_cli(use_real_model: bool = False):
     print_success("Tools initialized: ReadFile, SearchCode, WriteFile")
     print()
 
+    # Initialize state and display
+    state = CLISessionState()  # Default: Execute mode
+    display = CLIDisplay()
+
+    print(f"{Colors.BOLD}🤖 Five-Layer Coding Agent CLI{Colors.ENDC}")
+    print(f"Mode: {state.mode.value} (use /mode to switch)")
+    print()
+    display.show_help()
+
+    # Create appropriate planner based on mode
+    if use_real_model:
+        from planners.llm_planner import LLMPlanner
+        planner = LLMPlanner(model, workspace, verbose=True)
+    else:
+        # For deterministic mode, we'll create planner per task
+        planner = None
+
+    validator = VerboseValidator()
+
+    agent = EnhancedFiveLayerAgent(
+        name="interactive-agent",
+        model=model,
+        tools=tool_provider,
+        tool_gateway=tool_gateway,
+        planner=planner,  # May be None for deterministic mode
+        validator=validator,
+    )
+
     # Interactive loop
     while True:
         try:
-            # Get user input
-            print(f"{Colors.BOLD}Enter your task (or 'quit' to exit):{Colors.ENDC}")
-            print(f"{Colors.CYAN}Examples:{Colors.ENDC}")
-            print("  - Find all TODO comments")
-            print("  - Read sample.py and search for functions")
-            print("  - Search for function definitions")
-            print()
-
-            user_input = input(f"{Colors.GREEN}You: {Colors.ENDC}").strip()
-
-            if user_input.lower() in ['quit', 'exit', 'q']:
-                print_success("Goodbye!")
-                break
+            # Show prompt
+            prompt_prefix = "[Plan Pending] " if state.pending_plan else ""
+            user_input = input(f"{Colors.GREEN}{prompt_prefix}> {Colors.ENDC}").strip()
 
             if not user_input:
                 continue
 
-            # Create task
-            task = Task(description=user_input, task_id=f"task-{id(user_input)}")
+            # Parse input
+            parsed = parse_command(user_input)
 
-            print_header("🚀 Agent Execution")
+            # Handle commands
+            if isinstance(parsed, Command):
+                cmd = parsed
 
-            # Create appropriate planner based on mode
-            if use_real_model:
-                from planners.llm_planner import LLMPlanner
-                planner = LLMPlanner(model, workspace, verbose=True)
+                if cmd.type == CommandType.QUIT:
+                    print_success("Goodbye!")
+                    break
+
+                elif cmd.type == CommandType.HELP:
+                    display.show_help()
+
+                elif cmd.type == CommandType.STATUS:
+                    display.show_status(state)
+
+                elif cmd.type == CommandType.MODE:
+                    await handle_mode_command(cmd, state)
+
+                elif cmd.type == CommandType.APPROVE:
+                    await handle_approve_command(state, agent, display)
+
+                elif cmd.type == CommandType.REJECT:
+                    handle_reject_command(state)
+
             else:
-                planner = InteractivePlanner(workspace, user_input)
+                # Regular input - execute as task
+                _, task_text = parsed
 
-            validator = VerboseValidator()
+                if state.status != SessionStatus.IDLE:
+                    print_error(f"Cannot start new task (status: {state.status.value})")
+                    continue
 
-            agent = FiveLayerAgent(
-                name="interactive-agent",
-                model=model,
-                tools=tool_provider,
-                tool_gateway=tool_gateway,
-                planner=planner,
-                validator=validator,
-            )
+                # Create planner for this task if needed (deterministic mode)
+                if not use_real_model:
+                    task_planner = InteractivePlanner(workspace, task_text)
+                    agent._planner = task_planner
+                else:
+                    task_planner = planner
 
-            # Show execution layers
-            print_step("1️⃣", "Session Loop - Starting task execution")
-            print_step("2️⃣", "Milestone Loop - Breaking into milestones")
-            print_step("3️⃣", "Plan Loop - Generating execution plan")
-            print()
-
-            # Run the agent
-            result = await agent.run(task)
-
-            # Display result
-            print_header("📊 Execution Result")
-
-            if result.success:
-                print_success(f"Task completed successfully!")
-            else:
-                print_error(f"Task failed")
-
-            if result.output:
-                print(f"\n{Colors.BOLD}Output:{Colors.ENDC}")
-                print(result.output)
-
-            if result.errors:
-                print(f"\n{Colors.BOLD}Errors:{Colors.ENDC}")
-                for error in result.errors:
-                    print(f"  - {error}")
-
-            print()
+                if state.mode == ExecutionMode.PLAN:
+                    await run_plan_mode(task_text, state, agent, task_planner, display)
+                else:
+                    await run_execute_mode(task_text, agent)
 
         except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}Interrupted by user{Colors.ENDC}")
-            break
+            print(f"\n{Colors.YELLOW}Use /quit to exit{Colors.ENDC}")
         except Exception as e:
             print_error(f"Error: {type(e).__name__}: {e}")
             import traceback
