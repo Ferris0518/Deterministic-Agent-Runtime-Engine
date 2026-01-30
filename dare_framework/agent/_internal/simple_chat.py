@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from dare_framework.agent._internal.base import BaseAgent
+from dare_framework.agent.base_agent import BaseAgent
 from dare_framework.context import Context, Message
 from dare_framework.model import IModelAdapter, ModelInput
 from dare_framework.tool import IToolProvider
@@ -41,11 +41,11 @@ class SimpleChatAgent(BaseAgent):
         *,
         model: IModelAdapter,
         context: Context | None = None,
-        short_term_memory: "IShortTermMemory | None" = None,
-        long_term_memory: "ILongTermMemory | None" = None,
-        knowledge: "IKnowledge | None" = None,
-        tools: "IToolProvider | None" = None,
-        budget: "Budget | None" = None,
+        short_term_memory: IShortTermMemory | None = None,
+        long_term_memory: ILongTermMemory | None = None,
+        knowledge: IKnowledge | None = None,
+        tools: IToolProvider | None = None,
+        budget: Budget | None = None,
     ) -> None:
         """Initialize SimpleChatAgent.
 

@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, TypeVar
 
-from dare_framework.agent import DareAgent, SimpleChatAgent
+from dare_framework.agent._internal.five_layer import DareAgent
+from dare_framework.agent._internal.simple_chat import SimpleChatAgent
 from dare_framework.config.types import Config
 from dare_framework.context import Budget, Context
 from dare_framework.event.kernel import IEventLog
@@ -349,27 +350,27 @@ class DareAgentBuilder(_BaseAgentBuilder):
         self._execution_control: IExecutionControl | None = None
         self._hooks: list[IHook] = []
 
-    def with_planner(self, planner: IPlanner) -> "DareAgentBuilder":
+    def with_planner(self, planner: IPlanner) -> DareAgentBuilder:
         self._planner = planner
         return self
 
-    def add_validators(self, *validators: IValidator) -> "DareAgentBuilder":
+    def add_validators(self, *validators: IValidator) -> DareAgentBuilder:
         self._validators.extend(validators)
         return self
 
-    def with_remediator(self, remediator: IRemediator) -> "DareAgentBuilder":
+    def with_remediator(self, remediator: IRemediator) -> DareAgentBuilder:
         self._remediator = remediator
         return self
 
-    def with_event_log(self, event_log: IEventLog) -> "DareAgentBuilder":
+    def with_event_log(self, event_log: IEventLog) -> DareAgentBuilder:
         self._event_log = event_log
         return self
 
-    def with_execution_control(self, execution_control: IExecutionControl) -> "DareAgentBuilder":
+    def with_execution_control(self, execution_control: IExecutionControl) -> DareAgentBuilder:
         self._execution_control = execution_control
         return self
 
-    def add_hooks(self, *hooks: IHook) -> "DareAgentBuilder":
+    def add_hooks(self, *hooks: IHook) -> DareAgentBuilder:
         self._hooks.extend(hooks)
         return self
 
@@ -471,19 +472,7 @@ class DareAgentBuilder(_BaseAgentBuilder):
         )
 
 
-class Builder:
-    """Facade for selecting which builder variant to use."""
-
-    @staticmethod
-    def simple_chat_agent_builder(name: str) -> SimpleChatAgentBuilder:
-        return SimpleChatAgentBuilder(name)
-
-    @staticmethod
-    def five_layer_agent_builder(name: str) -> DareAgentBuilder:
-        return DareAgentBuilder(name)
-
-
-__all__ = ["Builder", "DareAgentBuilder", "SimpleChatAgentBuilder"]
+__all__ = ["DareAgentBuilder", "SimpleChatAgentBuilder"]
 
 
 class _ConfiguredToolProvider(IToolProvider):

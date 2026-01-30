@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from dare_framework.builder import Builder
+from dare_framework.agent import BaseAgent
 from dare_framework.model.kernel import IModelAdapter
 from dare_framework.model.types import ModelInput, ModelResponse
 from dare_framework.infra.component import ComponentType
@@ -46,7 +46,7 @@ class ListProvider:
 
 @pytest.mark.asyncio
 async def test_agent_builder_minimal_build() -> None:
-    agent = Builder.simple_chat_agent_builder("test-agent").with_model(DummyModelAdapter()).build()
+    agent = BaseAgent.simple_chat_agent_builder("test-agent").with_model(DummyModelAdapter()).build()
 
     result = await agent.run("hello")
 
@@ -56,7 +56,7 @@ async def test_agent_builder_minimal_build() -> None:
 
 def test_agent_builder_derives_tool_defs_from_gateway() -> None:
     agent = (
-        Builder.simple_chat_agent_builder("tool-agent")
+        BaseAgent.simple_chat_agent_builder("tool-agent")
         .with_model(DummyModelAdapter())
         .add_tools(EchoTool())
         .build()

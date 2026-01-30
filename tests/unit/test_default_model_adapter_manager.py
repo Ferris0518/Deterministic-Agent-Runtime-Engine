@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dare_framework.builder import Builder
+from dare_framework.agent import BaseAgent
 from dare_framework.config.types import Config, LLMConfig
 from dare_framework.model import (
     OpenAIModelAdapter,
@@ -36,6 +36,6 @@ def test_default_manager_unsupported_adapter_raises() -> None:
 
 def test_builder_uses_default_manager_when_missing() -> None:
     config = Config()
-    agent = Builder.simple_chat_agent_builder("default-manager-test").with_config(config).build()
+    agent = BaseAgent.simple_chat_agent_builder("default-manager-test").with_config(config).build()
     model = getattr(agent, "_model", None)
     assert isinstance(model, OpenAIModelAdapter)

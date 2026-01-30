@@ -177,7 +177,37 @@ class _ChannelSender(IOutputTransport):
             await target.on_message(msg)
 ```
 
-### 5.2 ClientTransport
+### 5.2 StdioChannel（标准输入输出）
+
+```python
+class StdioChannel(IInputOutputChannel):
+    """Stdio 通道：映射到 stdin/stdout"""
+    
+    def __init__(self):
+        self._client: IInputTransport | None = None
+        self._agent: IInputTransport | None = None
+    
+    def register_client(self, client: IInputTransport) -> IOutputTransport:
+        self._client = client
+        return _StdioClientSender()
+    
+    def register_agent(self, agent: IInputTransport) -> IOutputTransport:
+        self._agent = agent
+        return _StdioAgentSender()
+
+
+class _StdioClientSender(IOutputTransport):
+    """Client 发送消息到 stdout (Agent 会从 stdin 读)"""
+    async def send(self, msg: Message) -> None:
+        print(serialize(msg), flush=True)
+
+class _StdioAgentSender(IOutputTransport):
+    """Agent 发送消息到 stdout (Client 会从 stdin 读)"""
+    async def send(self, msg: Message) -> None:
+        print(serialize(msg), flush=True)
+```
+
+### 5.3 ClientTransport
 
 ```python
 class ClientTransport(IClientTransport):
@@ -199,7 +229,7 @@ class ClientTransport(IClientTransport):
         await self._handler.handle(self._context, msg)
 ```
 
-### 5.3 AgentTransport
+### 5.4 AgentTransport
 
 ```python
 class AgentTransport(IAgentTransport):
@@ -237,7 +267,7 @@ class AgentMessageHandler(IMessageHandler):
             await context.put(msg)
 ```
 
-### 5.4 TransportContext（基础）
+### 5.5 TransportContext（基础）
 
 ```python
 class TransportContext(ITransportContext):
@@ -258,7 +288,7 @@ class TransportContext(ITransportContext):
         return None
 ```
 
-### 5.5 AgentTransportContext（扩展）
+### 5.6 AgentTransportContext（扩展）
 
 ```python
 class AgentTransportContext(TransportContext, IAgentTransportContext):
@@ -302,34 +332,38 @@ class AgentTransportContext(TransportContext, IAgentTransportContext):
 1. **实现 `IMessageHandler`**：处理从 Agent 收到的消息
 2. **通过 `transport.send()` 发送消息**：向 Agent 发送任务/授权/中断等
 
-### 示例：CLI Client
+### 示例：Stdio Client
 
 ```python
+class StdioClient(ClientTransport):
+    def __init__(self, channel: IInputOutputChannel):
+        handler = CLIHandler(lambda: self)
+        super().__init__(channel, handler)
+    
+    async def run(self):
+        """主循环：从 stdin 持续读取并分发到 on_message"""
+        while True:
+            line = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
+            if not line: break
+            msg = deserialize(line)
+            await self.on_message(msg)
+
 class CLIHandler(IMessageHandler):
-    def __init__(self, get_transport: Callable[[], ClientTransport]):
-        self._get_transport = get_transport  # 延迟获取以处理循环依赖
+    def __init__(self, get_client: Callable[[], StdioClient]):
+        self._get_client = get_client
     
     async def handle(self, context: TransportContext, msg: Message) -> None:
         match msg.type:
             case "response":
-                print(msg.payload["content"])
+                print(f"Agent: {msg.payload['content']}")
             case "authorize.request":
-                approved = input("Approve? (y/n): ") == "y"
-                await self._get_transport().send(Message(
-                    type="authorize.response",
-                    payload={"approved": approved}
-                ))
-            case "complete":
-                print("Done!")
+                # ... 处理授权 ...
+                pass
 
 # 初始化
-channel = ProcessorChannel()
-handler = CLIHandler(lambda: client)  # 延迟引用
-client = ClientTransport(channel, handler)
-agent = AgentTransport(channel)
-
-# 发送任务
-await client.send(Message(type="task", payload={"text": "..."}))
+channel = StdioChannel()
+client = StdioClient(channel)
+await client.run()
 ```
 
 ---
@@ -340,47 +374,76 @@ await client.send(Message(type="task", payload={"text": "..."}))
 
 ```python
 class FiveLayerAgent:
-    def __init__(self, transport: AgentTransport):
-        self._transport = transport
+    def __init__(self, endpoint: IAgentTransport):
+        self.client_endpoint = endpoint  # 编排层通过此端点与外部通信
     
-    async def run(self, task: Task):
+    async def run(self):
+        # 模拟：等待初始任务
+        task_msg = await self.client_endpoint.recv(msg_type="task")
+        
         # 发送思考中
-        await self._transport.send(Message(type="thinking", ...))
+        await self.client_endpoint.send(Message(type="thinking", ...))
         
         # 可中断的模型调用
-        task = self._transport.run_interruptible(
-            self._model.generate(prompt)
+        task = self.client_endpoint.run_interruptible(
+            self._model.generate(task_msg.payload["text"])
         )
         response = await task
         
-        # 需要授权时
-        await self._transport.send(Message(type="authorize.request", ...))
-        auth = await self._transport.recv(msg_type="authorize.response")
-        if not auth.payload["approved"]:
-            return
+        # 发送最终响应
+        await self.client_endpoint.send(Message(type="response", ...))
+```
+
+## 8. 启动与初始化 (Bootstrap)
+
+无论是同进程还是 Stdio 模式，最终都需要一个启动入口。
+
+### 示例：Stdio 模式启动
+
+```python
+async def main():
+    # 1. 创建通道
+    channel = StdioChannel()
+    
+    # 2. 创建端点
+    # Client 包装 channel
+    client = StdioClient(channel)
+    
+    # Agent 包装 channel 并注入到业务类
+    agent_endpoint = AgentTransport(channel)
+    agent = FiveLayerAgent(agent_endpoint)
+    
+    # 3. 并发运行
+    await asyncio.gather(
+        agent.run(),
+        client.run()
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ---
 
-## 8. Hook 桥接（可选）
+## 9. Hook 桥接（可选）
 
 ```python
 class ToolHookTransport:
     """将 Hook 事件桥接到 Transport"""
     
-    def __init__(self, transport: AgentTransport):
-        self._transport = transport
+    def __init__(self, endpoint: IAgentTransport):
+        self._endpoint = endpoint
     
     async def on_tool_start(self, tool_id: str, params: dict):
-        await self._transport.send(Message(type="tool.start", payload={...}))
+        await self._endpoint.send(Message(type="tool.start", payload={...}))
     
     async def on_tool_result(self, tool_id: str, result: Any):
-        await self._transport.send(Message(type="tool.result", payload={...}))
+        await self._endpoint.send(Message(type="tool.result", payload={...}))
 ```
 
 ---
 
-## 9. 未来扩展
+## 10. 未来扩展
 
 | 场景 | 替换组件 |
 |------|----------|

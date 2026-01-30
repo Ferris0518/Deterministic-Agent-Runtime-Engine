@@ -3,7 +3,7 @@
 Demonstrates a minimal tool-calling loop with:
 - OpenAI-compatible model adapter
 - Trusted tool definitions from the gateway registry
-- FiveLayerAgent ReAct loop via Builder (no manual context wiring)
+- FiveLayerAgent ReAct loop via BaseAgent builders (no manual context wiring)
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dare_framework.builder import Builder
+from dare_framework.agent import BaseAgent
 from dare_framework.model import OpenAIModelAdapter
 from dare_framework.tool import (
     EditLineTool,
@@ -122,7 +122,7 @@ async def main() -> None:
     gateway = ToolManager(context_factory=run_context.build)
 
     agent = (
-        Builder.five_layer_agent_builder("tool-chat-v3_4")
+        BaseAgent.five_layer_agent_builder("tool-chat-v3_4")
         .with_model(model_adapter)
         .with_tool_gateway(gateway)
         .add_tools(*tools)
