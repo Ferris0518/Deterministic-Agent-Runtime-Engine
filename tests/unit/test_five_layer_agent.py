@@ -333,7 +333,7 @@ class TestFiveLayerMode:
     async def test_plan_tool_detected_via_registry_metadata(self) -> None:
         """Plan tool detection prefers trusted registry metadata over name prefix."""
         plan_tool = CapabilityDescriptor(
-            id="tool:replan",
+            id="replan",
             type=CapabilityType.TOOL,
             name="replan",
             description="Trigger replanning.",
