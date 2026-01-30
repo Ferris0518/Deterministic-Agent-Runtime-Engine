@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from dare_framework.builder import Builder
+from dare_framework.agent import BaseAgent
 from dare_framework.config.types import ComponentConfig, Config
 from dare_framework.hook.kernel import IHook
 from dare_framework.infra.component import ComponentType
@@ -112,7 +112,7 @@ class FixedHookManager:
 async def test_simple_chat_builder_resolves_model_via_manager() -> None:
     manager_model = DummyModelAdapter("from-manager")
     agent = (
-        Builder.simple_chat_agent_builder("test")
+        BaseAgent.simple_chat_agent_builder("test")
         .with_managers(model_adapter_manager=FixedModelAdapterManager(manager_model))
         .build()
     )
@@ -126,7 +126,7 @@ async def test_simple_chat_builder_explicit_model_overrides_manager() -> None:
     explicit = DummyModelAdapter("explicit")
     manager_model = DummyModelAdapter("from-manager")
     agent = (
-        Builder.simple_chat_agent_builder("test")
+        BaseAgent.simple_chat_agent_builder("test")
         .with_model(explicit)
         .with_managers(model_adapter_manager=FixedModelAdapterManager(manager_model))
         .build()
@@ -152,7 +152,7 @@ def test_simple_chat_builder_tools_extend_and_config_boundary() -> None:
         }
     )
     agent = (
-        Builder.simple_chat_agent_builder("test")
+        BaseAgent.simple_chat_agent_builder("test")
         .with_model(DummyModelAdapter("ok"))
         .with_config(config)
         .with_tool_gateway(_build_tool_manager([enabled_tool, disabled_tool]))
@@ -192,7 +192,7 @@ async def test_five_layer_builder_validators_extend_and_config_boundary() -> Non
         }
     )
     agent = (
-        Builder.five_layer_agent_builder("test")
+        BaseAgent.five_layer_agent_builder("test")
         .with_model(DummyModelAdapter("ok"))
         .with_config(config)
         .with_managers(validator_manager=FixedValidatorManager([enabled_validator, disabled_validator]))
@@ -223,7 +223,7 @@ def test_five_layer_builder_hooks_extend_and_config_boundary() -> None:
         }
     )
     agent = (
-        Builder.five_layer_agent_builder("test")
+        BaseAgent.five_layer_agent_builder("test")
         .with_model(DummyModelAdapter("ok"))
         .with_config(config)
         .with_managers(hook_manager=FixedHookManager([enabled_hook, disabled_hook]))

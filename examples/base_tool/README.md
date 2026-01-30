@@ -1,6 +1,6 @@
 # Example: Base Tool (v4.0)
 
-该目录展示 v4.0 工具运行时的最小可运行示例（基于 Builder 组装），包括：
+该目录展示 v4.0 工具运行时的最小可运行示例（基于 BaseAgent builder 组装），包括：
 - 可信工具目录（Tool Gateway Registry）
 - 内置文件工具集（read/search/write/edit）
 - 通过大模型进行工具调用的最小闭环
@@ -10,8 +10,8 @@
 ```
 base_tool/
 ├── README.md           # 本文件
-├── v4_tooling.py       # v4.0 工具运行时（Builder 组装后直接调用）
-└── tool_chat3.4.py     # v4.0 工具调用（Builder 组装 + 模型驱动）
+├── v4_tooling.py       # v4.0 工具运行时（BaseAgent builder 组装后直接调用）
+└── tool_chat3.4.py     # v4.0 工具调用（BaseAgent builder 组装 + 模型驱动）
 ```
 
 ## 运行方式

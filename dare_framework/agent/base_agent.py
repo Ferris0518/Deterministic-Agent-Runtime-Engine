@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from dare_framework.plan.types import RunResult, Task
+
+
+if TYPE_CHECKING:
+    from dare_framework.agent._internal.builder import DareAgentBuilder, SimpleChatAgentBuilder
 
 
 class BaseAgent(ABC):
@@ -52,5 +56,20 @@ class BaseAgent(ABC):
             Model response as string.
         """
         ...
+
+    @staticmethod
+    def simple_chat_agent_builder(name: str) -> SimpleChatAgentBuilder:
+        """Return a builder for SimpleChatAgent."""
+        from dare_framework.agent._internal.builder import SimpleChatAgentBuilder
+
+        return SimpleChatAgentBuilder(name)
+
+    @staticmethod
+    def five_layer_agent_builder(name: str) -> DareAgentBuilder:
+        """Return a builder for DareAgent (five-layer orchestration)."""
+        from dare_framework.agent._internal.builder import DareAgentBuilder
+
+        return DareAgentBuilder(name)
+
 
 __all__ = ["BaseAgent"]

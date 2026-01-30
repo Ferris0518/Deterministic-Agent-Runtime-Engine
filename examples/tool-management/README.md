@@ -1,10 +1,10 @@
-# Tool Management Example (Builder-Based)
+# Tool Management Example (BaseAgent Builder-Based)
 
 This example demonstrates the tool management capabilities of `dare_framework` with builder-based assembly.
 
 ## Features Demonstrated
 
-1. **Builder Assembly** - Building the agent shell while injecting a ToolManager-backed gateway
+1. **Builder Assembly** - Building the agent shell via BaseAgent builders while injecting a ToolManager-backed gateway
 2. **Gateway Setup** - Creating `ToolManager` as the default gateway
 3. **Tool Registration** - Dynamically registering `NoopTool` and `EchoTool`
 4. **Capability Discovery** - Listing capabilities with trusted metadata

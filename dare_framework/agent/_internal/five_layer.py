@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from dare_framework.agent._internal.base import BaseAgent
+from dare_framework.agent.base_agent import BaseAgent
 from dare_framework.agent._internal.orchestration import MilestoneState, SessionState
 from dare_framework.agent.interfaces import IAgentOrchestration
 from dare_framework.context import AssembledContext, Context, Message
@@ -94,23 +94,23 @@ class DareAgent(BaseAgent):
         name: str,
         *,
         model: IModelAdapter,
-        context: "IContext | None" = None,
+        context: IContext | None = None,
         # Memory components (optional)
-        short_term_memory: "IShortTermMemory | None" = None,
-        long_term_memory: "ILongTermMemory | None" = None,
+        short_term_memory: IShortTermMemory | None = None,
+        long_term_memory: ILongTermMemory | None = None,
         # Tool components (optional)
-        tools: "IToolProvider | None" = None,
-        tool_gateway: "IToolGateway | None" = None,
-        execution_control: "IExecutionControl | None" = None,
+        tools: IToolProvider | None = None,
+        tool_gateway: IToolGateway | None = None,
+        execution_control: IExecutionControl | None = None,
         # Plan components (optional - enables full five-layer mode)
-        planner: "IPlanner | None" = None,
-        validator: "IValidator | None" = None,
-        remediator: "IRemediator | None" = None,
+        planner: IPlanner | None = None,
+        validator: IValidator | None = None,
+        remediator: IRemediator | None = None,
         # Observability components (optional)
-        event_log: "IEventLog | None" = None,
-        hooks: "list[IHook] | None" = None,
+        event_log: IEventLog | None = None,
+        hooks: list[IHook] | None = None,
         # Configuration
-        budget: "Budget | None" = None,
+        budget: Budget | None = None,
         max_milestone_attempts: int = 3,
         max_plan_attempts: int = 3,
         max_tool_iterations: int = 20,
@@ -176,7 +176,7 @@ class DareAgent(BaseAgent):
         self._session_state: SessionState | None = None
 
     @property
-    def context(self) -> "IContext":
+    def context(self) -> IContext:
         """Agent context."""
         return self._context
 
@@ -868,4 +868,3 @@ def _done_predicate_satisfied(done_predicate: DonePredicate, result: Any) -> boo
         if key not in output:
             return False
     return True
-

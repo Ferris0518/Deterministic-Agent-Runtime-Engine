@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dare_framework.builder import Builder
+from dare_framework.agent import BaseAgent
 from dare_framework.infra.component import ComponentType
 from dare_framework.model import IModelAdapter
 from dare_framework.plan import Envelope
@@ -32,7 +32,7 @@ from dare_framework.tool import (
 WORKSPACE_ROOT = os.getenv("TOOL_WORKSPACE_ROOT", ".")
 
 
-# Builder requires a model adapter even when this example only exercises tools.
+# BaseAgent builder requires a model adapter even when this example only exercises tools.
 class _NoopModelAdapter(IModelAdapter):
     @property
     def name(self) -> str:
@@ -68,7 +68,7 @@ async def main():
 
     # Build the agent shell while keeping tool wiring explicit for this demo.
     _agent = (
-        Builder.simple_chat_agent_builder("tool-management")
+        BaseAgent.simple_chat_agent_builder("tool-management")
         .with_model(_NoopModelAdapter())
         .with_tool_gateway(gateway)
         .add_tools(*tools)

@@ -153,13 +153,13 @@ Loader 至少保证：
 
 ## 8. 集成路径
 
-### 8.1 Builder 集成
-Builder 提供：
+### 8.1 Agent Builder 集成
+Agent builders 提供：
 - prompt override（直接覆盖）
 - prompt_id override（通过 store 解析）
 - config 可提供 `default_prompt_id`
 
-Builder 内部使用单一 override 槽位（`prompt_id` 或 `prompt` 二选一）。
+Agent builders 内部使用单一 override 槽位（`prompt_id` 或 `prompt` 二选一）。
 
 ### 8.2 Context Assembly
 组装 context 时：
