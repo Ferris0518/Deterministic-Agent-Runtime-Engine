@@ -23,7 +23,7 @@ You should see the generated plan, followed by the final run result.
 ## Real Model Variant
 
 This mirrors the model configuration conventions used in
-`examples/base_tool/tool_chat3.4.py` and `examples/basic-chat/*`.
+`examples/tool_manager/five_layer_agent_tool_gateway_chat.py` and `examples/basic-chat/*`.
 
 ```bash
 python examples/plan-loop/real_model_plan_loop.py

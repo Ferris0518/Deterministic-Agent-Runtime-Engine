@@ -1,7 +1,7 @@
 """Plan loop example wired to a real model.
 
 References:
-- examples/base_tool/tool_chat3.4.py for model/env conventions
+- examples/tool_manager/five_layer_agent_tool_gateway_chat.py for model/env conventions
 - examples/plan-loop/plan_loop.py for deterministic plan loop shape
 """
 
@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from dare_framework.agent import FiveLayerAgent
 from dare_framework.context import Message
+from dare_framework.config import build_config_provider
 from dare_framework.infra.component import ComponentType
 from dare_framework.model import OpenAIModelAdapter
 from dare_framework.model.types import ModelInput
@@ -286,19 +287,8 @@ async def main() -> None:
         http_client_options=HTTP_CLIENT_OPTIONS,
     )
 
-    run_context = RunContextState(
-        config={
-            "workspace_roots": [WORKSPACE_ROOT],
-            "tools": {
-                "read_file": {"max_bytes": 1_000_000},
-                "search_code": {
-                    "max_results": 50,
-                    "max_file_bytes": 1_000_000,
-                    "ignore_dirs": [".git", "node_modules", "__pycache__", ".venv", "venv"],
-                },
-            },
-        }
-    )
+    config_provider = build_config_provider(workspace_dir=WORKSPACE_ROOT)
+    run_context = RunContextState(config=config_provider.current())
 
     tool_manager = ToolManager(context_factory=run_context.build)
     tool_manager.register_tool(ReadFileTool())

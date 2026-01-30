@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from dare_framework.agent import FiveLayerAgent, SimpleChatAgent
+from dare_framework.config import build_config_provider
 from dare_framework.config.types import Config
 from dare_framework.context import Budget, Context
 from dare_framework.event.kernel import IEventLog
@@ -46,6 +47,17 @@ from dare_framework.tool.kernel import IExecutionControl, IToolGateway, IToolMan
 TBuilder = TypeVar("TBuilder", bound="_BaseAgentBuilder")
 
 
+def _merge_config_dicts(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
+    """Merge config dicts with override taking precedence."""
+    merged = dict(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _merge_config_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 class _BaseAgentBuilder:
     """Internal base builder shared by all public builder variants."""
 
@@ -54,6 +66,7 @@ class _BaseAgentBuilder:
 
         # Shared configuration surface (used by all builder variants).
         self._config: Config | None = None
+        self._config_is_merged = False
         self._model_adapter_manager: IModelAdapterManager | None = None
         self._planner_manager: IPlannerManager | None = None
         self._validator_manager: IValidatorManager | None = None
@@ -80,7 +93,7 @@ class _BaseAgentBuilder:
     def _manager_config(self) -> Config | None:
         """Return the Config passed to managers."""
 
-        return self._config
+        return self._effective_config()
 
     # ---------------------------------------------------------------------
     # Shared "base" configuration API
@@ -88,6 +101,7 @@ class _BaseAgentBuilder:
 
     def with_config(self: TBuilder, config: Config) -> TBuilder:
         self._config = config
+        self._config_is_merged = False
         return self
 
     def with_managers(
@@ -187,10 +201,21 @@ class _BaseAgentBuilder:
 
     def _default_run_context(self) -> RunContext[Any]:
         """Create a default run context for tool invocation."""
-        return RunContext(deps=None, metadata={"agent": self._name})
+        # Propagate builder config into tool contexts when available.
+        return RunContext(deps=None, metadata={"agent": self._name}, config=self._effective_config())
 
     def _effective_config(self) -> Config:
-        return self._config or Config()
+        if self._config_is_merged and self._config is not None:
+            return self._config
+
+        default_config = build_config_provider().current()
+        if self._config is None:
+            self._config = default_config
+        else:
+            merged = _merge_config_dicts(default_config.to_dict(), self._config.to_dict())
+            self._config = Config.from_dict(merged)
+        self._config_is_merged = True
+        return self._config
 
     def _resolve_prompt_store(self) -> IPromptStore:
         if self._prompt_store is not None:

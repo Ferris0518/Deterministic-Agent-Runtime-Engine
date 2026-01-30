@@ -57,6 +57,10 @@ def resolve_workspace_roots(context: RunContext[Any]) -> list[Path]:
         roots = None
     elif hasattr(config, "workspace_roots"):
         roots = list(getattr(config, "workspace_roots") or [])
+    elif hasattr(config, "workspace_dir"):
+        workspace_dir = getattr(config, "workspace_dir")
+        if isinstance(workspace_dir, str) and workspace_dir:
+            roots = [workspace_dir]
     elif isinstance(config, dict):
         roots_value = config.get("workspace_roots")
         if isinstance(roots_value, list):

@@ -1,9 +1,9 @@
-"""Tool-chat example using dare_framework (builder-based).
+"""FiveLayerAgent tool gateway chat example using dare_framework (builder-based).
 
 Demonstrates a minimal tool-calling loop with:
 - OpenAI-compatible model adapter
-- Trusted tool definitions from the gateway registry
-- FiveLayerAgent ReAct loop via Builder (no manual context wiring)
+- Default tool gateway wiring (ToolManager) owned by the builder
+- FiveLayerAgent ReAct loop via Builder
 """
 
 from __future__ import annotations
@@ -15,21 +15,19 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root to path for local development
+# Add project root to path for local development.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dare_framework.builder import Builder
-from dare_framework.model import OpenAIModelAdapter
-from dare_framework.tool import (
+from dare_framework.builder import Builder  # noqa: E402
+from dare_framework.model import OpenAIModelAdapter  # noqa: E402
+from dare_framework.tool import (  # noqa: E402
     EditLineTool,
     NoOpTool,
     ReadFileTool,
     RunCommandTool,
-    RunContextState,
     SearchCodeTool,
-    ToolManager,
     WriteFileTool,
 )
 
@@ -38,9 +36,7 @@ API_KEY = os.getenv("CHAT_API_KEY", "")
 ENDPOINT = os.getenv("CHAT_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 HTTP_CLIENT_OPTIONS = {"trust_env": False, "proxy": None}
 LOG_LEVEL = os.getenv("CHAT_LOG_LEVEL", "INFO").upper()
-WORKSPACE_ROOT = os.getenv("TOOL_WORKSPACE_ROOT", ".")
-
-logger = logging.getLogger("tool-chat-v3_4")
+logger = logging.getLogger("five-layer-tool-gateway-chat")
 
 
 def _preview(text: str, limit: int = 200) -> str:
@@ -78,12 +74,11 @@ async def main() -> None:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
     logger.info(
-        "boot tool chat agent (dare_framework)",
+        "boot five-layer tool gateway chat agent (dare_framework)",
         extra={
             "model": MODEL,
             "endpoint": ENDPOINT,
             "api_key_set": bool(API_KEY),
-            "workspace_root": WORKSPACE_ROOT,
         },
     )
 
@@ -94,21 +89,7 @@ async def main() -> None:
         http_client_options=HTTP_CLIENT_OPTIONS,
     )
 
-    run_context = RunContextState(
-        config={
-            "workspace_roots": [WORKSPACE_ROOT],
-            "tools": {
-                "read_file": {"max_bytes": 1_000_000},
-                "write_file": {"max_bytes": 1_000_000},
-                "edit_line": {"max_bytes": 1_000_000},
-                "search_code": {
-                    "max_results": 50,
-                    "max_file_bytes": 1_000_000,
-                    "ignore_dirs": [".git", "node_modules", "__pycache__", ".venv", "venv"],
-                },
-            },
-        }
-    )
+    # Tool settings are loaded from .dare/config.json via the default config provider.
 
     tools = [
         ReadFileTool(),
@@ -119,18 +100,15 @@ async def main() -> None:
         NoOpTool(),
     ]
 
-    gateway = ToolManager(context_factory=run_context.build)
-
     agent = (
-        Builder.five_layer_agent_builder("tool-chat-v3_4")
+        Builder.five_layer_agent_builder("five-layer-tool-gateway-chat")
         .with_model(model_adapter)
-        .with_tool_gateway(gateway)
         .add_tools(*tools)
         .build()
     )
     _log_tool_defs(agent.context.listing_tools())
 
-    print("Tool Chat v3.4 - Type your message (or /quit to exit):", flush=True)
+    print("Five-Layer Tool Gateway Chat - Type your message (or /quit to exit):", flush=True)
     while True:
         try:
             raw = input("You: ")

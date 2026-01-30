@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dare_framework.agent import FiveLayerAgent
+from dare_framework.config import build_config_provider
 from dare_framework.context import Message
 from dare_framework.infra.component import ComponentType
 from dare_framework.model.types import ModelInput, ModelResponse
@@ -118,7 +119,8 @@ class DeterministicToolCallModel:
 
 
 async def main() -> None:
-    run_context = RunContextState(config={"workspace_roots": ["."]})
+    config_provider = build_config_provider()
+    run_context = RunContextState(config=config_provider.current())
 
     tool_manager = ToolManager(context_factory=run_context.build)
     descriptor = tool_manager.register_tool(EchoTool())
