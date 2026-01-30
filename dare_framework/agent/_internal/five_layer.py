@@ -920,6 +920,28 @@ class DareAgent(BaseAgent):
         await self._event_log.append(event_type, payload)
 
 
+def _format_tool_result(tool_result: dict[str, Any]) -> str:
+    import json
+
+    success = bool(tool_result.get("success", False))
+    result_obj = tool_result.get("result")
+    output: Any = None
+    error: Any = None
+
+    if result_obj is not None and hasattr(result_obj, "output"):
+        output = getattr(result_obj, "output", None)
+        error = getattr(result_obj, "error", None)
+    else:
+        output = tool_result.get("output")
+        error = tool_result.get("error")
+
+    payload = {"success": success, "output": output}
+    if error:
+        payload["error"] = error
+
+    return json.dumps(payload, ensure_ascii=True)
+
+
 __all__ = ["DareAgent"]
 
 
