@@ -67,9 +67,35 @@ agent = (
 )
 ```
 
+## Skill 挂载
+
+一个 agent 同时只支持一个 skill。框架支持：
+
+- **Builder**：`.with_skill(path)` 设置初始 skill
+- **Config**：`initial_skill_path` 设置初始 skill
+- **运行时**：`agent.set_skill(skill)` / `agent.clear_skill()` 动态挂载、替换、删除
+
+Skill prompt 在 context.assemble() 时作为单独一段注入，与 base prompt 解耦。
+
+示例 CLI 通过 `--skill` 传入路径：
+
+```bash
+python cli.py --skill path/to/my_skill
+```
+
+Skill 目录结构（Agent Skills 格式）：
+
+```
+my_skill/
+├── SKILL.md        # YAML frontmatter + markdown 正文
+└── scripts/        # 可执行脚本
+    ├── run_tool.py
+    └── check.sh
+```
+
 ## Prompt 管理说明
 
-系统提示由框架 Prompt Store 管理（默认 `base.system`），无需在示例中手写系统提示。
+系统提示由框架 Prompt Store 管理（默认 `base.system`），并自动合并 skill 内容。
 如需覆盖，使用 `.dare/_prompts.json` 配置。
 
 ## 工具命名规则
@@ -79,7 +105,7 @@ agent = (
 ## 文件结构
 
 ```
-03-dare-coding-agent/
+04-dare-coding-agent-enhanced/
 ├── main.py
 ├── cli.py
 ├── demo.py

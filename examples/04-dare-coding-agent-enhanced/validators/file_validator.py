@@ -81,20 +81,48 @@ class FileExistsValidator(IValidator):
             success=True,
         )
 
+    def _expected_files_from_plan(self, plan: ValidatedPlan | None) -> list[str]:
+        """Collect expected file names from plan steps (e.g. code_creation_evidence)."""
+        if plan is None:
+            return []
+        names: list[str] = []
+        for step in plan.steps:
+            raw = step.params.get("expected_files")
+            if raw is None:
+                continue
+            if isinstance(raw, list):
+                for x in raw:
+                    if isinstance(x, str) and x.strip():
+                        names.append(x.strip())
+            elif isinstance(raw, str) and raw.strip():
+                names.append(raw.strip())
+        return names
+
     async def verify_milestone(
-        self, result: RunResult, ctx: IContext
+        self,
+        result: RunResult,
+        ctx: IContext,
+        *,
+        plan: ValidatedPlan | None = None,
     ) -> VerifyResult:
-        """Verify milestone completion by checking if expected files exist."""
+        """Verify milestone completion by checking if expected files exist.
+
+        Expected files come from: (1) plan steps (e.g. code_creation_evidence.params.expected_files),
+        or (2) constructor expected_files. So plan-driven verification takes effect when the planner
+        emits steps with expected_files (e.g. ['helloworld.py']).
+        """
         if self._verbose:
             print(f"[{self.name}] Verifying milestone...")
 
-        # If no expected files, just check execution success
-        if not self._expected_files:
+        # Prefer expected_files from plan steps so dare_agent verification actually runs
+        expected = self._expected_files_from_plan(plan) or self._expected_files
+
+        if not expected:
             if self._verbose:
-                print(f"[{self.name}] No expected files configured, using execution result")
+                print(f"[{self.name}] No expected files (plan or config), using execution result")
             return VerifyResult(
                 success=result.success,
-                errors=result.errors,
+                errors=result.errors or [],
                 metadata={"verification_type": "execution_result"},
             )
 
@@ -102,7 +130,7 @@ class FileExistsValidator(IValidator):
         missing_files = []
         found_files = []
 
-        for filename in self._expected_files:
+        for filename in expected:
             filepath = self._workspace / filename
             if filepath.exists():
                 found_files.append(filename)

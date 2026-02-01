@@ -13,6 +13,7 @@ All builder variants share the same precedence rules:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from dare_framework.agent._internal.five_layer import DareAgent
@@ -79,6 +80,9 @@ class _BaseAgentBuilder:
         self._tool_gateway: IToolGateway | None = None
         self._tool_provider: IToolProvider | None = None
         self._run_context_factory: Callable[[], RunContext[Any]] = self._default_run_context
+
+        # Initial skill path (None = not set; single path for one skill).
+        self._initial_skill_path: str | None = None
 
     def _manager_config(self) -> Config | None:
         """Return the Config passed to managers."""
@@ -171,6 +175,11 @@ class _BaseAgentBuilder:
 
     def with_run_context_factory(self: TBuilder, factory: Callable[[], RunContext[Any]]) -> TBuilder:
         self._run_context_factory = factory
+        return self
+
+    def with_skill(self: TBuilder, path: str | Path) -> TBuilder:
+        """Set initial skill path (one skill). Loaded at build, mounted on context."""
+        self._initial_skill_path = str(path)
         return self
 
     # ---------------------------------------------------------------------
@@ -277,6 +286,18 @@ class _BaseAgentBuilder:
             raise ValueError("Model adapter manager did not return an IModelAdapter")
         return candidate
 
+    def _load_initial_skill_and_mount(self, context: Context) -> None:
+        """Load skill from initial_skill_path and mount on context."""
+        path = self._initial_skill_path if self._initial_skill_path is not None else self._effective_config().initial_skill_path
+        if not path:
+            return
+        from dare_framework.skill._internal.filesystem_skill_loader import FileSystemSkillLoader
+
+        loader = FileSystemSkillLoader(Path(path))
+        skills = loader.load()
+        if skills:
+            context.set_skill(skills[0])
+
     def _resolved_tools(self) -> list[ITool]:
         explicit = list(self._tools)
         explicit_names = {tool.name for tool in explicit}
@@ -320,6 +341,7 @@ class SimpleChatAgentBuilder(_BaseAgentBuilder):
             if tool_provider is not None:
                 context._tool_provider = tool_provider
             context._sys_prompt = sys_prompt
+            self._load_initial_skill_and_mount(context)
             return SimpleChatAgent(
                 name=self._name,
                 model=model,
@@ -330,6 +352,7 @@ class SimpleChatAgentBuilder(_BaseAgentBuilder):
         if tool_provider is not None:
             setattr(self._context, "_tool_provider", tool_provider)
         setattr(self._context, "_sys_prompt", sys_prompt)
+        self._load_initial_skill_and_mount(self._context)
 
         return SimpleChatAgent(
             name=self._name,
@@ -362,6 +385,7 @@ class ReactAgentBuilder(_BaseAgentBuilder):
             if tool_provider is not None:
                 context._tool_provider = tool_provider
             context._sys_prompt = sys_prompt
+            self._load_initial_skill_and_mount(context)
             return ReactAgent(
                 name=self._name,
                 model=model,
@@ -372,6 +396,7 @@ class ReactAgentBuilder(_BaseAgentBuilder):
         if tool_provider is not None:
             setattr(self._context, "_tool_provider", tool_provider)
         setattr(self._context, "_sys_prompt", sys_prompt)
+        self._load_initial_skill_and_mount(self._context)
 
         return ReactAgent(
             name=self._name,
@@ -487,6 +512,7 @@ class DareAgentBuilder(_BaseAgentBuilder):
             if tool_provider is not None:
                 context._tool_provider = tool_provider
             context._sys_prompt = sys_prompt
+            self._load_initial_skill_and_mount(context)
             return DareAgent(
                 name=self._name,
                 model=model,
@@ -506,6 +532,7 @@ class DareAgentBuilder(_BaseAgentBuilder):
         if tool_provider is not None:
             setattr(self._context, "_tool_provider", tool_provider)
         setattr(self._context, "_sys_prompt", sys_prompt)
+        self._load_initial_skill_and_mount(self._context)
 
         return DareAgent(
             name=self._name,

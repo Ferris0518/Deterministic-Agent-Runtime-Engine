@@ -214,6 +214,8 @@ def build_agent(
     max_tokens: int,
     timeout_seconds: float,
     display: CLIDisplay,
+    *,
+    initial_skill_path: Path | str | None = None,
 ) -> Any:
     model = OpenRouterModelAdapter(
         model=model_name,
@@ -231,7 +233,7 @@ def build_agent(
 
     event_log = StreamingEventLog(display.show_event)
 
-    agent = (
+    builder = (
         DareAgentBuilder("dare-coding-agent")
         .with_model(model)
         .add_tools(*tools)
@@ -245,10 +247,11 @@ def build_agent(
         .add_validators(validator)
         .with_remediator(DefaultRemediator(model, verbose=False))
         .with_event_log(event_log)
-        .build()
     )
+    if initial_skill_path:
+        builder = builder.with_skill(initial_skill_path)
 
-    return agent
+    return builder.build()
 
 
 async def preview_plan(task_text: str, model: OpenRouterModelAdapter, display: CLIDisplay) -> Any:
@@ -350,6 +353,12 @@ async def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--script", type=str, default=None, help="run scripted CLI session")
     parser.add_argument("--demo", type=str, default=None, help="run demo script")
     parser.add_argument("--model", type=str, default=None, help="OpenRouter model name")
+    parser.add_argument(
+        "--skill",
+        type=str,
+        default=None,
+        help="path to initial skill directory (one skill)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -359,12 +368,12 @@ async def main(argv: list[str] | None = None) -> None:
     except Exception:
         pass
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = "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"
     if not api_key:
         print("OPENROUTER_API_KEY not set")
         sys.exit(1)
 
-    model_name = args.model or os.getenv("OPENROUTER_MODEL", "z-ai/glm-4.7")
+    model_name = "openai/gpt-oss-120b"
     max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "2048"))
     timeout_seconds = float(os.getenv("OPENROUTER_TIMEOUT", "60"))
     workspace = Path(__file__).parent / "workspace"
@@ -383,7 +392,11 @@ async def main(argv: list[str] | None = None) -> None:
         extra={"max_tokens": max_tokens},
         http_client_options={"timeout": timeout_seconds},
     )
-    agent = build_agent(workspace, model_name, api_key, max_tokens, timeout_seconds, display)
+    initial_skill_path = Path(args.skill) if args.skill else None
+    agent = build_agent(
+        workspace, model_name, api_key, max_tokens, timeout_seconds, display,
+        initial_skill_path=initial_skill_path,
+    )
 
     if args.demo:
         script_path = Path(args.demo)

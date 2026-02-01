@@ -172,6 +172,7 @@ class Config:
     user_dir: str = field(default_factory=_default_user_dir)
     prompt_store_path_pattern: str = ".dare/_prompts.json"
     default_prompt_id: str | None = None
+    initial_skill_path: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -194,6 +195,8 @@ class Config:
         default_prompt_id = data.get("default_prompt_id")
         if default_prompt_id is not None:
             default_prompt_id = str(default_prompt_id)
+        initial_skill_path_raw = data.get("initial_skill_path")
+        initial_skill_path = str(initial_skill_path_raw) if initial_skill_path_raw else None
         workspace_dir_raw = data.get("workspace_dir")
         if isinstance(workspace_dir_raw, str):
             workspace_dir = workspace_dir_raw
@@ -216,6 +219,7 @@ class Config:
             user_dir=user_dir,
             prompt_store_path_pattern=prompt_store_path_pattern,
             default_prompt_id=default_prompt_id,
+            initial_skill_path=initial_skill_path,
         )
 
     def component_settings(self, component_type: ComponentType | str) -> ComponentConfig:
@@ -260,5 +264,6 @@ class Config:
             "user_dir": self.user_dir,
             "prompt_store_path_pattern": self.prompt_store_path_pattern,
             "default_prompt_id": self.default_prompt_id,
+            "initial_skill_path": self.initial_skill_path,
         }
 __all__ = ["ComponentType", "ProxyConfig", "LLMConfig", "ComponentConfig", "Config"]
