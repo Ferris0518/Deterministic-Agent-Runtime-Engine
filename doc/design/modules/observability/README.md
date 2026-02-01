@@ -1,122 +1,94 @@
 # Module: observability
 
-> Status: initial implementation (2026-02-01). TODO marks follow-ups.
+> Status: v2 implementation (2026-02-01).
 
 ## 1. 定位与职责
 
-- 提供基于 OpenTelemetry 的 traces / metrics / logs 观测能力。
-- 通过 Hook + EventLog 扩展点输出 TelemetryProvider，可独立演进/替换。
-- 以最小侵入方式采集上下文长度、token 消耗、工具执行、调用链等关键指标。
+- 提供基于 OpenTelemetry 的 traces / metrics / logs 观测能力（可选依赖）。
+- 通过 Hook 与 EventLog 扩展点，做到最小侵入的采集与关联。
+- 覆盖上下文长度、tokens 消耗、工具执行、调用链等核心指标。
 
 ## 2. 关键概念与数据结构
 
-- `ITelemetryProvider`: 观测组件接口（Hook 兼容 + EventLog 入口）。
-- `TelemetrySpanNames`: 运行期 span 命名规范（`dare.run`, `dare.execute`, ...）。
-- `TelemetryMetricNames`: 核心指标命名规范（context/tokens/tool/budget）。
-- `TelemetryContext`: 运行期关联上下文（task/run/milestone/plan 等）。
-- Redaction：默认去敏的 payload 处理策略。
+- `ITelemetryProvider`: 统一观测接口（start_span / record_metric / record_event）。
+- `ISpan`: 最小 span 接口（set_attribute / add_event / set_status / end）。
+- `TelemetryConfig`: OTel 相关配置（service / exporter / sampling / privacy）。
+- `RunMetrics`: 单次运行聚合指标（tokens/context/tool/loops/budget）。
+- `ObservabilityHook`: Hook 驱动的观测采集实现。
+- `MetricsCollector`: RunMetrics 聚合器。
+- `TraceAwareEventLog`: EventLog 注入 trace 上下文的桥接实现。
 
 ## 3. 关键接口与实现
 
-- Kernel: `ITelemetryProvider` (`dare_framework/observability/kernel.py`)
-  - `invoke(phase, payload=...)` 作为 Hook 消费入口
-  - `on_event(event_type, payload)` 消费 EventLog 入口
-  - `shutdown()` flush/关闭
-- Types: `TelemetrySpanNames`, `TelemetryMetricNames` (`dare_framework/observability/types.py`)
-- Utilities: `estimate_tokens`, `summarize_messages` (`dare_framework/observability/utils.py`)
-- Providers:
-  - `OpenTelemetryProvider` (`dare_framework/observability/_internal/otel_provider.py`)
-  - `InMemoryTelemetryProvider` (`dare_framework/observability/_internal/in_memory_provider.py`)
-- Redaction:
-  - `redact_payload` (`dare_framework/observability/_internal/redaction.py`)
+- Kernel: `ITelemetryProvider`, `ISpan` (`dare_framework/observability/kernel.py`)
+- Types: `TelemetryConfig`, `RunMetrics`, `SpanKind`, `SpanStatus` (`dare_framework/observability/types.py`)
+- OpenTelemetry 实现:
+  - `OTelTelemetryProvider` / `NoOpTelemetryProvider` (`dare_framework/observability/_internal/otel_provider.py`)
+  - `ObservabilityHook` (`dare_framework/observability/_internal/tracing_hook.py`)
+  - `MetricsCollector` (`dare_framework/observability/_internal/metrics_collector.py`)
+  - `TraceAwareEventLog` (`dare_framework/observability/_internal/event_trace_bridge.py`)
 
 ## 4. 与其他模块的交互
 
 - **Agent**
-  - DareAgent 在 Run/Session/Milestone/Plan/Execute/Model/Tool/Context 关键点 emit hook。
-  - EventLog 记录 `trace_id`/`span_id` 以便审计-观测关联。
+  - `DareAgent` 接收 `telemetry` 参数，默认使用 `NoOpTelemetryProvider`。
+  - `DareAgent` 在初始化时包装 `event_log` 为 trace-aware。
+  - 当 `telemetry` 为 `OTelTelemetryProvider` 时自动挂载 `ObservabilityHook`。
 - **Hook**
-  - `HookExtensionPoint` 承担 Hook 分发，TelemetryProvider 通过 HookPhase 接收 payload。
+  - `HookExtensionPoint` 分发 HookPhase payload。
+  - `ObservabilityHook` 从 payload 提取关键字段，创建 spans/metrics。
 - **EventLog**
-  - `ITelemetryProvider.on_event(...)` 可订阅事件流（用于回放/补偿/离线分析）。
-- **Config**
-  - `observability` block 控制 exporter/sampling/redaction 与功能开关。
+  - `TraceAwareEventLog` 自动注入 `_trace` 字段并与 span 关联。
 
-## 5. Payload / Schema 概览（与实现一致）
+## 5. Hook payload 关键字段（v2）
 
-Hook payload 关键字段（均为可选）：
-- `context_stats`: `messages_count`, `length_chars`, `length_bytes`, `tokens_estimate`
-- `model_usage`: `prompt_tokens`, `completion_tokens`, `total_tokens`
-- `tool_stats`: `success`, `duration_ms`
-- `budget_stats`: `tokens_used`, `tokens_remaining`, `tool_calls_used`, `tool_calls_remaining`, `time_used_seconds`, `time_remaining_seconds`
-- `duration_ms`: 运行阶段耗时
-- `task_id`, `run_id`, `milestone_id`, `plan_attempt`, `iteration`
+最小要求字段（其余可扩展）：
+- BEFORE_RUN: `task_id`, `session_id`, `agent_name`, `execution_mode`
+- AFTER_RUN: `success`, `token_usage`, `errors`
+- BEFORE_TOOL: `tool_name`, `tool_call_id`, `capability_id`, `attempt`, `risk_level`, `requires_approval`
+- AFTER_TOOL: `tool_call_id`, `tool_name`, `success`, `error`, `approved`, `evidence_collected`
 
-EventLog payload 会附加：
-- `trace_id`, `span_id`（来自 TelemetryProvider 的上下文）
+建议字段：
+- AFTER_CONTEXT_ASSEMBLE: `context_length`, `context_messages_count`, `context_tools_count`
+- AFTER_MODEL: `model_usage`（含 prompt/completion tokens）
 
-### 5.1 Span 对照表（实现映射）
+## 6. Span 层级（v2）
 
-| Span | HookPhase（start/end） | 触发位置 | 备注 |
-| --- | --- | --- | --- |
-| `dare.run` | `BEFORE_RUN` / `AFTER_RUN` | `dare_framework/agent/_internal/five_layer.py` | run 生命周期总跨度 |
-| `dare.session` | `BEFORE_SESSION` / `AFTER_SESSION` | `dare_framework/agent/_internal/five_layer.py` | session loop |
-| `dare.milestone` | `BEFORE_MILESTONE` / `AFTER_MILESTONE` | `dare_framework/agent/_internal/five_layer.py` | milestone loop |
-| `dare.plan` | `BEFORE_PLAN` / `AFTER_PLAN` | `dare_framework/agent/_internal/five_layer.py` | plan attempt |
-| `dare.execute` | `BEFORE_EXECUTE` / `AFTER_EXECUTE` | `dare_framework/agent/_internal/five_layer.py` | execute loop |
-| `dare.context` | `BEFORE_CONTEXT_ASSEMBLE` / `AFTER_CONTEXT_ASSEMBLE` | `dare_framework/agent/_internal/five_layer.py` | assemble 过程 |
-| `dare.model` | `BEFORE_MODEL` / `AFTER_MODEL` | `dare_framework/agent/_internal/five_layer.py` | model call |
-| `dare.tool` | `BEFORE_TOOL` / `AFTER_TOOL` | `dare_framework/agent/_internal/five_layer.py` | tool invoke |
+```
+dare.session
+└── dare.milestone
+    ├── dare.plan
+    ├── dare.execute
+    │   ├── llm.chat
+    │   └── dare.tool
+    └── dare.verify
+```
 
-Span 映射由 TelemetryProvider 负责：
-- `OpenTelemetryProvider` / `InMemoryTelemetryProvider` 使用 HookPhase → span name 规则（`dare_framework/observability/_internal/*_provider.py`）。
+## 7. Metrics（v2）
 
-### 5.2 Metric 对照表（实现映射）
+- `gen_ai.client.token.usage`（Histogram）
+- `gen_ai.client.operation.duration`（Histogram）
+- `dare.context.length`（Histogram）
+- `dare.tool.invocations`（Counter）
+- `dare.loop.iterations`（Counter）
 
-| Metric | 来源 payload | 触发位置 | 备注 |
-| --- | --- | --- | --- |
-| `context.messages.count` | `context_stats.messages_count` | `AFTER_CONTEXT_ASSEMBLE` | 组装消息数 |
-| `context.tokens.estimate` | `context_stats.tokens_estimate` | `AFTER_CONTEXT_ASSEMBLE` | 估算 token |
-| `context.length.chars` | `context_stats.length_chars` | `AFTER_CONTEXT_ASSEMBLE` | 字符长度 |
-| `context.length.bytes` | `context_stats.length_bytes` | `AFTER_CONTEXT_ASSEMBLE` | 字节长度 |
-| `model.tokens.input` | `model_usage.prompt_tokens` | `AFTER_MODEL` | 模型输入 |
-| `model.tokens.output` | `model_usage.completion_tokens` | `AFTER_MODEL` | 模型输出 |
-| `model.tokens.total` | `model_usage.total_tokens` | `AFTER_MODEL` | 模型总计 |
-| `model.latency.ms` | `duration_ms` | `AFTER_MODEL` | 模型耗时 |
-| `tool.calls.total` | `tool_stats` | `AFTER_TOOL` | 失败也计数 |
-| `tool.duration.ms` | `tool_stats.duration_ms` | `AFTER_TOOL` | 工具耗时 |
-| `tool.errors.total` | `tool_stats.success == False` | `AFTER_TOOL` | 失败计数 |
-| `run.duration.ms` | `duration_ms` | `AFTER_RUN` | 总运行耗时 |
-| `session.duration.ms` | `duration_ms` | `AFTER_SESSION` | session 耗时 |
-| `milestone.duration.ms` | `duration_ms` | `AFTER_MILESTONE` | milestone 耗时 |
-| `plan.duration.ms` | `duration_ms` | `AFTER_PLAN` | plan 尝试耗时 |
-| `execute.duration.ms` | `duration_ms` | `AFTER_EXECUTE` | execute 耗时 |
-| `budget.tokens.used` | `budget_stats.tokens_used` | `AFTER_*` | 运行期多处 |
-| `budget.tokens.remaining` | `budget_stats.tokens_remaining` | `AFTER_*` | 运行期多处 |
-| `budget.tool_calls.used` | `budget_stats.tool_calls_used` | `AFTER_*` | 运行期多处 |
-| `budget.tool_calls.remaining` | `budget_stats.tool_calls_remaining` | `AFTER_*` | 运行期多处 |
+## 8. 配置
 
-## 6. 配置
+`TelemetryConfig` 通过代码初始化：
 
-`Config.observability` 对应 `ObservabilityConfig`：
-- `enabled`, `traces_enabled`, `metrics_enabled`, `logs_enabled`
-- `exporter`: `otlp` | `console` | `none`
-- `otlp_endpoint`, `headers`, `insecure`
-- `sampling_ratio`
-- `capture_content`
-- `redaction` (`mode`, `keys`, `replacement`)
-- `attribute_cardinality_limits`
+```python
+telemetry = OTelTelemetryProvider(
+    TelemetryConfig(
+        service_name="dare-framework",
+        exporter_type="console",
+        sample_rate=1.0,
+    )
+)
+```
 
-## 7. 现状与限制
+YAML 示例见 `doc/design/Observability_Design_v2.md`。
 
-- OpenTelemetry SDK 为可选依赖；缺失时 provider 退化为 no-op。
-- 目前只在 Agent 层发出 hook payload；未对工具内部做深度 span。
-- 当前 metrics 采用 histogram 记录，未区分 counter/histogram 类型。
-- 运行结束的 flush 需要显式调用 `provider.shutdown()`（示例已覆盖）。
+## 9. 现状与限制
 
-## 8. TODO / 未决问题
-
-- TODO: 将 `logs_enabled` 接入 OpenTelemetry Logs SDK（当前使用标准 logging）。
-- TODO: 更完整的 GenAI semantic conventions 映射（属性与 metric 命名）。
-- TODO: 增加更细粒度的 tool/model 属性维度（需控制基数）。
-- TODO: 默认 EventLog 回放/补偿策略与 OTEL span 对齐策略。
+- OpenTelemetry SDK 为可选依赖；缺失时自动退化为 no-op。
+- 当前 Hook payload 仍以 Agent 层为主，工具内部细粒度 span 可后续补充。
