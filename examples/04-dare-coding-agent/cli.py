@@ -207,7 +207,7 @@ def _match_filter(event: Event, filter: dict[str, Any]) -> bool:
     return True
 
 
-def build_agent(
+async def build_agent(
     workspace: Path,
     model_name: str,
     api_key: str,
@@ -231,7 +231,7 @@ def build_agent(
 
     event_log = StreamingEventLog(display.show_event)
 
-    agent = (
+    agent = await (
         DareAgentBuilder("dare-coding-agent")
         .with_model(model)
         .add_tools(*tools)
@@ -383,7 +383,7 @@ async def main(argv: list[str] | None = None) -> None:
         extra={"max_tokens": max_tokens},
         http_client_options={"timeout": timeout_seconds},
     )
-    agent = build_agent(workspace, model_name, api_key, max_tokens, timeout_seconds, display)
+    agent = await build_agent(workspace, model_name, api_key, max_tokens, timeout_seconds, display)
 
     if args.demo:
         script_path = Path(args.demo)
