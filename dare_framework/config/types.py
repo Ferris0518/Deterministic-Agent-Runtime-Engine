@@ -301,6 +301,8 @@ class Config:
     initial_skill_path: str | None = None
     skill_paths: list[str] = field(default_factory=list)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
+    a2a: dict[str, Any] = field(default_factory=dict)
+    """Optional A2A server config: name, description, provider, capabilities (for AgentCard)."""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -362,6 +364,7 @@ class Config:
             if isinstance(observability_raw, dict)
             else ObservabilityConfig()
         )
+        a2a = data.get("a2a") if isinstance(data.get("a2a"), dict) else {}
         return cls(
             llm=llm,
             mcp=mcp,
@@ -380,6 +383,7 @@ class Config:
             initial_skill_path=initial_skill_path,
             skill_paths=skill_paths,
             observability=observability,
+            a2a=a2a,
         )
 
     def component_settings(self, component_type: ComponentType | str) -> ComponentConfig:
@@ -431,6 +435,7 @@ class Config:
             "initial_skill_path": self.initial_skill_path,
             "skill_paths": list(self.skill_paths),
             "observability": self.observability.to_dict(),
+            "a2a": dict(self.a2a),
         }
 
 
