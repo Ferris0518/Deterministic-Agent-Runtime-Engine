@@ -24,11 +24,13 @@ from typing import Any, Callable, TypeVar
 from dare_framework.agent._internal.five_layer import DareAgent
 from dare_framework.agent._internal.react_agent import ReactAgent
 from dare_framework.agent._internal.simple_chat import SimpleChatAgent
+from dare_framework.config.kernel import IConfigProvider
 from dare_framework.config.types import Config
 from dare_framework.context import Budget, Context
 from dare_framework.event.kernel import IEventLog
 from dare_framework.hook.interfaces import IHookManager
 from dare_framework.hook.kernel import IHook
+from dare_framework.agent.types import ISessionSummaryStore
 from dare_framework.infra.component import ComponentType
 from dare_framework.knowledge import IKnowledge, create_knowledge
 from dare_framework.knowledge._internal.knowledge_tools import (
@@ -511,6 +513,8 @@ class DareAgentBuilder(_BaseAgentBuilder):
         self._execution_control: IExecutionControl | None = None
         self._hooks: list[IHook] = []
         self._telemetry: ITelemetryProvider | None = None
+        self._config_provider: IConfigProvider | None = None
+        self._session_summary_store: ISessionSummaryStore | None = None
         self._verbose: bool = False
 
     def with_planner(self, planner: IPlanner) -> DareAgentBuilder:
@@ -527,6 +531,14 @@ class DareAgentBuilder(_BaseAgentBuilder):
 
     def with_event_log(self, event_log: IEventLog) -> DareAgentBuilder:
         self._event_log = event_log
+        return self
+
+    def with_config_provider(self, provider: IConfigProvider) -> DareAgentBuilder:
+        self._config_provider = provider
+        return self
+
+    def with_session_summary_store(self, store: ISessionSummaryStore) -> DareAgentBuilder:
+        self._session_summary_store = store
         return self
 
     def with_execution_control(self, execution_control: IExecutionControl) -> DareAgentBuilder:
@@ -612,21 +624,23 @@ class DareAgentBuilder(_BaseAgentBuilder):
                 context._tool_provider = tool_provider
             context._sys_prompt = sys_prompt
             self._load_initial_skill_and_mount(context)
-            return DareAgent(
-                name=self._name,
-                model=model,
-                context=context,
-                tools=tool_provider,
-                tool_gateway=tool_gateway,
-                execution_control=self._execution_control,
-                planner=planner,
-                validator=validator,
-                remediator=remediator,
-                event_log=self._event_log,
-                hooks=hooks,
-                telemetry=telemetry,
-                verbose=self._verbose,
-            )
+        return DareAgent(
+            name=self._name,
+            model=model,
+            context=context,
+            tools=tool_provider,
+            tool_gateway=tool_gateway,
+            execution_control=self._execution_control,
+            planner=planner,
+            validator=validator,
+            remediator=remediator,
+            event_log=self._event_log,
+            hooks=hooks,
+            telemetry=telemetry,
+            config_provider=self._config_provider,
+            session_summary_store=self._session_summary_store,
+            verbose=self._verbose,
+        )
 
         self._apply_context_overrides(self._context)
         if tool_provider is not None:
@@ -647,6 +661,8 @@ class DareAgentBuilder(_BaseAgentBuilder):
             event_log=self._event_log,
             hooks=hooks,
             telemetry=telemetry,
+            config_provider=self._config_provider,
+            session_summary_store=self._session_summary_store,
             verbose=self._verbose,
         )
 

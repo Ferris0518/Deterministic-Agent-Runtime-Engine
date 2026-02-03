@@ -60,6 +60,8 @@ class Task:
         task_id: Optional unique identifier (auto-generated if not provided).
         milestones: Pre-defined sub-goals. If empty, a single milestone is auto-created.
         metadata: Arbitrary key-value data for context or audit.
+        previous_session_summary: Optional summary from a prior session for continuity.
+        resume_from_checkpoint: Reserved field for future resume workflows.
 
     See Also:
         doc/用户旅程地图：全栈智能研发 Agent 交付云服务 LandingZone 对接.md
@@ -69,6 +71,8 @@ class Task:
     task_id: str | None = None
     milestones: list[Milestone] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    previous_session_summary: "SessionSummary | None" = None
+    resume_from_checkpoint: str | None = None
 
     def to_milestones(self) -> list[Milestone]:
         """Convert task to a list of milestones.
@@ -88,6 +92,61 @@ class Task:
         ]
 
 
+@dataclass(frozen=True)
+class MilestoneSummary:
+    """Deterministic summary of a milestone execution."""
+
+    milestone_id: str
+    description: str
+    attempts: int
+    success: bool
+    outputs: list[Any] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    evidence_count: int = 0
+    reflections_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "milestone_id": self.milestone_id,
+            "description": self.description,
+            "attempts": self.attempts,
+            "success": self.success,
+            "outputs": list(self.outputs),
+            "errors": list(self.errors),
+            "evidence_count": self.evidence_count,
+            "reflections_count": self.reflections_count,
+        }
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    """Deterministic session summary for audit and handoff."""
+
+    session_id: str
+    task_id: str
+    success: bool
+    started_at: float
+    ended_at: float
+    duration_ms: float
+    milestones: list[MilestoneSummary] = field(default_factory=list)
+    final_output: Any | None = None
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "task_id": self.task_id,
+            "success": self.success,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "duration_ms": self.duration_ms,
+            "milestones": [summary.to_dict() for summary in self.milestones],
+            "final_output": self.final_output,
+            "errors": list(self.errors),
+            "metadata": dict(self.metadata),
+        }
+
 
 
 @dataclass(frozen=True)
@@ -98,6 +157,8 @@ class RunResult:
     output: Any | None = None
     errors: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    session_id: str | None = None
+    session_summary: SessionSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -188,9 +249,11 @@ __all__ = [
     "DonePredicate",
     "Envelope",
     "Milestone",
+    "MilestoneSummary",
     "ProposedStep",
     "ProposedPlan",
     "RunResult",
+    "SessionSummary",
     "Task",
     "ToolLoopRequest",
     "ValidatedStep",
