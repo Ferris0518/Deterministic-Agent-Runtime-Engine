@@ -7,6 +7,11 @@
 
 ## Modules
 - agent: `docs/design/module_design/agent/README.md` (assessment: `docs/design/module_design/agent/Assessment.md`)
+  - DareAgent: `docs/design/module_design/agent/DareAgent.md`
+  - DareAgent Session: `docs/design/module_design/agent/DareAgent_Session.md`
+  - DareAgent Milestone: `docs/design/module_design/agent/DareAgent_Milestone.md`
+  - ReactAgent: `docs/design/module_design/agent/ReactAgent.md`
+  - SimpleChatAgent: `docs/design/module_design/agent/SimpleChatAgent.md`
 - context: `docs/design/module_design/context/README.md` (assessment: `docs/design/module_design/context/Assessment.md`)
 - tool: `docs/design/module_design/tool/README.md`
 - plan: `docs/design/module_design/plan/README.md`

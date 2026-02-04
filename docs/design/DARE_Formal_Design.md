@@ -337,7 +337,9 @@ flowchart LR
 - **职责**：运行入口与编排策略（五层循环 + 降级模式）。
 - **关键类型**：`Task` / `Milestone` / `RunResult` / `SessionState`。
 - **核心接口**：`IAgent`、`IAgentOrchestration`（`dare_framework/agent/kernel.py`, `interfaces.py`）。
-- **默认实现**：`DareAgent`、`ReactAgent`、`SimpleChatAgent`（`dare_framework/agent/_internal/*`）。
+- **默认实现**：`DareAgent`、`ReactAgent`、`SimpleChatAgent`（`dare_framework/agent/dare_agent.py`, `react_agent.py`, `simple_chat.py`）。
+- **文档结构**：按 Agent 类型拆分设计文档，且 DareAgent 的 Session/Milestone 设计独立成文档。
+  参考：`docs/design/module_design/agent/DareAgent.md`, `docs/design/module_design/agent/DareAgent_Session.md`, `docs/design/module_design/agent/DareAgent_Milestone.md`, `docs/design/module_design/agent/ReactAgent.md`, `docs/design/module_design/agent/SimpleChatAgent.md`。
 - **扩展点**：自定义编排策略、执行控制（HITL）、Hook/Telemetry。
 - **现状限制**：ValidatedPlan.steps 未驱动执行；Hook payload schema 仍在收敛；SecurityBoundary 未接入。
 
