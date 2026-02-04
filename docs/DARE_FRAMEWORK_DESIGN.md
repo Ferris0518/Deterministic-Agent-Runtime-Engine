@@ -1249,6 +1249,7 @@ sequenceDiagram
 
 ## 附录 B：PDF 导出
 
-- Typora：打开本 MD 后导出 PDF。
-- Pandoc：`pandoc docs/DARE_FRAMEWORK_DESIGN.md -o out.pdf --pdf-engine=xelatex -V CJKmainfont=\"SimSun\"`
+- **GitHub Actions**：推送 `docs/DARE_FRAMEWORK_DESIGN.md` 到 `main`/`master`/`detailed_doc` 或在 Actions 页手动触发 workflow「Build design doc PDF」；流水线会使用 pandoc-mermaid 将 Mermaid 代码块渲染为图片后生成 PDF，完成后在对应 run 的 Artifacts 中下载 `DARE_FRAMEWORK_DESIGN-pdf`。
+- **Typora**：打开本 MD 后导出 PDF（可正确渲染 Mermaid）。
+- **Pandoc 本地**：安装 `mmdc`（mermaid-cli）与 `pandoc-mermaid-filter` 后执行 `pandoc docs/DARE_FRAMEWORK_DESIGN.md -o out.pdf --pdf-engine=xelatex -V CJKmainfont="Noto Serif CJK SC" --filter pandoc-mermaid`，可得到含 Mermaid 图的 PDF。
 
