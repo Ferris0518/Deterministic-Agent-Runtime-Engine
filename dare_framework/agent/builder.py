@@ -457,7 +457,7 @@ class ReactAgentBuilder(_BaseAgentBuilder[ReactAgent]):
         sys_prompt = self._resolve_sys_prompt(model)
         knowledge = self._resolved_knowledge()
         tools = self._resolve_tools(knowledge)
-        tool_gateway = self._ensure_tool_gateway(tools, self._tool_providers)
+        tool_gateway = self._ensure_tool_gateway(config, tools, self._tool_providers)
 
         if self._context is None:
             context = Context(
@@ -540,7 +540,7 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
         sys_prompt = self._resolve_sys_prompt(model)
         knowledge = self._resolved_knowledge()
         tools = self._resolve_tools(knowledge)
-        tool_gateway = self._ensure_tool_gateway(tools, self._tool_providers)
+        tool_gateway = self._ensure_tool_gateway(config, tools, self._tool_providers)
 
         planner = self._planner
         if planner is None:
