@@ -3,8 +3,8 @@
 > Scope: `dare_framework/agent/dare_agent.py`
 >
 > 本文只描述 DareAgent 的总体设计、模式选择与核心循环；Session 与 Milestone 的详细设计见独立文档：
-> - `docs/design/module_design/agent/DareAgent_Session.md`
-> - `docs/design/module_design/agent/DareAgent_Milestone.md`
+> - `docs/design/modules/agent/DareAgent_Session.md`
+> - `docs/design/modules/agent/DareAgent_Milestone.md`
 
 ## 1. 设计定位
 

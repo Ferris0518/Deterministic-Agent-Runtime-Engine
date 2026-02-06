@@ -19,18 +19,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from dare_framework.agent.base_agent import BaseAgent
 from dare_framework.agent.dare_agent import DareAgent
 from dare_framework.agent.react_agent import ReactAgent
 from dare_framework.agent.simple_chat import SimpleChatAgent
 from dare_framework.config.types import Config
-from dare_framework.context import Budget, Context
+from dare_framework.context import Budget, Context, IAssembleContext
 from dare_framework.event.kernel import IEventLog
 from dare_framework.hook.interfaces import IHookManager
 from dare_framework.hook.kernel import IHook
-from dare_framework.infra.component import ComponentType
 from dare_framework.knowledge import IKnowledge, create_knowledge
 from dare_framework.knowledge._internal.knowledge_tools import (
     KnowledgeAddTool,
@@ -54,6 +53,8 @@ from dare_framework.plan.interfaces import (
     IValidator,
     IValidatorManager,
 )
+from dare_framework.skill import Skill, ISkillLoader, ISkillStore, SkillStoreBuilder
+from dare_framework.skill._internal.filesystem_skill_loader import FileSystemSkillLoader
 from dare_framework.tool.interfaces import IExecutionControl
 from dare_framework.tool.kernel import ITool, IToolGateway, IToolManager, IToolProvider
 from dare_framework.tool.tool_manager import ToolManager
@@ -82,7 +83,7 @@ class _BaseAgentBuilder(Generic[TAgent]):
 
         # Core components (commonly used across agent variants).
         self._model: IModelAdapter | None = None
-        self._context: Context | None = None
+        self._assemble_context: IAssembleContext | None = None
         self._budget: Budget | None = None
         self._short_term_memory: IShortTermMemory | None = None
         self._long_term_memory: ILongTermMemory | None = None
@@ -90,23 +91,23 @@ class _BaseAgentBuilder(Generic[TAgent]):
         self._embedding_adapter: Any = None
         """Optional; used with config.knowledge to create vector knowledge from config."""
         self._prompt_store: IPromptStore | None = None
-        self._prompt: tuple[str | None, Prompt | None] | None = None
+        self._sys_prompt: tuple[str | None, Prompt | None] | None = None
         # Tool wiring (shared across variants).
         self._tools: list[ITool] = []
-        self._tool_gateway: IToolGateway | None = None
         self._tool_providers: list[IToolProvider] = []
-        self._run_context_factory: Callable[[], RunContext[Any]] = self._default_run_context
+        self._tool_gateway: IToolGateway | None = None
 
         # MCP tool provider (optional, provides MCP-backed tools).
         self._mcp_toolkit: IToolProvider | None = None
 
-        # Initial skill path (None = not set; single path for one skill).
-        self._initial_skill_path: str | None = None
-        self._skill_mode: str | None = None
-        self._skill_paths: list[str] = []
-
         # Optional transport channel (agent-facing).
         self._agent_channel: AgentChannel | None = None
+
+        self._sys_skill: Skill | None = None
+        self._enable_skill_tool: bool = True
+        self._skill_loaders: list[ISkillLoader] = []
+        self._skill_store: ISkillStore | None = None
+        self._disabled_skill_ids: set[str] = set()
 
     def _manager_config(self) -> Config | None:
         """Return the Config passed to managers."""
@@ -156,15 +157,15 @@ class _BaseAgentBuilder(Generic[TAgent]):
         return self
 
     def with_prompt(self: TBuilder, prompt: Prompt) -> TBuilder:
-        self._prompt = (None, prompt)
+        self._sys_prompt = (None, prompt)
         return self
 
     def with_prompt_id(self: TBuilder, prompt_id: str) -> TBuilder:
-        self._prompt = (prompt_id, None)
+        self._sys_prompt = (prompt_id, None)
         return self
 
-    def with_context(self: TBuilder, context: Context) -> TBuilder:
-        self._context = context
+    def with_context(self: TBuilder, assemble_context: IAssembleContext) -> TBuilder:
+        self._assemble_context = assemble_context
         return self
 
     def with_budget(self: TBuilder, budget: Budget) -> TBuilder:
@@ -204,28 +205,43 @@ class _BaseAgentBuilder(Generic[TAgent]):
         self._tool_providers.append(provider)
         return self
 
-    def with_run_context_factory(self: TBuilder, factory: Callable[[], RunContext[Any]]) -> TBuilder:
-        self._run_context_factory = factory
-        return self
-
     def with_agent_channel(self: TBuilder, channel: AgentChannel) -> TBuilder:
         """Attach an AgentChannel for transport-backed output/hook streaming."""
         self._agent_channel = channel
         return self
 
-    def with_skill(self: TBuilder, path: str | Path) -> TBuilder:
-        """Set initial skill path (one skill). Loaded at build, mounted on context."""
-        self._initial_skill_path = str(path)
+    def with_sys_skill(self: TBuilder, skill: Skill | None) -> TBuilder:
+        """Set explicit sys_skill for prompt enrichment mode."""
+        self._sys_skill = skill
         return self
 
-    def with_skill_mode(self: TBuilder, mode: str) -> TBuilder:
-        """Set skill mode ('agent' or 'search_tool')."""
-        self._skill_mode = mode
+    def with_skill_tool(self: TBuilder, enable_skill_tool: bool) -> TBuilder:
+        """Toggle automatic registration of search_skill tool."""
+        self._enable_skill_tool = enable_skill_tool
+        return self
+
+    def with_skill_store(self: TBuilder, skill_store: ISkillStore) -> TBuilder:
+        """Inject a pre-built skill store."""
+        self._skill_store = skill_store
+        return self
+
+    def add_skill_loader(self: TBuilder, skill_loader: ISkillLoader) -> TBuilder:
+        """Append an external skill loader for store composition."""
+        self._skill_loaders.append(skill_loader)
+        return self
+
+    def disable_skills(self: TBuilder, *skill_ids: str) -> TBuilder:
+        """Disable skills by id from the builder-composed store."""
+        for skill_id in skill_ids:
+            normalized = skill_id.strip()
+            if normalized:
+                self._disabled_skill_ids.add(normalized)
         return self
 
     def with_skill_paths(self: TBuilder, *paths: str | Path) -> TBuilder:
-        """Set skill search roots (used by skill search tool mode)."""
-        self._skill_paths = [str(p) for p in paths]
+        """Backward-compatible helper that appends filesystem loaders for paths."""
+        for path in paths:
+            self._skill_loaders.append(FileSystemSkillLoader(Path(path)))
         return self
 
     async def build(self) -> TAgent:
@@ -237,23 +253,6 @@ class _BaseAgentBuilder(Generic[TAgent]):
     def _build_impl(self) -> TAgent:
         """Override in subclasses to perform the actual build. Called by build() after MCP load."""
         raise NotImplementedError
-
-    # ---------------------------------------------------------------------
-    # Shared helper utilities
-    # ---------------------------------------------------------------------
-
-    def _apply_context_overrides(self, context: Context) -> None:
-        """Apply optional overrides to a provided context instance."""
-        if self._budget is not None:
-            context.budget = self._budget
-        if self._short_term_memory is not None:
-            context.short_term_memory = self._short_term_memory
-        ltm = self._resolved_long_term_memory()
-        if ltm is not None:
-            context.long_term_memory = ltm
-        knowledge = self._resolved_knowledge()
-        if knowledge is not None:
-            context.knowledge = knowledge
 
     def _resolved_long_term_memory(self) -> ILongTermMemory | None:
         """LTM from explicit with_long_term_memory() or from config.long_term_memory + embedding_adapter."""
@@ -277,23 +276,22 @@ class _BaseAgentBuilder(Generic[TAgent]):
         """Create a default run context for tool invocation."""
         return RunContext(deps=None, metadata={"agent": self._name})
 
-    def _resolved_skill_mode(self) -> str | None:
-        if self._skill_mode is not None:
-            return self._skill_mode
-        return self._effective_config().skill_mode
+    def _resolve_skill_store(self, config: Config) -> ISkillStore:
+        if self._skill_store is not None:
+            return self._skill_store
 
-    def _resolved_skill_paths(self) -> list[str]:
-        if self._skill_paths:
-            return list(self._skill_paths)
-        config = self._effective_config()
-        if config.skill_paths:
-            return list(config.skill_paths)
-        if config.initial_skill_path:
-            return [config.initial_skill_path]
-        return []
+        builder = SkillStoreBuilder.config(config)
+        for skill_loader in self._skill_loaders:
+            builder.with_skill_loader(skill_loader)
+        for skill_id in sorted(self._disabled_skill_ids):
+            builder.disable_skill(skill_id)
+        return builder.build()
 
     def _effective_config(self) -> Config:
-        return self._config or Config()
+        if self._config is None:
+            # Ensure all components built in this pass share the same Config instance.
+            self._config = Config()
+        return self._config
 
     def _resolve_prompt_store(self) -> IPromptStore:
         if self._prompt_store is not None:
@@ -303,9 +301,9 @@ class _BaseAgentBuilder(Generic[TAgent]):
     def _resolve_sys_prompt(self, model: IModelAdapter) -> Prompt | None:
         prompt = None
         prompt_id = None
-        if self._prompt is not None:
-            prompt = self._prompt[1]
-            prompt_id = self._prompt[0]
+        if self._sys_prompt is not None:
+            prompt = self._sys_prompt[1]
+            prompt_id = self._sys_prompt[0]
         if prompt is not None:
             return prompt
         if prompt_id is None:
@@ -346,7 +344,7 @@ class _BaseAgentBuilder(Generic[TAgent]):
             gateway.register_tool(tool)
         return gateway
 
-    def _resolve_model(self, config: Config | None) -> IModelAdapter:
+    def _resolve_model(self, config: Config) -> IModelAdapter:
         if self._model is not None:
             return self._model
         manager = self._model_adapter_manager or create_default_model_adapter_manager(config)
@@ -358,47 +356,19 @@ class _BaseAgentBuilder(Generic[TAgent]):
             raise ValueError("Model adapter manager did not return an IModelAdapter")
         return candidate
 
-    def _load_initial_skill_and_mount(self, context: Context) -> None:
-        """Load skill from initial_skill_path and mount on context."""
-        if self._resolved_skill_mode() == "search_tool":
-            return
-        path = (
-            self._initial_skill_path
-            if self._initial_skill_path is not None
-            else self._effective_config().initial_skill_path
-        )
-        if not path:
-            return
-        from dare_framework.skill._internal.filesystem_skill_loader import FileSystemSkillLoader
-
-        loader = FileSystemSkillLoader(Path(path))
-        skills = loader.load()
-        if skills:
-            context.set_skill(skills[0])
-
-    def _resolved_skill_search_tool(self) -> ITool | None:
-        mode = self._resolved_skill_mode()
-        if mode is None:
-            return None
-        if mode != "search_tool":
-            return None
-        paths = self._resolved_skill_paths()
-        if not paths:
+    def _resolved_skill_search_tool(self, config: Config) -> ITool | None:
+        if not self._enable_skill_tool:
             return None
         from dare_framework.skill.defaults import (
-            FileSystemSkillLoader,
             SearchSkillTool,
-            SkillStore,
         )
-        loader = FileSystemSkillLoader(*[Path(p) for p in paths])
-        store = SkillStore([loader])
-        return SearchSkillTool(store)
+        return SearchSkillTool(self._resolve_skill_store(config))
 
-    def _resolve_tools(self, knowledge: IKnowledge) -> list[ITool]:
+    def _resolve_tools(self, config: Config, knowledge: IKnowledge | None) -> list[ITool]:
         """Resolve explicit tools (local + skill + knowledge) for registration."""
         explicit = list(self._tools)
         explicit_names = {tool.name for tool in explicit}
-        skill_tool = self._resolved_skill_search_tool()
+        skill_tool = self._resolved_skill_search_tool(config)
 
         if skill_tool is not None and skill_tool.name not in explicit_names:
             explicit.append(skill_tool)
@@ -408,37 +378,43 @@ class _BaseAgentBuilder(Generic[TAgent]):
             explicit.append(KnowledgeAddTool(knowledge))
         return explicit
 
+    def _build_context(
+            self,
+            *,
+            config: Config,
+            knowledge: IKnowledge | None,
+            sys_prompt: Prompt | None,
+            tool_gateway: IToolGateway | None,
+    ) -> Context:
+        """Build context with shared defaults for all builder variants."""
+        sys_skill = None if self._enable_skill_tool else self._sys_skill
+        return Context(
+            id=f"context_{self._name}",
+            short_term_memory=self._short_term_memory,
+            long_term_memory=self._resolved_long_term_memory(),
+            knowledge=knowledge,
+            budget=self._budget or Budget(),
+            sys_prompt=sys_prompt,
+            skill=sys_skill,
+            config=config,
+            tool_gateway=tool_gateway,
+            assemble_context=self._assemble_context,
+        )
+
 
 class SimpleChatAgentBuilder(_BaseAgentBuilder[SimpleChatAgent]):
     """Builder for SimpleChatAgent."""
 
     def _build_impl(self) -> SimpleChatAgent:
-        config = self._manager_config()
+        config = self._effective_config()
         model = self._resolve_model(config)
         sys_prompt = self._resolve_sys_prompt(model)
         knowledge = self._resolved_knowledge()
-        tools = self._resolve_tools(knowledge)
+        tools = self._resolve_tools(config, knowledge)
         tool_gateway = self._ensure_tool_gateway(config, tools, self._tool_providers)
-
-        if self._context is None:
-            context = Context(
-                id=f"context_{self._name}",
-                short_term_memory=self._short_term_memory,
-                long_term_memory=self._resolved_long_term_memory(),
-                knowledge=knowledge,
-                budget=self._budget or Budget(),
-            )
-            context._tool_gateway = tool_gateway
-            context._sys_prompt = sys_prompt
-            self._context = context
-        else:
-            # todo 后面这个context的覆盖策略需要考虑
-            self._apply_context_overrides(self._context)
-            if tool_gateway is not None:
-                setattr(self._context, "_tool_gateway", tool_gateway)
-            setattr(self._context, "_sys_prompt", sys_prompt)
-
-        self._load_initial_skill_and_mount(self._context)
+        context = self._build_context(config=config, knowledge=knowledge, sys_prompt=sys_prompt,
+                                      tool_gateway=tool_gateway)
+        self._context = context
         return SimpleChatAgent(
             name=self._name,
             model=model,
@@ -451,33 +427,16 @@ class ReactAgentBuilder(_BaseAgentBuilder[ReactAgent]):
     """Builder for ReactAgent (ReAct tool loop)."""
 
     def _build_impl(self) -> ReactAgent:
-
-        config = self._manager_config()
+        config = self._effective_config()
         model = self._resolve_model(config)
         sys_prompt = self._resolve_sys_prompt(model)
         knowledge = self._resolved_knowledge()
-        tools = self._resolve_tools(knowledge)
+        tools = self._resolve_tools(config, knowledge)
         tool_gateway = self._ensure_tool_gateway(config, tools, self._tool_providers)
+        context = self._build_context(config=config, knowledge=knowledge, sys_prompt=sys_prompt,
+                                      tool_gateway=tool_gateway)
+        self._context = context
 
-        if self._context is None:
-            context = Context(
-                id=f"context_{self._name}",
-                short_term_memory=self._short_term_memory,
-                long_term_memory=self._resolved_long_term_memory(),
-                knowledge=self._resolved_knowledge(),
-                budget=self._budget or Budget(),
-            )
-            context._tool_gateway = tool_gateway
-            context._sys_prompt = sys_prompt
-            self._context = context
-        else:
-            # todo 后面这个context的覆盖策略需要考虑
-            self._apply_context_overrides(self._context)
-            if tool_gateway is not None:
-                setattr(self._context, "_tool_gateway", tool_gateway)
-            setattr(self._context, "_sys_prompt", sys_prompt)
-
-        self._load_initial_skill_and_mount(self._context)
         return ReactAgent(
             name=self._name,
             model=model,
@@ -535,20 +494,19 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
         return self
 
     def _build_impl(self) -> DareAgent:
-        config = self._manager_config()
+        config = self._effective_config()
         model = self._resolve_model(config)
         sys_prompt = self._resolve_sys_prompt(model)
         knowledge = self._resolved_knowledge()
-        tools = self._resolve_tools(knowledge)
+        tools = self._resolve_tools(config, knowledge)
         tool_gateway = self._ensure_tool_gateway(config, tools, self._tool_providers)
-
+        context = self._build_context(config=config, knowledge=knowledge, sys_prompt=sys_prompt,
+                                      tool_gateway=tool_gateway)
         planner = self._planner
         if planner is None:
             manager = self._planner_manager
             if manager is not None:
-                candidate = manager.load_planner(config=config)
-                if candidate is not None:
-                    planner = candidate
+                planner = manager.load_planner(config=config)
 
         validators = list(self._validators)
         manager = self._validator_manager
@@ -585,25 +543,8 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
 
         telemetry = self._telemetry
 
-        if self._context is None:
-            context = Context(
-                id=f"context_{self._name}",
-                short_term_memory=self._short_term_memory,
-                long_term_memory=self._resolved_long_term_memory(),
-                knowledge=self._resolved_knowledge(),
-                budget=self._budget or Budget(),
-            )
-            context._tool_gateway = tool_gateway
-            context._sys_prompt = sys_prompt
-            self._context = context
-        else:
-            # todo 后面这个context的覆盖策略需要考虑
-            self._apply_context_overrides(self._context)
-            if tool_gateway is not None:
-                setattr(self._context, "_tool_gateway", tool_gateway)
-            setattr(self._context, "_sys_prompt", sys_prompt)
-            context = self._context
-        self._load_initial_skill_and_mount(context)
+        self._context = context
+
         return DareAgent(
             name=self._name,
             model=model,
@@ -625,7 +566,7 @@ __all__ = ["DareAgentBuilder", "ReactAgentBuilder", "SimpleChatAgentBuilder"]
 
 
 async def load_mcp_toolkit(
-        config: Config | None = None,
+        config: Config,
         *,
         paths: list[str | Path] | None = None,
 ) -> IToolProvider:
@@ -636,7 +577,7 @@ async def load_mcp_toolkit(
 
     Args:
         config: Configuration with mcp_paths and allowmcps settings.
-                If None, uses default Config.
+                Must be non-null.
         paths: Explicit list of paths to scan. Overrides config.mcp_paths.
 
     Returns:
@@ -652,9 +593,8 @@ async def load_mcp_toolkit(
             await provider.close()
     """
     from dare_framework.mcp.defaults import create_mcp_clients, load_mcp_configs, MCPToolProvider
-
     if config is None:
-        config = Config()
+        raise ValueError("load_mcp_toolkit requires a non-null Config.")
 
     # Determine scan paths
     if paths is None:

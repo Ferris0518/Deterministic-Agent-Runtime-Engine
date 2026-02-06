@@ -297,7 +297,7 @@ def _create_builder(
 
 
 async def preview_plan(task_text: str, model: OpenRouterModelAdapter, display: CLIDisplay) -> Any:
-    ctx = Context(id="plan-preview")
+    ctx = Context(id="plan-preview", config=Config())
     ctx.stm_add(Message(role="user", content=task_text))
     planner = DefaultPlanner(model, verbose=False)
     plan = await planner.plan(ctx)

@@ -184,7 +184,7 @@ class ToolManager(IToolManager, IToolGateway):
             tools.append(entry.tool)
         return tools
 
-    async def list_capabilities(self, *, include_disabled: bool = False) -> list[CapabilityDescriptor]:
+    def list_capabilities(self, *, include_disabled: bool = False) -> list[CapabilityDescriptor]:
         descriptors: list[CapabilityDescriptor] = []
         for entry in self._registry.values():
             if not include_disabled and not entry.enabled:

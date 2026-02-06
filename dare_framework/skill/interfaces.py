@@ -6,7 +6,6 @@ Core skill contracts live in `dare_framework.skill.kernel`.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Protocol
 
 from dare_framework.skill.types import Skill
 
@@ -31,6 +30,11 @@ class ISkillStore(ABC):
     @abstractmethod
     def get_skill(self, skill_id: str) -> Skill | None:
         """Get a skill by id."""
+        ...
+
+    @abstractmethod
+    def select_for_task(self, query: str, limit: int = 5) -> list[Skill]:
+        """Select relevant skills for a natural-language task/query."""
         ...
 
 __all__ = ["ISkillLoader", "ISkillStore"]

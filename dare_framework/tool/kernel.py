@@ -29,7 +29,7 @@ class IToolProvider(ABC):
     """[Component] Tool provider interface (core)."""
 
     @abstractmethod
-    def list_tools(self) -> list["ITool"]:
+    def list_tools(self) -> list[ITool]:
         """Get available tool instances for registration."""
         ...
 
@@ -112,7 +112,7 @@ class IToolGateway(ABC):
     """System-call boundary and trusted capability registry facade."""
 
     @abstractmethod
-    async def list_capabilities(self) -> Sequence[CapabilityDescriptor]: ...
+    def list_capabilities(self) -> list[CapabilityDescriptor]: ...
 
     @abstractmethod
     async def invoke(
