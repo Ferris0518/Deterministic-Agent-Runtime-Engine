@@ -33,6 +33,8 @@ Important:
 - Only use skills listed in "Available skills" below.
 """
 
+_MAX_DESCRIPTION_SKILLS = 50
+
 
 def _error_result(message: str) -> ToolResult:
     return ToolResult(success=False, output={}, error=message, evidence=[])
@@ -60,8 +62,13 @@ def _build_dynamic_description(skill_store: ISkillStore) -> str:
         return _BASE_DESCRIPTION + "\nAvailable skills:\n- (none loaded)"
 
     lines = ["Available skills:"]
-    for skill in skills:
+    for skill in skills[:_MAX_DESCRIPTION_SKILLS]:
         lines.append(f"- {skill.id} ({skill.name}): {_summarize_skill(skill)}")
+    remaining = len(skills) - _MAX_DESCRIPTION_SKILLS
+    if remaining > 0:
+        lines.append(
+            f"- ... {remaining} additional skills are not loaded into this description."
+        )
     return _BASE_DESCRIPTION + "\n" + "\n".join(lines)
 
 
@@ -93,7 +100,7 @@ class SearchSkillTool(ITool):
 
     @property
     def name(self) -> str:
-        return "search_skill"
+        return "skill"
 
     @property
     def description(self) -> str:

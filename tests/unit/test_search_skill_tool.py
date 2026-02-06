@@ -68,6 +68,26 @@ def test_search_skill_tool_description_includes_available_skills() -> None:
     assert "- review-pr (Review PR Skill):" in description
 
 
+def test_search_skill_tool_description_caps_list_to_50_skills() -> None:
+    many_skills = [
+        Skill(
+            id=f"skill-{index:02d}",
+            name=f"Skill {index:02d}",
+            description=f"description {index:02d}",
+            content=f"content {index:02d}",
+        )
+        for index in range(52)
+    ]
+    tool = SearchSkillTool(StaticSkillStore(many_skills))
+
+    description = tool.description
+    assert "- skill-00 (Skill 00):" in description
+    assert "- skill-49 (Skill 49):" in description
+    assert "- skill-50 (Skill 50):" not in description
+    assert "- skill-51 (Skill 51):" not in description
+    assert "- ... 2 additional skills are not loaded into this description." in description
+
+
 @pytest.mark.asyncio
 async def test_search_skill_tool_resolves_by_skill_name() -> None:
     tool = SearchSkillTool(StaticSkillStore(_skills()))
