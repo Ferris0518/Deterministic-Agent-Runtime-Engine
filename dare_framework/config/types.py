@@ -35,7 +35,7 @@ class ProxyConfig:
     disabled: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ProxyConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ProxyConfig:
         """Create from a dictionary, enforcing precedence rules."""
         disabled = bool(data.get("disabled", False))
         use_system_proxy = bool(data.get("use_system_proxy", False))
@@ -88,7 +88,7 @@ class LLMConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LLMConfig":
+    def from_dict(cls, data: dict[str, Any]) -> LLMConfig:
         """Create from a dictionary."""
         adapter = data.get("adapter")
         endpoint = data.get("endpoint")
@@ -136,7 +136,7 @@ class ComponentConfig:
     entries: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ComponentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ComponentConfig:
         """Create from a dictionary."""
         disabled_raw = data.get("disabled", [])
         disabled = [str(item) for item in disabled_raw] if isinstance(disabled_raw, list) else []
@@ -160,7 +160,7 @@ class RedactionConfig:
     replacement: str = "[REDACTED]"
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "RedactionConfig":
+    def from_dict(cls, data: dict[str, Any]) -> RedactionConfig:
         mode = data.get("mode", "denylist")
         if mode not in {"denylist", "allowlist"}:
             mode = "denylist"
@@ -197,7 +197,7 @@ class ObservabilityConfig:
     attribute_cardinality_limits: dict[str, int] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ObservabilityConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ObservabilityConfig:
         enabled = bool(data.get("enabled", False))
         traces_enabled = bool(data.get("traces_enabled", True))
         metrics_enabled = bool(data.get("metrics_enabled", True))
@@ -300,7 +300,7 @@ class Config:
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Config":
+    def from_dict(cls, data: dict[str, Any]) -> Config:
         """Create from a dictionary."""
         llm_data = data.get("llm")
         llm = LLMConfig.from_dict(llm_data) if isinstance(llm_data, dict) else LLMConfig()

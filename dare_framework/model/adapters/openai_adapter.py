@@ -7,6 +7,7 @@ import logging
 from abc import ABC
 from typing import TYPE_CHECKING, Any, Literal
 
+from dare_framework.tool.types import CapabilityDescriptor
 from dare_framework.model.kernel import IModelAdapter
 from dare_framework.model.types import ModelInput, ModelResponse, GenerateOptions
 from dare_framework.infra.component import ComponentType
@@ -79,22 +80,23 @@ class OpenAIModelAdapter(IModelAdapter):
         *,
         options: GenerateOptions | None = None,
     ) -> ModelResponse:
-        """Generate a response from the OpenAI-compatible model.
-
-        Args:
-            model_input: ModelInput containing messages and tools
-            options: Generation options
-
-        Returns:
-            ModelResponse with content and optional tool calls
-        """
+        """Generate a response from the OpenAI-compatible model."""
         client = self._ensure_client()
         client = self._apply_options(client, options)
         
-        # Convert tools from dict format to ToolDefinition-like format
-        tools = self._convert_tools(model_input.tools) if model_input.tools else None
-        if tools:
-            client = client.bind_tools([self._tool_definition(tool) for tool in tools])
+        # Build tools directly from CapabilityDescriptor objects
+        if model_input.tools:
+            openai_tools = []
+            for tool in model_input.tools:
+                openai_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.input_schema,
+                    },
+                })
+            client = client.bind_tools(openai_tools)
         
         self._log_client_config(client)
         response = await client.ainvoke(self._to_langchain_messages(model_input.messages))
@@ -272,44 +274,6 @@ class OpenAIModelAdapter(IModelAdapter):
         except Exception:
             return None, None
 
-    def _convert_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Convert tool dicts to ToolDefinition-like format."""
-        # Tools are already in dict format from Context.listing_tools()
-        # Just ensure they have the right structure
-        converted = []
-        for tool in tools:
-            if isinstance(tool, dict):
-                # If it's already in OpenAI function format, use it directly
-                if tool.get("type") == "function":
-                    converted.append(tool)
-                else:
-                    # Convert to OpenAI function format
-                    converted.append({
-                        "type": "function",
-                        "function": {
-                            "name": tool.get("name", ""),
-                            "description": tool.get("description", ""),
-                            "parameters": tool.get("parameters", tool.get("input_schema", {})),
-                        },
-                    })
-        return converted
-
-    def _tool_definition(self, tool: dict[str, Any]) -> dict[str, Any]:
-        """Convert a tool dict to OpenAI's function format."""
-        if tool.get("type") == "function":
-            return tool
-        function = tool.get("function", {})
-        parameters = function.get("parameters", {})
-        if "type" not in parameters:
-            parameters = {"type": "object", "properties": parameters}
-        return {
-            "type": "function",
-            "function": {
-                "name": function.get("name", tool.get("name", "")),
-                "description": function.get("description", tool.get("description", "")),
-                "parameters": parameters,
-            },
-        }
 
 
 __all__ = ["OpenAIModelAdapter"]

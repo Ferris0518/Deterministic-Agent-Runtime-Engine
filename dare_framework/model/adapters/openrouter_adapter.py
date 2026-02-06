@@ -9,6 +9,7 @@ from typing import Any, Literal
 from dare_framework.infra.component import ComponentType
 from dare_framework.model.kernel import IModelAdapter
 from dare_framework.model.types import GenerateOptions, ModelInput, ModelResponse
+from dare_framework.tool.types import CapabilityDescriptor
 
 
 class OpenRouterModelAdapter(IModelAdapter):
@@ -61,7 +62,17 @@ class OpenRouterModelAdapter(IModelAdapter):
             "messages": messages,
         }
         if model_input.tools:
-            api_params["tools"] = model_input.tools
+            api_params["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.input_schema,
+                    },
+                }
+                for tool in model_input.tools
+            ]
 
         if self._extra:
             api_params.update(self._extra)
@@ -133,6 +144,8 @@ def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
             payload["name"] = msg.name
         serialized.append(payload)
     return serialized
+
+
 
 
 def _extract_tool_calls(message: Any) -> list[dict[str, Any]]:

@@ -14,7 +14,7 @@ from dare_framework.tool.types import (
 )
 
 if TYPE_CHECKING:
-    from dare_framework.context._internal.context import Context
+    from dare_framework.context.context import Context
     from dare_framework.skill.interfaces import ISkillStore
 
 
@@ -25,7 +25,7 @@ def _error_result(message: str) -> ToolResult:
 class SearchSkillTool(ITool, IComponent):
     """Load a skill's full content by skill_id (tool execution). Writes skill full content into context's dict; assemble merges dict into context for next LLM input."""
 
-    def __init__(self, skill_store: "ISkillStore", context: "Context") -> None:
+    def __init__(self, skill_store: ISkillStore, context: Context) -> None:
         self._skill_store = skill_store
         self._context = context
 
