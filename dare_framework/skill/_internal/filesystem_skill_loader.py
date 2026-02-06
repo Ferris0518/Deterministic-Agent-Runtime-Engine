@@ -18,7 +18,7 @@ class FileSystemSkillLoader(ISkillLoader):
         Each path can be a directory containing skill subdirs, or a direct skill dir
         with SKILL.md.
         """
-        self._paths = [Path(p) for p in paths]
+        self._paths = [Path(path) for path in paths]
 
     def load(self) -> list[Skill]:
         """Load and parse all skills from configured paths."""

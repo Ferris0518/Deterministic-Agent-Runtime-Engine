@@ -30,7 +30,8 @@ class Context(IContext):
             self,
             id: str | None = None,
             budget: Budget | None = None,
-            config: Config | None = None,
+            *,
+            config: Config,
             short_term_memory: IRetrievalContext | None = None,
             long_term_memory: IRetrievalContext | None = None,
             knowledge: IRetrievalContext | None = None,
@@ -39,6 +40,8 @@ class Context(IContext):
             skill: Skill | None = None,
             assemble_context: IAssembleContext | None = None,
     ) -> None:
+        if config is None:
+            raise ValueError("Context requires a non-null Config")
         self._id = id or str(uuid.uuid4())
         self._budget = budget or Budget()
         self._config = config
@@ -50,7 +53,6 @@ class Context(IContext):
 
         # Current skill (one at a time; injected at assemble time)
         self._sys_skill = skill
-
 
         self._assemble_context = assemble_context or DefaultAssembledContext()
 
@@ -80,7 +82,7 @@ class Context(IContext):
         return self._knowledge
 
     @property
-    def config(self) -> dict[str, Any] | None:
+    def config(self) -> Config:
         return self._config
 
     @property
@@ -88,7 +90,7 @@ class Context(IContext):
         return self._sys_prompt
 
     @property
-    def sys_skill(self) -> Skill:
+    def sys_skill(self) -> Skill | None:
         return self._sys_skill
 
     # ========== Short-term Memory Methods ==========
@@ -160,20 +162,6 @@ class Context(IContext):
             return self._tool_gateway.list_capabilities()
         return []
 
-    # ========== Skill Methods (dynamic mount/unmount) ==========
-
-    def set_skill(self, skill: Skill | None) -> None:
-        """Mount or replace current skill. None clears."""
-        self._sys_skill = skill
-
-    def clear_skill(self) -> None:
-        """Unmount current skill."""
-        self._sys_skill = None
-
-    def current_skill(self) -> Skill | None:
-        """Get current skill, if any."""
-        return self._sys_skill
-
     # ========== Assembly Methods (Core) ==========
 
     def assemble(self) -> AssembledContext:
@@ -199,7 +187,9 @@ class DefaultAssembledContext(IAssembleContext):
             messages=messages,
             sys_prompt=sys_prompt,
             tools=tools,
-            metadata={"context_id": context.id},
+            metadata={
+                "context_id": context.id,
+            },
         )
 
 

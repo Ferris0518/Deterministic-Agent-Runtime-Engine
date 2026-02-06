@@ -57,7 +57,7 @@ class IContext(ABC):
 
     @property
     @abstractmethod
-    def sys_skill(self) -> Skill:
+    def sys_skill(self) -> Skill | None:
         """
         用于将skill作为系统prompt的场景
         """

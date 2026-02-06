@@ -2,7 +2,7 @@
 
 ## 文档范围与约束
 
-- **依据**：`dare_framework/` 与 `examples/05-dare-coding-agent-enhanced/` 源码分析；Context 与 STM/LTM/Knowledge 的深度联动方案见 `docs/design/module_design/context/CONTEXT_STM_LTM_KNOWLEDGE_INTEGRATION_PLAN.md`。
+- **依据**：`dare_framework/` 与 `examples/05-dare-coding-agent-enhanced/` 源码分析；Context 与 STM/LTM/Knowledge 的深度联动方案见 `docs/design/modules/context/CONTEXT_STM_LTM_KNOWLEDGE_INTEGRATION_PLAN.md`。
 - **输出**：Markdown，可导出 PDF；含架构说明、算法、设计原理、流程图/类图/时序图/状态图。
 
 ---
@@ -615,7 +615,7 @@ sequenceDiagram
 
 ### 4.4 context（上下文域）
 
-Context 是框架的**上下文中枢**：不存对话或知识内容，只持有 STM/LTM/Knowledge 的引用与 Budget、Prompt、Tools 等；在每次模型调用前**按策略 assemble**，决定“喂给模型的这一窗格”从哪来、怎么排、是否注入 LTM/Knowledge。详细联动方案见 `docs/design/module_design/context/CONTEXT_STM_LTM_KNOWLEDGE_INTEGRATION_PLAN.md`。
+Context 是框架的**上下文中枢**：不存对话或知识内容，只持有 STM/LTM/Knowledge 的引用与 Budget、Prompt、Tools 等；在每次模型调用前**按策略 assemble**，决定“喂给模型的这一窗格”从哪来、怎么排、是否注入 LTM/Knowledge。详细联动方案见 `docs/design/modules/context/CONTEXT_STM_LTM_KNOWLEDGE_INTEGRATION_PLAN.md`。
 
 #### 设计思想
 

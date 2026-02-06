@@ -18,15 +18,15 @@
 ## 3. Agent 类型设计文档（按形态区分）
 
 - **DareAgent**（五层循环模板）
-  - 设计总览：`docs/design/module_design/agent/DareAgent.md`
-  - Session 设计：`docs/design/module_design/agent/DareAgent_Session.md`
-  - Milestone 设计：`docs/design/module_design/agent/DareAgent_Milestone.md`
+  - 设计总览：`docs/design/modules/agent/DareAgent.md`
+  - Session 设计：`docs/design/modules/agent/DareAgent_Session.md`
+  - Milestone 设计：`docs/design/modules/agent/DareAgent_Milestone.md`
 
 - **ReactAgent**（ReAct 工具循环模板）
-  - 设计总览：`docs/design/module_design/agent/ReactAgent.md`
+  - 设计总览：`docs/design/modules/agent/ReactAgent.md`
 
 - **SimpleChatAgent**（单轮对话模板）
-  - 设计总览：`docs/design/module_design/agent/SimpleChatAgent.md`
+  - 设计总览：`docs/design/modules/agent/SimpleChatAgent.md`
 
 ## 4. 扩展点（共通）
 
@@ -42,4 +42,4 @@
 
 ## 6. Assessment
 
-- 评估报告：`docs/design/module_design/agent/Assessment.md`
+- 评估报告：`docs/design/modules/agent/Assessment.md`
