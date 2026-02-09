@@ -425,12 +425,12 @@ async def main(argv: list[str] | None = None) -> None:
     except Exception:
         pass
 
-    api_key = "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"
+    api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         print("OPENROUTER_API_KEY not set")
         sys.exit(1)
 
-    model_name = "openai/gpt-oss-120b"
+    model_name = args.model or os.getenv("OPENROUTER_MODEL", "z-ai/glm-4.7")
     max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "2048"))
     timeout_seconds = float(os.getenv("OPENROUTER_TIMEOUT", "60"))
     workspace = Path(__file__).parent / "workspace"
@@ -501,4 +501,10 @@ async def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nInterrupted. Exiting.")
+    except asyncio.CancelledError:
+        # Cancellation can bubble up during shutdown (e.g. Ctrl+C mid-request).
+        print("\nCancelled. Exiting.")

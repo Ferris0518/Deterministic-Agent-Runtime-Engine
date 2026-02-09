@@ -1,6 +1,6 @@
 # Design TODO Index
 
-> Status: generated from module docs (2026-01-31).
+> Status: generated from module docs (2026-02-05).
 >
 > 用途：集中查看当前架构/模块设计文档中的 TODO，便于分工与追踪。
 
@@ -62,7 +62,6 @@
 - [ ] 提供默认 LTM/Knowledge 实现（或接入外部向量库）。(`docs/design/modules/memory_knowledge/README.md`)
 - [ ] 统一检索融合策略（排序、去重、预算控制）。(`docs/design/modules/memory_knowledge/README.md`)
 - [ ] 知识作为 Tool 的统一策略（权限、计费、审计）。(`docs/design/modules/memory_knowledge/README.md`)
-
 ## skill
 - [ ] 标准化“技能注入上下文”的默认路径与安全边界。(`docs/design/modules/skill/README.md`)
 - [ ] skill 执行权限与审计机制。(`docs/design/modules/skill/README.md`)

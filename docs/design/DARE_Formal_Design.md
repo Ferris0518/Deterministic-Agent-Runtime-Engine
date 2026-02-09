@@ -399,7 +399,7 @@ flowchart LR
 详细设计：`docs/design/modules/memory_knowledge/README.md`。
 - **职责**：提供 STM/LTM/Knowledge 的检索实现。
 - **关键类型**：`IShortTermMemory` / `ILongTermMemory` / `IKnowledge`。
-- **默认实现**：`InMemorySTM`；LTM/Knowledge 仅接口。
+- **默认实现**：`InMemorySTM`；LTM/Knowledge 通过工厂支持 rawdata/vector 默认实现。
 - **扩展点**：RAG/GraphRAG、向量库接入、策略排序。
 
 ### 5.9 embedding
