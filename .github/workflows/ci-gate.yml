@@ -1,0 +1,116 @@
+name: ci-gate
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  # Keep one active run per ref/workflow so fast follow-up pushes cancel stale checks.
+  group: ci-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install lint tooling
+        run: python -m pip install --upgrade pip ruff
+
+      - name: Run lint gate (phase-1 syntax/parser safety)
+        run: ruff check dare_framework tests --select E9,F63,F7
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build gate (phase-1 compile check)
+        run: python -m compileall -q dare_framework tests
+
+  smoke-tests:
+    name: smoke-tests
+    runs-on: ubuntu-latest
+    needs: [lint, build]
+    # Phase-1 rollout: publish smoke signal without blocking merges yet.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install smoke-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-asyncio langchain-openai langchain-core httpx starlette uvicorn
+
+      - name: Run smoke tests
+        run: pytest -q tests/smoke -m smoke
+
+  risk-matrix:
+    name: risk-matrix
+    runs-on: ubuntu-latest
+    needs: [lint, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install risk-matrix dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-asyncio langchain-openai langchain-core httpx starlette uvicorn
+
+      - name: Run risk matrix
+        run: ./scripts/ci/run_risk_matrix.sh
+
+  test-skip-guard:
+    name: test-skip-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check new skip/only markers
+        run: ./scripts/ci/check_test_skip_markers.sh
+
+  lockfile-policy:
+    name: lockfile-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check lockfile update policy
+        run: ./scripts/ci/check_lockfile_policy.sh
