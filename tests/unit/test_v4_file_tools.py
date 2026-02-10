@@ -109,6 +109,26 @@ async def test_edit_line_strict_match_mismatch(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_edit_line_insert_defaults_line_number_to_first_line(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    target = root / "sample.txt"
+    target.write_text("one\ntwo\n")
+
+    ctx = RunContext(deps=None, run_id="run", config={"workspace_roots": [str(root)]})
+
+    tool = EditLineTool()
+    result = await tool.execute(
+        {"path": "sample.txt", "mode": "insert", "text": "zero"},
+        ctx,
+    )
+
+    assert result.success is True
+    assert result.output["line_number"] == 1
+    assert target.read_text() == "zero\none\ntwo\n"
+
+
+@pytest.mark.asyncio
 async def test_read_file_line_range_truncates(tmp_path):
     root = tmp_path / "root"
     root.mkdir()

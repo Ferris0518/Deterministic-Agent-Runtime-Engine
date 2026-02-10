@@ -104,7 +104,13 @@ class MCPTool(ITool):
     @property
     def timeout_seconds(self) -> int:
         value = _tool_field(self._tool_def, "timeout_seconds", 30)
-        return int(value) if isinstance(value, (int, float, str)) else 30
+        if isinstance(value, bool):
+            return 30
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 30
+        return parsed if parsed > 0 else 30
 
     @property
     def is_work_unit(self) -> bool:

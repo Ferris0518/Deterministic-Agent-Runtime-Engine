@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from dare_framework.mcp.tool_provider import MCPToolProvider
+from dare_framework.tool.tool_manager import ToolManager
 from dare_framework.tool.types import ToolResult
 
 
@@ -110,3 +111,29 @@ async def test_mcp_tool_execute_forwards_arguments() -> None:
 
     assert result.success is True
     assert client.calls == [("multiply", {"a": 6, "b": 7})]
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_invalid_timeout_falls_back_and_registers() -> None:
+    client = _FakeMCPClient(
+        "local_math",
+        [
+            {
+                "name": "divide",
+                "description": "Divide two numbers.",
+                "timeout_seconds": "invalid-timeout",
+            }
+        ],
+    )
+    provider = MCPToolProvider([client])
+    await provider.initialize()
+    tool = provider.list_tools()[0]
+
+    assert tool.timeout_seconds == 30
+
+    manager = ToolManager(load_entrypoints=False)
+    manager.register_provider(provider)
+    caps = await manager.list_capabilities()
+    assert caps
+    metadata = caps[0].metadata or {}
+    assert metadata.get("timeout_seconds") == 30
