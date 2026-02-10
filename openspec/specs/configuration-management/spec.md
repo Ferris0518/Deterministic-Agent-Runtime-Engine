@@ -38,14 +38,15 @@ The allowtools and allowmcps settings SHALL be treated as normal configuration k
 ### Requirement: Config Model Structure
 The Config model SHALL include at least the following top-level fields: llm, mcp, tools, allowtools, allowmcps, components, workspace_dir, and user_dir. The llm field MUST support connectivity configuration such as adapter, endpoint, api_key, model, and optional proxy settings (http, https, no_proxy, use_system_proxy, disabled). When proxy.disabled is true, proxy settings MUST be treated as disabled. Explicit proxy configuration and system proxy selection MUST be mutually exclusive in the effective model. The mcp and tools fields MUST support component-scoped configuration objects keyed by component name. The components field MUST support enable/disable flags and per-component configuration for entry point components by type and name (including validator, hook, skill, memory, model_adapter, tool, mcp, and prompt).
 
-#### Scenario: LLM connectivity fields available
-- **WHEN** the effective Config is produced
-- **THEN** the llm field can provide adapter, endpoint, api_key, model, and optional proxy values
+The Config model MUST NOT require top-level skill mode/path fields such as `skill_mode`, `skill_paths`, or `initial_skill_path`.
 
-#### Scenario: Proxy disabled takes precedence
-- **GIVEN** llm.proxy.disabled is true
-- **WHEN** the effective Config is produced
-- **THEN** the model adapter treats proxy as disabled regardless of other proxy fields
+Skill filesystem discovery MUST be derived from `workspace_dir` and `user_dir` by the skill loading layer.
+
+#### Scenario: Skill loading relies on workspace/user dirs only
+- **GIVEN** an effective Config containing `workspace_dir` and `user_dir`
+- **WHEN** the runtime initializes skill loading
+- **THEN** skill loading derives filesystem roots from those directories
+- **AND** no `skill_mode`, `skill_paths`, or `initial_skill_path` fields are required in Config
 
 ### Requirement: Component Enablement Configuration
 The system SHALL support a uniform enable/disable configuration for all entry point components using a type-scoped structure. The components.<type>.disabled list identifies disabled component names. The default behavior MUST be enabled when a name is absent from components.<type>.disabled.
