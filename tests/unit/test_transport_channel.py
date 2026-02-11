@@ -52,7 +52,7 @@ class RecordActionHandler(IActionHandler):
     def supports(self) -> set[ResourceAction]:
         return {ResourceAction.TOOLS_LIST}
 
-    async def invoke(self, action: ResourceAction, _params: dict[str, object]):
+    async def invoke(self, action: ResourceAction, **_params: object):
         self._calls.append(action.value)
         return {"ok": True}
 
@@ -61,7 +61,7 @@ class SlowActionHandler(IActionHandler):
     def supports(self) -> set[ResourceAction]:
         return {ResourceAction.TOOLS_LIST}
 
-    async def invoke(self, _action: ResourceAction, _params: dict[str, object]):
+    async def invoke(self, _action: ResourceAction, **_params: object):
         await asyncio.sleep(0.2)
         return {"ok": True}
 
