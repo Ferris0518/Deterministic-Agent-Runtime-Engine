@@ -42,6 +42,7 @@ class ReactAgent(BaseAgent):
         long_term_memory: ILongTermMemory | None = None,
         knowledge: IKnowledge | None = None,
         tools: IToolProvider | None = None,
+        plan_provider: IToolProvider | None = None,
         budget: Budget | None = None,
         max_tool_rounds: int = 10,
         agent_channel: AgentChannel | None = None,
@@ -49,6 +50,7 @@ class ReactAgent(BaseAgent):
         super().__init__(name, agent_channel=agent_channel)
         self._model = model
         self._max_tool_rounds = max_tool_rounds
+        self._plan_provider = plan_provider
 
         if context is None:
             from dare_framework.context import Budget
@@ -69,6 +71,12 @@ class ReactAgent(BaseAgent):
     def context(self) -> Context:
         return self._context
 
+    @property
+    def plan_provider(self) -> IToolProvider | None:
+        """When built with with_plan_provider(plan_v2.Planner(...)), the mounted planner.
+        Use e.g. getattr(agent.plan_provider, "state", None) to get PlannerState for copy_for_execution()."""
+        return self._plan_provider
+
     async def _execute(self, task: str) -> str:
         user_message = Message(role="user", content=task)
         self._context.stm_add(user_message)
@@ -76,7 +84,8 @@ class ReactAgent(BaseAgent):
         gateway = getattr(self._context, "_tool_gateway", None)
         has_invoke = gateway is not None and hasattr(gateway, "invoke")
 
-        for _ in range(self._max_tool_rounds):
+        for round_idx in range(self._max_tool_rounds):
+            print(f"[{self.name}] Round {round_idx + 1}/{self._max_tool_rounds}: 调用模型中...", flush=True)
             assembled = self._context.assemble()
             messages = list(assembled.messages)
             prompt_def = getattr(assembled, "sys_prompt", None)
@@ -90,6 +99,16 @@ class ReactAgent(BaseAgent):
                     ),
                     *messages,
                 ]
+            # Inject critical_block from plan_provider (maintained by plan tools)
+            if self._plan_provider is not None:
+                state = getattr(self._plan_provider, "state", None)
+                critical_block = getattr(state, "critical_block", "") if state else ""
+                if critical_block:
+                    print("\n--- [Plan State] (injected) ---\n" + critical_block + "\n---\n", flush=True)
+                    messages.insert(
+                        1,
+                        Message(role="system", content=critical_block, name="plan_state"),
+                    )
 
             model_input = ModelInput(
                 messages=messages,
@@ -97,6 +116,8 @@ class ReactAgent(BaseAgent):
                 metadata=assembled.metadata,
             )
             response = await self._model.generate(model_input)
+            n_tools = len(response.tool_calls) if response.tool_calls else 0
+            print(f"[{self.name}] 模型返回, tool_calls={n_tools}", flush=True)
 
             if response.usage:
                 tokens = response.usage.get("total_tokens", 0)
@@ -135,6 +156,8 @@ class ReactAgent(BaseAgent):
                     except json.JSONDecodeError:
                         args = {}
                 params = args if isinstance(args, dict) else {}
+                task_preview = (params.get("task") or "")[:80] if isinstance(params.get("task"), str) else ""
+                print(f"[{self.name}] 执行工具: {name}" + (f" (task: {task_preview}...)" if task_preview else ""), flush=True)
 
                 try:
                     result = await gateway.invoke(name, envelope=envelope, **params)
