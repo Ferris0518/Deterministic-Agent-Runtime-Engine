@@ -114,6 +114,11 @@ class _BaseAgentBuilder(Generic[TAgent]):
         # MCP tool provider (optional, provides MCP-backed tools).
         self._mcp_toolkit: IToolProvider | None = None
 
+        # Optional plan provider (e.g. plan_v2.Planner). When set, registered as tool provider
+        # so the agent gets plan tools (create_plan, validate_plan, etc.). ReactAgentBuilder
+        # also passes it to the agent so you can access agent.plan_provider (e.g. .state for copy_for_execution).
+        self._plan_provider: IToolProvider | None = None
+
         # Optional transport channel (agent-facing).
         self._agent_channel: AgentChannel | None = None
 
@@ -227,6 +232,12 @@ class _BaseAgentBuilder(Generic[TAgent]):
 
     def add_tool_provider(self: TBuilder, provider: IToolProvider) -> TBuilder:
         self._tool_providers.append(provider)
+        return self
+
+    def with_plan_provider(self: TBuilder, plan_provider: IToolProvider) -> TBuilder:
+        """Optionally mount a plan provider (e.g. plan_v2.Planner). Its tools are registered;
+        for ReactAgent, the same provider is exposed as agent.plan_provider (e.g. to read .state)."""
+        self._plan_provider = plan_provider
         return self
 
     def with_agent_channel(self: TBuilder, channel: AgentChannel) -> TBuilder:
@@ -417,6 +428,8 @@ class _BaseAgentBuilder(Generic[TAgent]):
             self._tool_manager = tool_manager
 
         providers = list(tool_providers)
+        if self._plan_provider is not None and self._plan_provider not in providers:
+            providers.append(self._plan_provider)
         if self._mcp_toolkit is not None and self._mcp_toolkit not in providers:
             providers.append(self._mcp_toolkit)
 
@@ -508,7 +521,11 @@ class SimpleChatAgentBuilder(_BaseAgentBuilder[SimpleChatAgent]):
 
 
 class ReactAgentBuilder(_BaseAgentBuilder[ReactAgent]):
-    """Builder for ReactAgent (ReAct tool loop)."""
+    """Builder for ReactAgent (ReAct tool loop).
+
+    Optional plan: use with_plan_provider(plan_v2.Planner(state)) to mount plan tools;
+    the agent then exposes agent.plan_provider (e.g. .state for copy_for_execution).
+    """
 
     def _build_impl(
             self,
@@ -520,11 +537,12 @@ class ReactAgentBuilder(_BaseAgentBuilder[ReactAgent]):
             approval_manager: ToolApprovalManager,
             agent_channel: AgentChannel | None,
     ) -> ReactAgent:
-        _ = (config, tool_gateway, approval_manager)
+        _ = (config, approval_manager)
         return ReactAgent(
             name=self._name,
             model=model,
             context=context,
+            plan_provider=self._plan_provider,
             agent_channel=agent_channel,
         )
 

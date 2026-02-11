@@ -42,6 +42,7 @@ class ReactAgent(BaseAgent):
         long_term_memory: ILongTermMemory | None = None,
         knowledge: IKnowledge | None = None,
         tools: IToolProvider | None = None,
+        plan_provider: IToolProvider | None = None,
         budget: Budget | None = None,
         max_tool_rounds: int = 10,
         agent_channel: AgentChannel | None = None,
@@ -49,6 +50,7 @@ class ReactAgent(BaseAgent):
         super().__init__(name, agent_channel=agent_channel)
         self._model = model
         self._max_tool_rounds = max_tool_rounds
+        self._plan_provider = plan_provider
 
         if context is None:
             from dare_framework.context import Budget
@@ -68,6 +70,12 @@ class ReactAgent(BaseAgent):
     @property
     def context(self) -> Context:
         return self._context
+
+    @property
+    def plan_provider(self) -> IToolProvider | None:
+        """When built with with_plan_provider(plan_v2.Planner(...)), the mounted planner.
+        Use e.g. getattr(agent.plan_provider, "state", None) to get PlannerState for copy_for_execution()."""
+        return self._plan_provider
 
     async def _execute(self, task: str) -> str:
         user_message = Message(role="user", content=task)
