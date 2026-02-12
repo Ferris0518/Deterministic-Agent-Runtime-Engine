@@ -19,6 +19,7 @@ import json
 import logging
 from numbers import Real
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -73,11 +74,13 @@ if TYPE_CHECKING:
     from dare_framework.context.kernel import IContext
     from dare_framework.event.kernel import IEventLog
     from dare_framework.hook.kernel import IHook
+    from dare_framework.mcp.manager import MCPManager
     from dare_framework.observability.kernel import ITelemetryProvider
     from dare_framework.memory import ILongTermMemory, IShortTermMemory
     from dare_framework.plan.interfaces import IPlanner, IRemediator, IValidator
     from dare_framework.tool.interfaces import IExecutionControl
-    from dare_framework.tool.kernel import IToolGateway
+    from dare_framework.tool.kernel import IToolGateway, IToolManager, IToolProvider
+    from dare_framework.tool.types import ToolDefinition
     from dare_framework.transport.kernel import AgentChannel
 
 
@@ -126,6 +129,7 @@ class DareAgent(BaseAgent):
         long_term_memory: ILongTermMemory | None = None,
         # Tool components (optional)
         tool_gateway: IToolGateway | None = None,
+        mcp_manager: MCPManager | None = None,
         execution_control: IExecutionControl | None = None,
         # Plan components (optional - enables full five-layer mode)
         planner: IPlanner | None = None,
@@ -196,6 +200,7 @@ class DareAgent(BaseAgent):
 
         # Tool components
         self._tool_gateway = tool_gateway
+        self._mcp_manager = mcp_manager
         self._exec_ctl = execution_control
 
         # Plan components (optional)
@@ -262,6 +267,55 @@ class DareAgent(BaseAgent):
         Just model generation, no tools.
         """
         return self._planner is None and self._tool_gateway is None
+
+    @property
+    def supports_mcp_management(self) -> bool:
+        """Whether agent can perform runtime MCP management operations."""
+        try:
+            self._require_tool_manager()
+            self._require_mcp_manager()
+        except RuntimeError:
+            return False
+        return True
+
+    async def reload_mcp(
+        self,
+        *,
+        config: Config | None = None,
+        paths: list[str | Path] | None = None,
+    ) -> IToolProvider:
+        """Reload MCP provider set and refresh tool registry."""
+        manager = self._require_mcp_manager()
+        tool_manager = self._require_tool_manager()
+        return await manager.reload(tool_manager, config=config, paths=paths)
+
+    async def unload_mcp(self) -> bool:
+        """Unload active MCP provider from the tool registry."""
+        manager = self._require_mcp_manager()
+        tool_manager = self._require_tool_manager()
+        return await manager.unload(tool_manager)
+
+    def inspect_mcp_tools(self, *, tool_name: str | None = None) -> list[ToolDefinition]:
+        """Return MCP tool definitions currently exposed to the model."""
+        manager = self._require_mcp_manager()
+        tool_manager = self._require_tool_manager()
+        return manager.list_mcp_tool_defs(tool_manager, tool_name=tool_name)
+
+    def list_tool_defs(self) -> list[ToolDefinition]:
+        """Return all current tool definitions from the runtime registry."""
+        return self._require_tool_manager().list_tool_defs()
+
+    def _require_tool_manager(self) -> IToolManager:
+        from dare_framework.tool.kernel import IToolManager
+
+        if not isinstance(self._tool_gateway, IToolManager):
+            raise RuntimeError("Tool gateway does not support provider management.")
+        return self._tool_gateway
+
+    def _require_mcp_manager(self) -> MCPManager:
+        if self._mcp_manager is None:
+            raise RuntimeError("MCP manager is not configured on this agent.")
+        return self._mcp_manager
 
     def _log(self, message: str) -> None:
         """Print message if verbose mode is enabled."""
