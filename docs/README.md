@@ -28,7 +28,8 @@
 6. 示例实现
    ├── /examples/04-dare-coding-agent/ (五层循环示例 Agent)
    ├── /examples/06-dare-coding-agent-mcp/ (Config 驱动 MCP + 动态重载示例)
-   └── /examples/07-tool-approval-memory/ (工具审批记忆与自动放行示例)
+   ├── /examples/07-tool-approval-memory/ (工具审批记忆与自动放行示例)
+   └── /examples/08-hook-governance/ (Hook 治理：patch + block 示例)
 
 7. 开发规范
    ├── /CONTRIBUTING_AI.md (AI Agent 协作规范)
