@@ -149,8 +149,10 @@ class ReactAgent(BaseAgent):
                 name = tool_call.get("name", "")
                 tool_call_id = tool_call.get("id", "")
                 params = _normalize_tool_args(tool_call.get("arguments", {}))
-                task_preview = (params.get("task") or "")[:80] if isinstance(params.get("task"), str) else ""
-                print(f"[{self.name}] 执行工具: {name}" + (f" (task: {task_preview}...)" if task_preview else ""), flush=True)
+                # 打印工具调用信息：名称、参数
+                params_str = json.dumps(params, ensure_ascii=False)
+                params_preview = params_str[:300] + ("..." if len(params_str) > 300 else "")
+                print(f"[{self.name}] 工具调用: {name} | id={tool_call_id or '-'} | args={params_preview}", flush=True)
 
                 try:
                     result = await gateway.invoke(name, envelope=envelope, **params)
@@ -159,6 +161,9 @@ class ReactAgent(BaseAgent):
 
                 success = getattr(result, "success", False)
                 output = getattr(result, "output", {})
+                # 打印工具执行结果摘要
+                out_preview = _preview_output(output)
+                print(f"[{self.name}] 工具结果: {name} | success={success} | {out_preview}", flush=True)
                 error = getattr(result, "error", "") or ""
 
                 tool_content = json.dumps(
@@ -175,6 +180,28 @@ class ReactAgent(BaseAgent):
             output=final_message,
             output_text=final_message,
         )
+
+
+def _preview_output(output: Any, max_len: int = 120) -> str:
+    """生成 output 的简短预览，用于日志打印。"""
+    if output is None:
+        return "output=None"
+    if isinstance(output, dict):
+        # 常见字段优先展示
+        for key in ("content", "path", "matches", "paths"):
+            if key in output:
+                val = output[key]
+                if isinstance(val, str):
+                    preview = val[:max_len] + ("..." if len(val) > max_len else "")
+                elif isinstance(val, list):
+                    preview = f"list[{len(val)}]"
+                else:
+                    preview = str(val)[:max_len]
+                return f"{key}={preview}"
+        s = json.dumps(output, ensure_ascii=False)[:max_len]
+        return s + ("..." if len(json.dumps(output, ensure_ascii=False)) > max_len else "")
+    s = str(output)[:max_len]
+    return s + ("..." if len(str(output)) > max_len else "")
 
 
 def _normalize_tool_args(raw_args: Any) -> dict[str, Any]:

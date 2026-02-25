@@ -91,9 +91,28 @@ class SearchFileTool(ITool):
     def capability_kind(self) -> CapabilityKind:
         return CapabilityKind.TOOL
 
-    async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
+    # noinspection PyMethodOverriding
+    async def execute(
+        self,
+        *,
+        run_context: RunContext[Any],
+        pattern: str,
+        path: str = ".",
+        max_results: int | None = None,
+    ) -> ToolResult:
+        """Search file paths by glob pattern.
+
+        Args:
+            run_context: Runtime invocation context.
+            pattern: Glob pattern to match file paths (e.g. *.py).
+            path: Directory or file path to search under.
+            max_results: Optional maximum number of matches to return.
+        """
         try:
-            return _execute_search_file(input, context)
+            input_payload: dict[str, Any] = {"pattern": pattern, "path": path}
+            if max_results is not None:
+                input_payload["max_results"] = max_results
+            return _execute_search_file(input_payload, run_context)
         except ToolError as exc:
             return _error_result(exc)
 
