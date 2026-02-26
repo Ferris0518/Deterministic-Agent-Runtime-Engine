@@ -1,0 +1,251 @@
+from __future__ import annotations
+
+import asyncio
+import importlib
+import json
+
+import pytest
+
+from client.commands.approvals import handle_approvals_tokens
+from client.commands.info import build_doctor_report
+from client.commands.mcp import summarize_tools
+from client.parser.command import Command, CommandType, parse_command
+from client.parser.kv import parse_key_value_args
+from client.runtime.action_client import ActionClientError, _parse_action_response
+from client.runtime.task_runner import format_run_output
+from dare_framework.config import Config
+
+
+def test_parse_command_mode() -> None:
+    parsed = parse_command("/mode plan")
+    assert isinstance(parsed, Command)
+    assert parsed.type == CommandType.MODE
+    assert parsed.args == ["plan"]
+
+
+def test_parse_command_plain_text() -> None:
+    parsed = parse_command("build one file")
+    assert isinstance(parsed, tuple)
+    assert parsed[0] is None
+    assert parsed[1] == "build one file"
+
+
+def test_parse_key_value_args() -> None:
+    positional, options = parse_key_value_args(["req-1", "scope=workspace", "matcher=exact_params"])
+    assert positional == ["req-1"]
+    assert options == {"scope": "workspace", "matcher": "exact_params"}
+
+
+def test_format_run_output_variants() -> None:
+    assert format_run_output("  ok  ") == "ok"
+    assert format_run_output({"content": " done "}) == "done"
+    assert format_run_output({"x": 1}) == "{'x': 1}"
+    assert format_run_output(None) is None
+
+
+def test_parse_action_response_error() -> None:
+    with pytest.raises(ActionClientError) as excinfo:
+        _parse_action_response(
+            {
+                "type": "error",
+                "kind": "action",
+                "target": "approvals:list",
+                "code": "ACTION_HANDLER_FAILED",
+                "reason": "failed",
+            },
+            expected_kind="action",
+        )
+    assert excinfo.value.code == "ACTION_HANDLER_FAILED"
+
+
+def test_summarize_tools_split_mcp_and_local() -> None:
+    class _Agent:
+        @staticmethod
+        def list_tool_defs():
+            return [
+                {"function": {"name": "read_file"}},
+                {"function": {"name": "local_math:add"}},
+            ]
+
+    result = summarize_tools(_Agent())
+    assert result["local_tools"] == ["read_file"]
+    assert result["mcp_tools"] == ["local_math:add"]
+
+
+@pytest.mark.asyncio
+async def test_handle_approvals_tokens_grant() -> None:
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    class _ActionClient:
+        async def invoke_action(self, action, **params):  # noqa: ANN001
+            action_id = action.value if hasattr(action, "value") else str(action)
+            calls.append((action_id, {k: str(v) for k, v in params.items()}))
+            return {"ok": True}
+
+    payload = await handle_approvals_tokens(
+        ["grant", "req-1", "scope=workspace", "matcher=exact_params"],
+        action_client=_ActionClient(),  # type: ignore[arg-type]
+    )
+    assert payload == {"ok": True}
+    assert calls == [
+        (
+            "approvals:grant",
+            {
+                "request_id": "req-1",
+                "scope": "workspace",
+                "matcher": "exact_params",
+            },
+        )
+    ]
+
+
+def test_build_doctor_report_warns_on_missing_api_key() -> None:
+    config = Config.from_dict(
+        {
+            "workspace_dir": ".",
+            "user_dir": ".",
+            "llm": {
+                "adapter": "openrouter",
+                "model": "z-ai/glm-4.7",
+            },
+            "mcp_paths": ["./missing-mcp-path"],
+        }
+    )
+    payload = build_doctor_report(config=config, model_probe_error="api key missing")
+    assert payload["llm"]["adapter"] == "openrouter"
+    assert payload["ok"] is False
+    assert any("missing API key" in item for item in payload["warnings"])
+    assert any("model adapter probe failed" in item for item in payload["warnings"])
+
+
+def test_build_doctor_report_accepts_openai_with_key() -> None:
+    config = Config.from_dict(
+        {
+            "workspace_dir": ".",
+            "user_dir": ".",
+            "llm": {
+                "adapter": "openai",
+                "model": "gpt-4o-mini",
+                "api_key": "dummy",
+            },
+            "mcp_paths": [],
+        }
+    )
+    payload = build_doctor_report(config=config)
+    assert payload["llm"]["api_key_present"] is True
+    assert "workspace_dir" in payload
+
+
+@pytest.mark.asyncio
+async def test_main_doctor_does_not_bootstrap_runtime(monkeypatch, tmp_path) -> None:
+    client_main = importlib.import_module("client.main")
+    workspace = tmp_path / "workspace"
+    user_dir = tmp_path / "user"
+    workspace.mkdir(parents=True, exist_ok=True)
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    config = Config.from_dict(
+        {
+            "workspace_dir": str(workspace),
+            "user_dir": str(user_dir),
+            "llm": {
+                "adapter": "openrouter",
+                "model": "z-ai/glm-4.7",
+                "api_key": "dummy",
+            },
+        }
+    )
+
+    def _fake_load_effective_config(_options):  # noqa: ANN001
+        return object(), config
+
+    async def _fail_bootstrap(_options):  # noqa: ANN001
+        raise AssertionError("bootstrap_runtime should not be called for doctor")
+
+    monkeypatch.setattr(client_main, "load_effective_config", _fake_load_effective_config)
+    monkeypatch.setattr(client_main, "bootstrap_runtime", _fail_bootstrap)
+
+    rc = await client_main.main(
+        [
+            "--workspace",
+            str(workspace),
+            "--user-dir",
+            str(user_dir),
+            "doctor",
+        ]
+    )
+    assert rc == 0
+
+
+@pytest.mark.asyncio
+async def test_run_chat_script_returns_nonzero_on_failure(monkeypatch) -> None:
+    client_main = importlib.import_module("client.main")
+
+    class _FakeResult:
+        success = False
+        output = None
+        errors = ["boom"]
+
+    async def _fake_run_task(*, agent, task_text, conversation_id=None, transport=None):  # noqa: ANN001
+        _ = (agent, task_text, conversation_id, transport)
+        return _FakeResult()
+
+    monkeypatch.setattr(client_main, "run_task", _fake_run_task)
+
+    class _FakeClientChannel:
+        async def poll(self, timeout=None):  # noqa: ANN001
+            await asyncio.sleep(0)
+            return None
+
+    class _FakeRuntime:
+        agent = object()
+        channel = object()
+        model = object()
+        config = Config.from_dict({"workspace_dir": ".", "user_dir": "."})
+        client_channel = _FakeClientChannel()
+
+    rc = await client_main._run_chat(
+        runtime=_FakeRuntime(),
+        action_client=object(),
+        output=client_main.OutputFacade("json"),
+        mode="execute",
+        script_lines=["do one failing task"],
+    )
+    assert rc == 1
+
+
+def test_output_facade_json_schema(capsys) -> None:
+    client_main = importlib.import_module("client.main")
+    output = client_main.OutputFacade("json")
+    output.info("hello")
+    output.emit_data({"ok": True})
+    output.emit_event("transport", {"x": 1})
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    first = json.loads(lines[0])
+    second = json.loads(lines[1])
+    third = json.loads(lines[2])
+
+    assert first == {"type": "log", "level": "info", "message": "hello"}
+    assert second == {"type": "result", "data": {"ok": True}}
+    assert third == {"type": "event", "event": "transport", "data": {"x": 1}}
+
+
+def test_sync_main_wraps_async_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    client_main = importlib.import_module("client.main")
+
+    async def _fake_main(argv=None):  # noqa: ANN001
+        _ = argv
+        return 7
+
+    monkeypatch.setattr(client_main, "main", _fake_main)
+    rc = client_main.sync_main(["doctor"])
+    assert rc == 7
+
+
+def test_cli_raises_system_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    client_main = importlib.import_module("client.main")
+    monkeypatch.setattr(client_main, "sync_main", lambda argv=None: 5)
+    with pytest.raises(SystemExit) as excinfo:
+        client_main.cli()
+    assert excinfo.value.code == 5
