@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -542,6 +543,66 @@ class TestNoPlannerToolExecution:
 
         result = await run_task
         assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_no_planner_denied_approval_reports_not_allow_without_resolved_event(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run a shell command.",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Running command...",
+                    tool_calls=[{"name": "run_command", "arguments": {"command": "git status --short"}}],
+                ),
+                ModelResponse(content="Denied.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-approval-denied",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+        )
+        transport = RecordingTransportChannel()
+
+        run_task = asyncio.create_task(agent("Run git status", transport=transport))
+        request_id: str | None = None
+        for _ in range(100):
+            pending = approval_manager.list_pending()
+            if pending:
+                request_id = pending[0].request_id
+                break
+            await asyncio.sleep(0.01)
+        assert request_id is not None
+
+        await approval_manager.deny(
+            request_id,
+            scope=ApprovalScope.ONCE,
+            matcher=ApprovalMatcherKind.EXACT_PARAMS,
+        )
+
+        await run_task
+
+        tool_messages = [msg for msg in agent._context.stm_get() if msg.role == "tool"]
+        assert tool_messages
+        tool_payload = json.loads(tool_messages[-1].content)
+        assert tool_payload.get("status") == "not_allow"
+        assert tool_payload.get("success") is False
+
+        event_types = [getattr(envelope, "event_type", None) for envelope in transport.sent]
+        assert "approval.pending" in event_types
+        assert "approval.resolved" not in event_types
 
 
 # =============================================================================

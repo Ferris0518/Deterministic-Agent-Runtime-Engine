@@ -92,6 +92,26 @@ async def test_dare_agent_does_not_emit_hook_messages_without_transport_hook() -
 
 
 @pytest.mark.asyncio
+async def test_send_transport_payload_requires_explicit_transport_argument() -> None:
+    transport = _RecordingChannel()
+    agent = DareAgent(
+        name="transport-explicitness",
+        model=_Model(),
+        context=Context(config=Config()),
+        tool_gateway=_ToolGateway(),
+    )
+
+    await agent._send_transport_payload(  # type: ignore[attr-defined]
+        {"ok": True},
+        transport=transport,
+        event_type=TransportEventType.APPROVAL_PENDING.value,
+    )
+
+    assert len(transport.sent) == 1
+    assert transport.sent[0].event_type == TransportEventType.APPROVAL_PENDING.value
+
+
+@pytest.mark.asyncio
 async def test_dare_builder_registers_agent_event_transport_hook_when_channel_present() -> None:
     channel = _RecordingChannel()
     builder = BaseAgent.dare_agent_builder("hook-builder").with_model(_Model())
