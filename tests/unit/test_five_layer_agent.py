@@ -732,6 +732,108 @@ class TestNoPlannerToolExecution:
         _capability_id, params, _envelope = tool_gateway.invoke_calls[-1]
         assert params.get("session_id") == "tool-arg-session"
 
+    @pytest.mark.asyncio
+    async def test_no_planner_tool_params_context_does_not_collide_with_runtime_context(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "context": {"type": "string"},
+                },
+            },
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Run command with tool-level context argument.",
+                    tool_calls=[
+                        {
+                            "name": "run_command",
+                            "arguments": {
+                                "command": "git status --short",
+                                "context": "tool-arg-context",
+                            },
+                        }
+                    ],
+                ),
+                ModelResponse(content="Done.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-tool-param-context",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+        )
+
+        run_task = asyncio.create_task(agent("Run command with tool arg context"))
+        request_id: str | None = None
+        for _ in range(100):
+            pending = approval_manager.list_pending()
+            if pending:
+                request_id = pending[0].request_id
+                break
+            await asyncio.sleep(0.01)
+        assert request_id is not None
+
+        await approval_manager.grant(
+            request_id,
+            scope=ApprovalScope.ONCE,
+            matcher=ApprovalMatcherKind.EXACT_PARAMS,
+        )
+        result = await run_task
+        assert result.success is True
+
+        assert tool_gateway.invoke_calls
+        _capability_id, params, _envelope = tool_gateway.invoke_calls[-1]
+        assert params.get("context") == "tool-arg-context"
+
+    @pytest.mark.asyncio
+    async def test_no_planner_missing_approval_manager_reports_fail_status(self) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Try running command without approval manager.",
+                    tool_calls=[{"name": "run_command", "arguments": {"command": "git status --short"}}],
+                ),
+                ModelResponse(content="Done.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-missing-approval-manager",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=None,
+        )
+
+        await agent("Run command")
+        tool_messages = [msg for msg in agent._context.stm_get() if msg.role == "tool"]
+        assert tool_messages
+        tool_payload = json.loads(tool_messages[-1].content)
+        assert tool_payload.get("success") is False
+        assert tool_payload.get("status") == "fail"
+        assert "no approval manager" in str(tool_payload.get("error", ""))
+
 
 # =============================================================================
 # Tests: Full Five-Layer Mode

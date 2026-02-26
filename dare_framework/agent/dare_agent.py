@@ -990,12 +990,12 @@ class DareAgent(BaseAgent):
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
                     event_logger=self._log_event,
+                    runtime_context=self._context,
                 )
                 result = await self._governed_tool_gateway.invoke(
                     request.capability_id,
                     approval_ctx,
                     envelope=request.envelope,
-                    context=self._context,
                     **request.params,
                 )
 

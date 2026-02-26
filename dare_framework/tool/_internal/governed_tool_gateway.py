@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
 from dare_framework.tool._internal.control.approval_manager import (
     ApprovalDecision,
@@ -42,6 +42,15 @@ class ApprovalInvokeContext:
     tool_name: str | None = None
     tool_call_id: str | None = None
     event_logger: ApprovalEventLogger | None = None
+    runtime_context: Context | None = None
+
+
+@dataclass(frozen=True)
+class ApprovalResolution:
+    """Approval decision normalized for invoke-layer status mapping."""
+
+    verdict: Literal["allow", "deny", "error"]
+    error: str | None = None
 
 
 class GovernedToolGateway(IToolGateway):
@@ -57,6 +66,7 @@ class GovernedToolGateway(IToolGateway):
         self._delegate = delegate
         self._approval_manager = approval_manager
         self._logger = logger or logging.getLogger("dare.tool.governed_gateway")
+        self._runtime_context_param = "__dare_runtime_context__"
 
     def list_capabilities(self) -> list[CapabilityDescriptor]:
         return self._delegate.list_capabilities()
@@ -75,10 +85,21 @@ class GovernedToolGateway(IToolGateway):
         tool_name = approval.tool_name if approval is not None else None
         tool_call_id = approval.tool_call_id if approval is not None else None
         approval_event_logger = approval.event_logger if approval is not None else None
+        runtime_context = approval.runtime_context if approval is not None else None
+        if runtime_context is None:
+            runtime_context = context
+
+        delegate_params = params
+        if approval is not None and approval.runtime_context is not None and context is not None:
+            # When callers pass tool argument key `context`, Python binds it to this
+            # named parameter. Re-inject it into tool params so schema-defined
+            # arguments are preserved while runtime context stays out-of-band.
+            delegate_params = dict(params)
+            delegate_params.setdefault("context", context)
 
         requires_approval = self._requires_approval(capability_id)
         if requires_approval:
-            decision_error = await self._resolve_approval(
+            approval_resolution = await self._resolve_approval(
                 capability_id=capability_id,
                 params=params,
                 session_id=session_id,
@@ -87,20 +108,22 @@ class GovernedToolGateway(IToolGateway):
                 tool_call_id=tool_call_id or "unknown",
                 event_logger=approval_event_logger,
             )
-            if decision_error is not None:
-                # Return a deterministic denied result so orchestrators can treat
-                # it as a normal tool outcome instead of a special side channel.
+            if approval_resolution.verdict != "allow":
+                status = "not_allow" if approval_resolution.verdict == "deny" else "fail"
+                error = approval_resolution.error or "approval check failed"
                 return ToolResult(
                     success=False,
-                    output={"status": "not_allow"},
-                    error=decision_error,
+                    output={"status": status},
+                    error=error,
                 )
 
         result = await self._delegate.invoke(
             capability_id,
             envelope=envelope,
-            context=context,
-            **params,
+            **self._build_delegate_invoke_kwargs(
+                runtime_context=runtime_context,
+                params=delegate_params,
+            ),
         )
         return result
 
@@ -127,9 +150,12 @@ class GovernedToolGateway(IToolGateway):
         tool_name: str,
         tool_call_id: str,
         event_logger: ApprovalEventLogger | None,
-    ) -> str | None:
+    ) -> ApprovalResolution:
         if self._approval_manager is None:
-            return "tool requires approval but no approval manager is configured"
+            return ApprovalResolution(
+                verdict="error",
+                error="tool requires approval but no approval manager is configured",
+            )
 
         evaluation = await self._approval_manager.evaluate(
             capability_id=capability_id,
@@ -150,7 +176,7 @@ class GovernedToolGateway(IToolGateway):
                     "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
                 },
             )
-            return None
+            return ApprovalResolution(verdict="allow")
         if evaluation.status == ApprovalEvaluationStatus.DENY:
             await self._emit_approval_event(
                 event_logger,
@@ -164,9 +190,15 @@ class GovernedToolGateway(IToolGateway):
                     "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
                 },
             )
-            return "tool invocation denied by approval rule"
+            return ApprovalResolution(
+                verdict="deny",
+                error="tool invocation denied by approval rule",
+            )
         if evaluation.request is None:
-            return "tool invocation requires approval"
+            return ApprovalResolution(
+                verdict="error",
+                error="tool invocation requires approval",
+            )
 
         request_id = evaluation.request.request_id
         await self._emit_approval_pending_message(
@@ -207,8 +239,11 @@ class GovernedToolGateway(IToolGateway):
             },
         )
         if decision == ApprovalDecision.ALLOW:
-            return None
-        return "tool invocation denied by human approval"
+            return ApprovalResolution(verdict="allow")
+        return ApprovalResolution(
+            verdict="deny",
+            error="tool invocation denied by human approval",
+        )
 
     async def _emit_approval_pending_message(
         self,
@@ -262,5 +297,27 @@ class GovernedToolGateway(IToolGateway):
         except Exception:
             self._logger.exception("approval event emission failed: %s", event_type)
 
+    def _build_delegate_invoke_kwargs(
+        self,
+        *,
+        runtime_context: Context | None,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Assemble delegate invoke kwargs without colliding with tool arg keys."""
+        kwargs: dict[str, Any] = {
+            "params": dict(params),
+        }
+        delegate_params: dict[str, Any] = kwargs["params"]
 
-__all__ = ["ApprovalInvokeContext", "GovernedToolGateway"]
+        if runtime_context is None:
+            return delegate_params
+
+        if "context" in delegate_params:
+            delegate_params[self._runtime_context_param] = runtime_context
+            return delegate_params
+
+        delegate_params["context"] = runtime_context
+        return delegate_params
+
+
+__all__ = ["ApprovalInvokeContext", "ApprovalResolution", "GovernedToolGateway"]
