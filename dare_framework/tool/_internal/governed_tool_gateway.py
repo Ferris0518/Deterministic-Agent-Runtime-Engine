@@ -7,7 +7,7 @@ agent orchestration can focus on the loop itself.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from dare_framework.tool._internal.control.approval_manager import (
     ApprovalDecision,
@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from dare_framework.context import Context
     from dare_framework.plan.types import Envelope
     from dare_framework.transport.kernel import AgentChannel
+
+ApprovalEventLogger = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 class GovernedToolGateway(IToolGateway):
@@ -57,6 +59,7 @@ class GovernedToolGateway(IToolGateway):
         transport: AgentChannel | None = None,
         tool_name: str | None = None,
         tool_call_id: str | None = None,
+        approval_event_logger: ApprovalEventLogger | None = None,
         **params: Any,
     ) -> ToolResult:
         requires_approval = self._requires_approval(capability_id)
@@ -68,6 +71,7 @@ class GovernedToolGateway(IToolGateway):
                 transport=transport,
                 tool_name=tool_name or capability_id,
                 tool_call_id=tool_call_id or "unknown",
+                event_logger=approval_event_logger,
             )
             if decision_error is not None:
                 # Return a deterministic denied result so orchestrators can treat
@@ -108,6 +112,7 @@ class GovernedToolGateway(IToolGateway):
         transport: AgentChannel | None,
         tool_name: str,
         tool_call_id: str,
+        event_logger: ApprovalEventLogger | None,
     ) -> str | None:
         if self._approval_manager is None:
             return "tool requires approval but no approval manager is configured"
@@ -119,12 +124,37 @@ class GovernedToolGateway(IToolGateway):
             reason=f"Tool {capability_id} requires approval",
         )
         if evaluation.status == ApprovalEvaluationStatus.ALLOW:
+            await self._emit_approval_event(
+                event_logger,
+                "tool.approval",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": capability_id,
+                    "status": "allow",
+                    "source": "rule",
+                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
+                },
+            )
             return None
         if evaluation.status == ApprovalEvaluationStatus.DENY:
+            await self._emit_approval_event(
+                event_logger,
+                "tool.approval",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": capability_id,
+                    "status": "deny",
+                    "source": "rule",
+                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
+                },
+            )
             return "tool invocation denied by approval rule"
         if evaluation.request is None:
             return "tool invocation requires approval"
 
+        request_id = evaluation.request.request_id
         await self._emit_approval_pending_message(
             request=evaluation.request.to_dict(),
             transport=transport,
@@ -132,7 +162,36 @@ class GovernedToolGateway(IToolGateway):
             tool_name=tool_name,
             tool_call_id=tool_call_id,
         )
-        decision = await self._approval_manager.wait_for_resolution(evaluation.request.request_id)
+        await self._emit_approval_event(
+            event_logger,
+            "exec.waiting_human",
+            {
+                "checkpoint_id": request_id,
+                "reason": evaluation.request.reason,
+                "mode": "approval_memory_wait",
+            },
+        )
+        decision = await self._approval_manager.wait_for_resolution(request_id)
+        await self._emit_approval_event(
+            event_logger,
+            "exec.resume",
+            {
+                "checkpoint_id": request_id,
+                "decision": decision.value,
+            },
+        )
+        await self._emit_approval_event(
+            event_logger,
+            "tool.approval",
+            {
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
+                "capability_id": capability_id,
+                "status": decision.value,
+                "source": "pending_request",
+                "request_id": request_id,
+            },
+        )
         if decision == ApprovalDecision.ALLOW:
             return None
         return "tool invocation denied by human approval"
@@ -175,6 +234,19 @@ class GovernedToolGateway(IToolGateway):
             await transport.send(envelope)
         except Exception:
             self._logger.exception("approval pending transport send failed")
+
+    async def _emit_approval_event(
+        self,
+        event_logger: ApprovalEventLogger | None,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if event_logger is None:
+            return
+        try:
+            await event_logger(event_type, payload)
+        except Exception:
+            self._logger.exception("approval event emission failed: %s", event_type)
 
 
 __all__ = ["GovernedToolGateway"]

@@ -989,6 +989,7 @@ class DareAgent(BaseAgent):
                     transport=transport,
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
+                    approval_event_logger=self._log_event,
                     **request.params,
                 )
 

@@ -330,7 +330,11 @@ class ToolApprovalManager:
                 self._pending_by_id[request.request_id] = existing
                 self._pending_state_changed.notify_all()
             else:
-                self._track_pending_session_locked(existing, session_id)
+                # A deduplicated request can gain new interested sessions later.
+                # Wake session-filtered poll waiters when that subscriber set expands.
+                added_session = self._track_pending_session_locked(existing, session_id)
+                if added_session:
+                    self._pending_state_changed.notify_all()
 
             return ApprovalEvaluation(
                 status=ApprovalEvaluationStatus.PENDING,
@@ -545,9 +549,13 @@ class ToolApprovalManager:
         return oldest.request
 
     @staticmethod
-    def _track_pending_session_locked(pending: _PendingApproval, session_id: str | None) -> None:
+    def _track_pending_session_locked(pending: _PendingApproval, session_id: str | None) -> bool:
         if isinstance(session_id, str) and session_id:
+            if session_id in pending.session_ids:
+                return False
             pending.session_ids.add(session_id)
+            return True
+        return False
 
 
 def _rule_matches(

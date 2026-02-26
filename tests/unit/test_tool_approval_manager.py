@@ -275,6 +275,33 @@ async def test_poll_pending_waits_until_request_arrives(manager) -> None:
 
 
 @pytest.mark.asyncio
+async def test_poll_pending_session_waiter_wakes_when_dedup_adds_matching_session(manager) -> None:
+    first = await manager.evaluate(
+        capability_id="run_command",
+        params={"command": "echo dedup-shared"},
+        session_id="session-a",
+        reason="Tool run_command requires approval",
+    )
+    assert first.request is not None
+
+    waiter = asyncio.create_task(manager.poll_pending(session_id="session-b", timeout_seconds=1.0))
+    await asyncio.sleep(0.05)
+
+    second = await manager.evaluate(
+        capability_id="run_command",
+        params={"command": "echo dedup-shared"},
+        session_id="session-b",
+        reason="Tool run_command requires approval",
+    )
+    assert second.request is not None
+    assert second.request.request_id == first.request.request_id
+
+    polled = await asyncio.wait_for(waiter, timeout=0.2)
+    assert polled is not None
+    assert polled.request_id == first.request.request_id
+
+
+@pytest.mark.asyncio
 async def test_poll_pending_timeout_returns_none(manager) -> None:
     polled = await manager.poll_pending(timeout_seconds=0.05)
     assert polled is None

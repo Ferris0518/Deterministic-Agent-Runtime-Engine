@@ -610,6 +610,61 @@ class TestNoPlannerToolExecution:
         assert "approval.pending" in event_types
         assert "approval.resolved" not in event_types
 
+    @pytest.mark.asyncio
+    async def test_no_planner_emits_approval_lifecycle_events_for_event_log_auto_resolution(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+
+        class AutoApproveEventLog(MockEventLog):
+            async def append(self, event_type: str, payload: dict[str, Any]) -> None:
+                await super().append(event_type, payload)
+                if event_type != "exec.waiting_human":
+                    return
+                checkpoint_id = payload.get("checkpoint_id")
+                if isinstance(checkpoint_id, str) and checkpoint_id:
+                    await approval_manager.grant(
+                        checkpoint_id,
+                        scope=ApprovalScope.ONCE,
+                        matcher=ApprovalMatcherKind.EXACT_PARAMS,
+                    )
+
+        event_log = AutoApproveEventLog()
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Running command...",
+                    tool_calls=[{"name": "run_command", "arguments": {"command": "git status --short"}}],
+                ),
+                ModelResponse(content="Approved and finished.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-approval-lifecycle-events",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+            event_log=event_log,
+        )
+
+        result = await asyncio.wait_for(agent("Run git status"), timeout=1.0)
+        assert result.success is True
+
+        event_types = [event_type for event_type, _ in event_log.events]
+        assert "exec.waiting_human" in event_types
+        assert "exec.resume" in event_types
+        assert "tool.approval" in event_types
+
 
 # =============================================================================
 # Tests: Full Five-Layer Mode
