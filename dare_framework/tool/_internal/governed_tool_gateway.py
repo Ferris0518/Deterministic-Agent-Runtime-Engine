@@ -15,6 +15,10 @@ from dare_framework.tool._internal.control.approval_manager import (
     ApprovalEvaluationStatus,
     ToolApprovalManager,
 )
+from dare_framework.tool._internal.runtime_context_override import (
+    RUNTIME_CONTEXT_PARAM,
+    RuntimeContextOverride,
+)
 from dare_framework.tool.kernel import IToolGateway
 from dare_framework.tool.types import CapabilityDescriptor, ToolResult
 from dare_framework.transport.interaction.payloads import build_approval_pending_payload
@@ -66,7 +70,7 @@ class GovernedToolGateway(IToolGateway):
         self._delegate = delegate
         self._approval_manager = approval_manager
         self._logger = logger or logging.getLogger("dare.tool.governed_gateway")
-        self._runtime_context_param = "__dare_runtime_context__"
+        self._runtime_context_param = RUNTIME_CONTEXT_PARAM
 
     def list_capabilities(self) -> list[CapabilityDescriptor]:
         return self._delegate.list_capabilities()
@@ -101,7 +105,7 @@ class GovernedToolGateway(IToolGateway):
         if requires_approval:
             approval_resolution = await self._resolve_approval(
                 capability_id=capability_id,
-                params=params,
+                params=dict(delegate_params),
                 session_id=session_id,
                 transport=transport,
                 tool_name=tool_name or capability_id,
@@ -313,7 +317,7 @@ class GovernedToolGateway(IToolGateway):
             return delegate_params
 
         if "context" in delegate_params:
-            delegate_params[self._runtime_context_param] = runtime_context
+            delegate_params[self._runtime_context_param] = RuntimeContextOverride(runtime_context)
             return delegate_params
 
         delegate_params["context"] = runtime_context

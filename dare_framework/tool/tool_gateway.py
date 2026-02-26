@@ -2,11 +2,15 @@ from typing import Any
 
 from dare_framework.context import Context
 from dare_framework.plan import Envelope
+from dare_framework.tool._internal.runtime_context_override import (
+    RUNTIME_CONTEXT_PARAM,
+    RuntimeContextOverride,
+)
 from dare_framework.tool import IToolGateway, IToolManager, ToolResult, CapabilityDescriptor, RunContext
 
 
 class ToolGateway(IToolGateway):
-    _RUNTIME_CONTEXT_PARAM = "__dare_runtime_context__"
+    _RUNTIME_CONTEXT_PARAM = RUNTIME_CONTEXT_PARAM
 
     def __init__(self, tool_manager: IToolManager):
         self._tool_manager = tool_manager
@@ -28,8 +32,10 @@ class ToolGateway(IToolGateway):
         tool_params = dict(params)
         runtime_context = context
         runtime_context_override = tool_params.pop(self._RUNTIME_CONTEXT_PARAM, None)
-        if runtime_context_override is not None:
-            runtime_context = runtime_context_override
+        # Ignore caller-provided values on this reserved key unless they carry
+        # the internal wrapper type injected by GovernedToolGateway.
+        if isinstance(runtime_context_override, RuntimeContextOverride):
+            runtime_context = runtime_context_override.context
             if context is not None:
                 # `context` was consumed by this gateway's reserved kwarg slot;
                 # recover it as an explicit tool argument when collision occurs.
