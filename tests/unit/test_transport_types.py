@@ -26,6 +26,16 @@ def test_transport_envelope_normalizes_legacy_event_type() -> None:
     assert envelope.event_type == TransportEventType.APPROVAL_PENDING.value
 
 
+def test_transport_envelope_accepts_select_kind() -> None:
+    envelope = TransportEnvelope(
+        id="evt-select",
+        kind="select",
+        event_type=TransportEventType.APPROVAL_PENDING.value,
+        payload={"kind": "approval"},
+    )
+    assert envelope.kind == EnvelopeKind.SELECT
+
+
 def test_transport_envelope_rejects_empty_event_type() -> None:
     with pytest.raises(ValueError, match="event_type must not be empty"):
         TransportEnvelope(

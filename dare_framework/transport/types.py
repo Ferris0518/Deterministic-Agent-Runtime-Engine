@@ -12,6 +12,7 @@ class EnvelopeKind(StrEnum):
     """Strong envelope categories for transport dispatch."""
 
     MESSAGE = "message"
+    SELECT = "select"
     ACTION = "action"
     CONTROL = "control"
 

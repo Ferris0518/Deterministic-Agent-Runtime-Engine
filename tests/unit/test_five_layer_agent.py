@@ -22,6 +22,7 @@ from dare_framework.tool._internal.control.approval_manager import (
     ToolApprovalManager,
 )
 from dare_framework.tool.types import CapabilityDescriptor, CapabilityKind, CapabilityType
+from dare_framework.transport.types import EnvelopeKind
 
 
 # =============================================================================
@@ -534,6 +535,11 @@ class TestNoPlannerToolExecution:
                 break
             await asyncio.sleep(0.01)
         assert request_id is not None
+        assert any(
+            getattr(envelope, "event_type", None) == "approval.pending"
+            and getattr(envelope, "kind", None) == EnvelopeKind.SELECT
+            for envelope in transport.sent
+        )
 
         await approval_manager.grant(
             request_id,

@@ -91,9 +91,7 @@ async def test_dare_agent_does_not_emit_hook_messages_without_transport_hook() -
     assert hook_payloads == []
 
 
-@pytest.mark.asyncio
-async def test_send_transport_payload_requires_explicit_transport_argument() -> None:
-    transport = _RecordingChannel()
+def test_dare_agent_does_not_expose_transport_payload_helper() -> None:
     agent = DareAgent(
         name="transport-explicitness",
         model=_Model(),
@@ -101,14 +99,9 @@ async def test_send_transport_payload_requires_explicit_transport_argument() -> 
         tool_gateway=_ToolGateway(),
     )
 
-    await agent._send_transport_payload(  # type: ignore[attr-defined]
-        {"ok": True},
-        transport=transport,
-        event_type=TransportEventType.APPROVAL_PENDING.value,
-    )
-
-    assert len(transport.sent) == 1
-    assert transport.sent[0].event_type == TransportEventType.APPROVAL_PENDING.value
+    # Transport payload emission for approval flow now lives at tool-gateway
+    # boundary; agent should not expose the legacy helper.
+    assert not hasattr(agent, "_send_transport_payload")
 
 
 @pytest.mark.asyncio

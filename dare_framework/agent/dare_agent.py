@@ -47,15 +47,8 @@ from dare_framework.plan.types import (
     ValidatedPlan,
     VerifyResult,
 )
-from dare_framework.tool._internal.control.approval_manager import (
-    ApprovalDecision,
-    ApprovalEvaluationStatus,
-)
+from dare_framework.tool._internal.governed_tool_gateway import GovernedToolGateway
 from dare_framework.tool.types import CapabilityKind
-from dare_framework.transport.interaction.payloads import (
-    build_approval_pending_payload,
-)
-from dare_framework.transport.types import TransportEnvelope, TransportEventType, new_envelope_id
 
 
 @dataclass
@@ -168,6 +161,11 @@ class DareAgent(BaseAgent):
 
         # Tool components
         self._tool_gateway = tool_gateway
+        self._governed_tool_gateway = GovernedToolGateway(
+            tool_gateway,
+            approval_manager=approval_manager,
+            logger=self._logger,
+        )
         self._mcp_manager = mcp_manager
         self._exec_ctl = execution_control
         self._approval_manager = approval_manager
@@ -937,48 +935,6 @@ class DareAgent(BaseAgent):
             self._context.budget_check()
             self._context.budget_use("tool_calls", 1)
 
-            if requires_approval:
-                allowed, approval_error = await self._resolve_tool_approval(
-                    capability_id=request.capability_id,
-                    params=request.params,
-                    session_id=session_id,
-                    transport=transport,
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                )
-                if not allowed:
-                    await self._log_event(
-                        "tool.error",
-                        {
-                            "tool_name": tool_name,
-                            "tool_call_id": tool_call_id,
-                            "capability_id": request.capability_id,
-                            "error": approval_error,
-                            "attempt": attempts,
-                        },
-                    )
-                    await self._emit_hook(
-                        HookPhase.AFTER_TOOL,
-                        {
-                            "tool_call_id": tool_call_id,
-                            "tool_name": tool_name,
-                            "capability_id": request.capability_id,
-                            "attempt": attempts,
-                            "success": False,
-                            "error": approval_error,
-                            "approved": False,
-                            "evidence_collected": False,
-                            "duration_ms": 0.0,
-                            "budget_stats": self._budget_stats(),
-                        },
-                    )
-                    return {
-                        "success": False,
-                        "status": "not_allow",
-                        "error": approval_error,
-                        "output": {},
-                    }
-
             tool_start = time.perf_counter()
             before_tool_dispatch = await self._emit_hook(
                 HookPhase.BEFORE_TOOL,
@@ -1025,9 +981,14 @@ class DareAgent(BaseAgent):
             })
 
             try:
-                result = await self._tool_gateway.invoke(
+                result = await self._governed_tool_gateway.invoke(
                     request.capability_id,
                     envelope=request.envelope,
+                    context=self._context,
+                    session_id=session_id,
+                    transport=transport,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
                     **request.params,
                 )
 
@@ -1043,6 +1004,15 @@ class DareAgent(BaseAgent):
                 if hasattr(result, "success") and not result.success:
                     tool_success = False
                 evidence_collected = bool(getattr(result, "evidence", []))
+                denied_status = "fail"
+                denied_output = getattr(result, "output", {})
+                approved = True
+                if not tool_success:
+                    if isinstance(denied_output, dict):
+                        candidate_status = denied_output.get("status")
+                        if isinstance(candidate_status, str) and candidate_status:
+                            denied_status = candidate_status
+                    approved = denied_status != "not_allow"
                 await self._emit_hook(
                     HookPhase.AFTER_TOOL,
                     {
@@ -1052,7 +1022,7 @@ class DareAgent(BaseAgent):
                         "attempt": attempts,
                         "success": tool_success,
                         "error": result.error if hasattr(result, "error") else None,
-                        "approved": True,
+                        "approved": approved,
                         "evidence_collected": evidence_collected,
                         "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
                         "budget_stats": self._budget_stats(),
@@ -1062,9 +1032,9 @@ class DareAgent(BaseAgent):
                 if not tool_success:
                     return {
                         "success": False,
-                        "status": "fail",
+                        "status": denied_status,
                         "error": result.error or "tool failed",
-                        "output": getattr(result, "output", {}),
+                        "output": denied_output,
                         "result": result,
                     }
 
@@ -1129,95 +1099,6 @@ class DareAgent(BaseAgent):
                     "error": str(e),
                     "output": {},
                 }
-
-    async def _resolve_tool_approval(
-        self,
-        *,
-        capability_id: str,
-        params: dict[str, Any],
-        session_id: str | None,
-        transport: AgentChannel | None = None,
-        tool_name: str,
-        tool_call_id: str,
-    ) -> tuple[bool, str | None]:
-        if self._approval_manager is None:
-            return False, "tool requires approval but no approval manager is configured"
-
-        evaluation = await self._approval_manager.evaluate(
-            capability_id=capability_id,
-            params=params,
-            session_id=session_id,
-            reason=f"Tool {capability_id} requires approval",
-        )
-        if evaluation.status == ApprovalEvaluationStatus.ALLOW:
-            await self._log_event(
-                "tool.approval",
-                {
-                    "tool_name": tool_name,
-                    "tool_call_id": tool_call_id,
-                    "capability_id": capability_id,
-                    "status": "allow",
-                    "source": "rule",
-                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
-                },
-            )
-            return True, None
-
-        if evaluation.status == ApprovalEvaluationStatus.DENY:
-            await self._log_event(
-                "tool.approval",
-                {
-                    "tool_name": tool_name,
-                    "tool_call_id": tool_call_id,
-                    "capability_id": capability_id,
-                    "status": "deny",
-                    "source": "rule",
-                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
-                },
-            )
-            return False, "tool invocation denied by approval rule"
-
-        if evaluation.request is None:
-            return False, "tool invocation requires approval"
-
-        request_id = evaluation.request.request_id
-        await self._emit_approval_pending_message(
-            request=evaluation.request.to_dict(),
-            transport=transport,
-            capability_id=capability_id,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-        await self._log_event(
-            "exec.waiting_human",
-            {
-                "checkpoint_id": request_id,
-                "reason": evaluation.request.reason,
-                "mode": "approval_memory_wait",
-            },
-        )
-        decision = await self._approval_manager.wait_for_resolution(request_id)
-        await self._log_event(
-            "exec.resume",
-            {
-                "checkpoint_id": request_id,
-                "decision": decision.value,
-            },
-        )
-        await self._log_event(
-            "tool.approval",
-            {
-                "tool_name": tool_name,
-                "tool_call_id": tool_call_id,
-                "capability_id": capability_id,
-                "status": decision.value,
-                "source": "pending_request",
-                "request_id": request_id,
-            },
-        )
-        if decision == ApprovalDecision.ALLOW:
-            return True, None
-        return False, "tool invocation denied by human approval"
 
     # =========================================================================
     # Verify
@@ -1502,46 +1383,6 @@ class DareAgent(BaseAgent):
             except Exception:
                 return HookResult(decision=HookDecision.ALLOW)
         return HookResult(decision=HookDecision.ALLOW)
-
-    async def _emit_approval_pending_message(
-        self,
-        *,
-        request: dict[str, Any],
-        transport: AgentChannel | None = None,
-        capability_id: str,
-        tool_name: str,
-        tool_call_id: str,
-    ) -> None:
-        payload = build_approval_pending_payload(
-            request=request,
-            capability_id=capability_id,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-        await self._send_transport_payload(
-            payload,
-            transport=transport,
-            event_type=TransportEventType.APPROVAL_PENDING.value,
-        )
-
-    async def _send_transport_payload(
-        self,
-        payload: dict[str, Any],
-        *,
-        transport: AgentChannel | None = None,
-        event_type: str | None = None,
-    ) -> None:
-        if transport is None:
-            return
-        envelope = TransportEnvelope(
-            id=new_envelope_id(),
-            event_type=event_type,
-            payload=payload,
-        )
-        try:
-            await transport.send(envelope)
-        except Exception:
-            self._logger.exception("agent approval transport send failed")
 
     def _record_token_usage(self, usage: dict[str, Any] | None) -> None:
         if not usage:
