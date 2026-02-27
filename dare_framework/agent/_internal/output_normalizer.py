@@ -65,6 +65,16 @@ def extract_text_payload(value: Any) -> str | None:
     return normalized or None
 
 
+def _has_meaningful_fallback_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict)):
+        return bool(value)
+    return True
+
+
 def normalize_run_output(output: Any) -> str | None:
     """Normalize RunResult.output for display/logging channels."""
     if output is None:
@@ -73,14 +83,21 @@ def normalize_run_output(output: Any) -> str | None:
     if text:
         return text
     if isinstance(output, dict):
-        for key in ("content", "text", "output", "message", "result"):
-            if key not in output:
-                continue
-            value = output.get(key)
-            if value is None:
-                return None
-            if isinstance(value, str) and not value.strip():
-                return None
+        text_keys = ("content", "text", "output", "message", "result")
+        present_text_keys = [key for key in text_keys if key in output]
+        if present_text_keys:
+            has_non_text_fallback = any(
+                _has_meaningful_fallback_value(value)
+                for key, value in output.items()
+                if key not in text_keys
+            )
+            if not has_non_text_fallback:
+                all_text_fields_empty = all(
+                    extract_text_payload(output.get(key)) is None
+                    for key in present_text_keys
+                )
+                if all_text_fields_empty:
+                    return None
         try:
             return json.dumps(output, ensure_ascii=False, indent=2)
         except TypeError:
