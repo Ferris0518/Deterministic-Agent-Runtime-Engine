@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from dare_framework.tool._internal.runtime_context_override import (
+    RUNTIME_CONTEXT_PARAM,
+    RuntimeContextOverride,
+)
+
 
 class ApprovalDecision(StrEnum):
     """Approval decisions returned by approval policies."""
@@ -285,8 +290,9 @@ class ToolApprovalManager:
         session_id: str | None,
         reason: str,
     ) -> ApprovalEvaluation:
-        params_hash = _params_hash(params)
-        command = _extract_command(params)
+        approval_params = _sanitize_approval_params(params)
+        params_hash = _params_hash(approval_params)
+        command = _extract_command(approval_params)
         fingerprint = _request_fingerprint(capability_id, params_hash)
 
         # Use the condition lock consistently for pending-state mutations.
@@ -317,7 +323,7 @@ class ToolApprovalManager:
                 request = PendingApprovalRequest(
                     request_id=uuid4().hex,
                     capability_id=capability_id,
-                    params=dict(params),
+                    params=dict(approval_params),
                     params_hash=params_hash,
                     command=command,
                     session_id=session_id,
@@ -605,6 +611,20 @@ def _extract_command(params: dict[str, Any]) -> str | None:
     if isinstance(command, str) and command.strip():
         return command.strip()
     return None
+
+
+def _sanitize_approval_params(params: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in params.items():
+        if key == RUNTIME_CONTEXT_PARAM:
+            # Internal override transport never participates in approval matching.
+            # It is internal runtime control data that should not affect dedupe.
+            continue
+        if isinstance(value, RuntimeContextOverride):
+            # Defensive: collapse internal marker to raw context when seen.
+            value = value.context
+        normalized[key] = value
+    return normalized
 
 
 def _request_fingerprint(capability_id: str, params_hash: str) -> str:
