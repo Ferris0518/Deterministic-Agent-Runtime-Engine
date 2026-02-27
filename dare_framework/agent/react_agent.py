@@ -72,6 +72,7 @@ class ReactAgent(BaseAgent):
 
         last_tool_signature: tuple[str, ...] | None = None
         repeated_tool_rounds = 0
+        latest_usage: dict[str, Any] | None = None
 
         for round_idx in range(self._max_tool_rounds):
             print(f"[{self.name}] Round {round_idx + 1}/{self._max_tool_rounds}: 调用模型中...", flush=True)
@@ -105,6 +106,8 @@ class ReactAgent(BaseAgent):
                 metadata=assembled.metadata,
             )
             response = await self._model.generate(model_input)
+            if isinstance(response.usage, dict):
+                latest_usage = response.usage
             n_tools = len(response.tool_calls) if response.tool_calls else 0
             print(f"[{self.name}] 模型返回, tool_calls={n_tools}", flush=True)
 
@@ -140,7 +143,7 @@ class ReactAgent(BaseAgent):
             if repeated_tool_rounds >= 3:
                 loop_guard = "模型连续重复调用相同工具，已停止自动循环。请换一种描述，或明确要求先调用 ask_user 再继续。"
                 self._context.stm_add(Message(role="assistant", content=loop_guard))
-                output = build_output_envelope(loop_guard)
+                output = build_output_envelope(loop_guard, usage=latest_usage)
                 return RunResult(success=True, output=output, output_text=output["content"])
 
             assistant_msg = Message(
@@ -176,7 +179,7 @@ class ReactAgent(BaseAgent):
                 self._context.stm_add(tool_msg)
 
         final_message = "模型在工具循环中未收敛（达到最大轮次）。请缩小范围，或明确要求先调用 ask_user 再继续。"
-        output = build_output_envelope(final_message)
+        output = build_output_envelope(final_message, usage=latest_usage)
         return RunResult(
             success=True,
             output=output,

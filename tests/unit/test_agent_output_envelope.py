@@ -33,6 +33,42 @@ class _ToolGateway:
         return ToolResult(success=True, output={"ok": True})
 
 
+class _RepeatingToolModelWithUsage:
+    async def generate(self, model_input: ModelInput, *, options: Any = None) -> ModelResponse:
+        _ = (model_input, options)
+        return ModelResponse(
+            content="still searching",
+            tool_calls=[
+                {
+                    "id": "tc_same",
+                    "name": "tool:echo",
+                    "arguments": {"value": "ping"},
+                }
+            ],
+            usage={"total_tokens": 3},
+        )
+
+
+class _UniqueToolCallModelWithUsage:
+    def __init__(self) -> None:
+        self._round = 0
+
+    async def generate(self, model_input: ModelInput, *, options: Any = None) -> ModelResponse:
+        _ = (model_input, options)
+        self._round += 1
+        return ModelResponse(
+            content="still searching",
+            tool_calls=[
+                {
+                    "id": f"tc_{self._round}",
+                    "name": "tool:echo",
+                    "arguments": {"value": self._round},
+                }
+            ],
+            usage={"total_tokens": self._round},
+        )
+
+
 def _assert_output_envelope(result: RunResult) -> dict[str, Any]:
     assert isinstance(result.output, dict)
     envelope = result.output
@@ -87,6 +123,38 @@ async def test_react_agent_preserves_usage_in_output_envelope() -> None:
     envelope = _assert_output_envelope(result)
     assert envelope["content"] == "react-ok"
     assert envelope["usage"] == {"total_tokens": 13}
+
+
+@pytest.mark.asyncio
+async def test_react_agent_loop_guard_preserves_usage_in_output_envelope() -> None:
+    agent = ReactAgent(
+        name="react-output-envelope-loop-guard-usage",
+        model=_RepeatingToolModelWithUsage(),
+        context=Context(config=Config()),
+        tool_gateway=_ToolGateway(),
+        max_tool_rounds=10,
+    )
+
+    result = await agent("hello")
+    envelope = _assert_output_envelope(result)
+    assert "连续重复调用相同工具" in envelope["content"]
+    assert envelope["usage"] == {"total_tokens": 3}
+
+
+@pytest.mark.asyncio
+async def test_react_agent_max_rounds_preserves_usage_in_output_envelope() -> None:
+    agent = ReactAgent(
+        name="react-output-envelope-max-rounds-usage",
+        model=_UniqueToolCallModelWithUsage(),
+        context=Context(config=Config()),
+        tool_gateway=_ToolGateway(),
+        max_tool_rounds=2,
+    )
+
+    result = await agent("hello")
+    envelope = _assert_output_envelope(result)
+    assert "达到最大轮次" in envelope["content"]
+    assert envelope["usage"] == {"total_tokens": 2}
 
 
 @pytest.mark.asyncio
