@@ -28,8 +28,8 @@ from dare_framework.event.kernel import IEventLog
 from dare_framework.event.types import Event, RuntimeSnapshot
 from dare_framework.model import OpenRouterModelAdapter
 from dare_framework.plan import DefaultPlanner, DefaultRemediator, Task
-from dare_framework.tool.action_handler import ApprovalsActionHandler
 from dare_framework.tool._internal.tools import ReadFileTool, RunCommandTool, SearchCodeTool, WriteFileTool
+from dare_framework.transport import AgentChannel, DirectClientChannel, EnvelopeKind, TransportEnvelope, new_envelope_id
 from dare_framework.transport.interaction.resource_action import ResourceAction
 
 from validators.file_validator import FileExistsValidator
@@ -290,6 +290,8 @@ async def build_agent(
     timeout_seconds: float,
     display: CLIDisplay,
     config: Config,
+    *,
+    agent_channel: AgentChannel | None = None,
 ) -> Any:
     model = OpenRouterModelAdapter(
         model=model_name,
@@ -316,6 +318,8 @@ async def build_agent(
         .with_remediator(DefaultRemediator(model, verbose=False))
         .with_event_log(event_log)
     )
+    if agent_channel is not None:
+        builder = builder.with_agent_channel(agent_channel)
 
     agent = await builder.build()
     return agent
@@ -521,17 +525,75 @@ async def _handle_mcp_command(
 
 def _approvals_usage(display: CLIDisplay) -> None:
     display.info("/approvals list")
-    display.info("/approvals poll [timeout_ms=30000]")
+    display.info("/approvals poll [timeout_ms=30000] [session_id=...]")
     display.info("/approvals grant <request_id> [scope=workspace] [matcher=exact_params] [matcher_value=...]")
     display.info("/approvals deny <request_id> [scope=once] [matcher=exact_params] [matcher_value=...]")
     display.info("/approvals revoke <rule_id>")
 
 
-def _resolve_approvals_handler(agent: Any) -> ApprovalsActionHandler | None:
-    approval_manager = getattr(agent, "_approval_manager", None)
-    if approval_manager is None:
-        return None
-    return ApprovalsActionHandler(approval_manager)
+async def _invoke_approval_action(
+    approval_client: DirectClientChannel,
+    action: ResourceAction,
+    *,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    meta = dict(params or {})
+    request = TransportEnvelope(
+        id=new_envelope_id(),
+        kind=EnvelopeKind.ACTION,
+        payload=action.value,
+        meta=meta,
+    )
+    response = await approval_client.ask(
+        request,
+        timeout=_approval_action_timeout_seconds(action, meta),
+    )
+    payload = response.payload
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"unexpected action response payload: {payload!r}")
+
+    event_type = response.event_type
+    if not isinstance(event_type, str) or not event_type:
+        raise RuntimeError("invalid action response: missing event_type")
+    if event_type == "error":
+        raise RuntimeError(str(payload.get("reason") or payload.get("error") or "action failed"))
+
+    resp = payload.get("resp")
+    if not isinstance(resp, dict):
+        raise RuntimeError(f"unexpected action response shape: {payload!r}")
+
+    result = resp.get("result")
+    if not isinstance(result, dict):
+        raise RuntimeError(f"unexpected action result shape: {payload!r}")
+    return result
+
+
+def _approval_action_timeout_seconds(action: ResourceAction, params: dict[str, Any]) -> float:
+    default_timeout = 30.0
+    if action != ResourceAction.APPROVALS_POLL:
+        return default_timeout
+
+    poll_timeout_seconds = _parse_poll_timeout_seconds(params)
+    if poll_timeout_seconds is None:
+        return default_timeout
+    # Leave a small transport cushion so ask() does not time out first.
+    return max(default_timeout, poll_timeout_seconds + 5.0)
+
+
+def _parse_poll_timeout_seconds(params: dict[str, Any]) -> float | None:
+    raw_seconds = params.get("timeout_seconds")
+    raw_millis = params.get("timeout_ms")
+    if raw_seconds is not None:
+        seconds = float(raw_seconds)
+        if seconds < 0:
+            raise ValueError("timeout_seconds must be >= 0")
+        return seconds
+    if raw_millis is not None:
+        millis = float(raw_millis)
+        if millis < 0:
+            raise ValueError("timeout_ms must be >= 0")
+        return millis / 1000.0
+    return None
 
 
 def _parse_key_value_args(tokens: list[str]) -> tuple[list[str], dict[str, str]]:
@@ -561,15 +623,23 @@ def _build_approval_action_params(
     return params
 
 
+def _build_approval_poll_params(trailing_args: list[str]) -> dict[str, Any]:
+    _positional, options = _parse_key_value_args(trailing_args)
+    params: dict[str, Any] = {}
+    for key in ("timeout_ms", "timeout_seconds", "session_id"):
+        if key in options and options[key]:
+            params[key] = options[key]
+    return params
+
+
 async def _handle_approvals_command(
     args: list[str],
     *,
-    agent: Any,
+    approval_client: DirectClientChannel | None,
     display: CLIDisplay,
 ) -> None:
-    handler = _resolve_approvals_handler(agent)
-    if handler is None:
-        display.warn("approval manager unavailable on current agent")
+    if approval_client is None:
+        display.warn("approval transport unavailable")
         return
     if not args:
         _approvals_usage(display)
@@ -578,7 +648,7 @@ async def _handle_approvals_command(
     subcommand = args[0].lower()
     try:
         if subcommand == "list":
-            result = await handler.invoke(ResourceAction.APPROVALS_LIST)
+            result = await _invoke_approval_action(approval_client, ResourceAction.APPROVALS_LIST)
             pending = result.get("pending", [])
             rules = result.get("rules", [])
             display.info(f"pending={len(pending)} rules={len(rules)}")
@@ -586,12 +656,12 @@ async def _handle_approvals_command(
             return
 
         if subcommand == "poll":
-            _positional, options = _parse_key_value_args(args[1:])
-            params: dict[str, Any] = {}
-            for key in ("timeout_ms", "timeout_seconds"):
-                if key in options and options[key]:
-                    params[key] = options[key]
-            result = await handler.invoke(ResourceAction.APPROVALS_POLL, **params)
+            params = _build_approval_poll_params(args[1:])
+            result = await _invoke_approval_action(
+                approval_client,
+                ResourceAction.APPROVALS_POLL,
+                params=params,
+            )
             request = result.get("request")
             if isinstance(request, dict):
                 display.info(f"pending request: {request.get('request_id', '?')}")
@@ -612,7 +682,7 @@ async def _handle_approvals_command(
                 else ResourceAction.APPROVALS_DENY
             )
             params = _build_approval_action_params(request_id=request_id, trailing_args=args[2:])
-            result = await handler.invoke(action, **params)
+            result = await _invoke_approval_action(approval_client, action, params=params)
             display.ok(f"{subcommand} applied: {request_id}")
             print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
             return
@@ -623,9 +693,10 @@ async def _handle_approvals_command(
                 _approvals_usage(display)
                 return
             rule_id = args[1]
-            result = await handler.invoke(
+            result = await _invoke_approval_action(
+                approval_client,
                 ResourceAction.APPROVALS_REVOKE,
-                rule_id=rule_id,
+                params={"rule_id": rule_id},
             )
             if result.get("removed"):
                 display.ok(f"revoked rule: {rule_id}")
@@ -692,6 +763,7 @@ async def run_cli_loop(
     model: OpenRouterModelAdapter,
     display: CLIDisplay,
     mcp_state: MCPRuntimeState | None = None,
+    approval_client: DirectClientChannel | None = None,
     state: CLISessionState | None = None,
     background_execute: bool = False,
 ) -> tuple[CLISessionState, bool]:
@@ -730,7 +802,7 @@ async def run_cli_loop(
             if cmd.type == CommandType.APPROVALS:
                 await _handle_approvals_command(
                     cmd.args,
-                    agent=agent,
+                    approval_client=approval_client,
                     display=display,
                 )
                 continue
@@ -853,6 +925,8 @@ async def main(argv: list[str] | None = None) -> None:
     else:
         display.warn("No mcp_paths configured. MCP tools will not be loaded by default.")
 
+    approval_client = DirectClientChannel()
+    approval_channel = AgentChannel.build(approval_client)
     agent = await build_agent(
         workspace,
         model_name,
@@ -861,7 +935,9 @@ async def main(argv: list[str] | None = None) -> None:
         timeout_seconds,
         display,
         config,
+        agent_channel=approval_channel,
     )
+    await approval_channel.start()
     mcp_state = MCPRuntimeState(
         config_provider=config_provider,
         config=config,
@@ -876,50 +952,56 @@ async def main(argv: list[str] | None = None) -> None:
         http_client_options={"timeout": timeout_seconds},
     )
 
-    if args.demo:
-        script_path = Path(args.demo)
-        lines = load_script_lines(script_path)
-        await run_cli_loop(
-            lines,
-            agent=agent,
-            model=model,
-            display=display,
-            mcp_state=mcp_state,
-        )
-        return
+    try:
+        if args.demo:
+            script_path = Path(args.demo)
+            lines = load_script_lines(script_path)
+            await run_cli_loop(
+                lines,
+                agent=agent,
+                model=model,
+                display=display,
+                mcp_state=mcp_state,
+                approval_client=approval_client,
+            )
+            return
 
-    if args.script:
-        script_path = Path(args.script)
-        lines = load_script_lines(script_path)
-        await run_cli_loop(
-            lines,
-            agent=agent,
-            model=model,
-            display=display,
-            mcp_state=mcp_state,
-        )
-        return
+        if args.script:
+            script_path = Path(args.script)
+            lines = load_script_lines(script_path)
+            await run_cli_loop(
+                lines,
+                agent=agent,
+                model=model,
+                display=display,
+                mcp_state=mcp_state,
+                approval_client=approval_client,
+            )
+            return
 
-    display.info("type /help for commands. /quit to exit.")
-    cli_state = CLISessionState()
-    while True:
-        try:
-            raw = input("dare> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            break
-        if not raw:
-            continue
-        cli_state, quit_requested = await run_cli_loop(
-            [raw],
-            agent=agent,
-            model=model,
-            display=display,
-            mcp_state=mcp_state,
-            state=cli_state,
-            background_execute=True,
-        )
-        if quit_requested:
-            break
+        display.info("type /help for commands. /quit to exit.")
+        cli_state = CLISessionState()
+        while True:
+            try:
+                raw = input("dare> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not raw:
+                continue
+            cli_state, quit_requested = await run_cli_loop(
+                [raw],
+                agent=agent,
+                model=model,
+                display=display,
+                mcp_state=mcp_state,
+                approval_client=approval_client,
+                state=cli_state,
+                background_execute=True,
+            )
+            if quit_requested:
+                break
+    finally:
+        await approval_channel.stop()
 
 
 if __name__ == "__main__":

@@ -47,16 +47,11 @@ from dare_framework.plan.types import (
     ValidatedPlan,
     VerifyResult,
 )
-from dare_framework.tool._internal.control.approval_manager import (
-    ApprovalDecision,
-    ApprovalEvaluationStatus,
+from dare_framework.tool._internal.governed_tool_gateway import (
+    ApprovalInvokeContext,
+    GovernedToolGateway,
 )
 from dare_framework.tool.types import CapabilityKind
-from dare_framework.transport.interaction.payloads import (
-    build_approval_pending_payload,
-    build_approval_resolved_payload,
-)
-from dare_framework.transport.types import TransportEnvelope, new_envelope_id
 
 
 @dataclass
@@ -169,6 +164,11 @@ class DareAgent(BaseAgent):
 
         # Tool components
         self._tool_gateway = tool_gateway
+        self._governed_tool_gateway = GovernedToolGateway(
+            tool_gateway,
+            approval_manager=approval_manager,
+            logger=self._logger,
+        )
         self._mcp_manager = mcp_manager
         self._exec_ctl = execution_control
         self._approval_manager = approval_manager
@@ -207,7 +207,6 @@ class DareAgent(BaseAgent):
 
         # Runtime state (set during execution)
         self._session_state: SessionState | None = None
-        self._active_transport: AgentChannel | None = None
         self._conversation_id: str | None = None
         self._token_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
 
@@ -285,8 +284,6 @@ class DareAgent(BaseAgent):
         transport: AgentChannel | None = None,
     ) -> RunResult:
         """Execute a task with automatic mode selection."""
-        previous_transport = self._active_transport
-        self._active_transport = transport
         previous_conversation_id = self._conversation_id
         if isinstance(task, Task):
             task_obj = task
@@ -314,13 +311,12 @@ class DareAgent(BaseAgent):
         result: RunResult | None = None
         error: Exception | None = None
         try:
-            result = await self._run_session_loop(task_obj)
+            result = await self._run_session_loop(task_obj, transport=transport)
             return self._with_normalized_output_text(result)
         except Exception as exc:
             error = exc
             raise
         finally:
-            self._active_transport = previous_transport
             self._conversation_id = previous_conversation_id
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             errors: list[str] = []
@@ -348,7 +344,12 @@ class DareAgent(BaseAgent):
     # Session Loop (Layer 1)
     # =========================================================================
 
-    async def _run_session_loop(self, task: Task) -> RunResult:
+    async def _run_session_loop(
+        self,
+        task: Task,
+        *,
+        transport: AgentChannel | None = None,
+    ) -> RunResult:
         """Run the session loop - top-level task lifecycle."""
         # Initialize session state
         if self._session_state is None:
@@ -417,7 +418,7 @@ class DareAgent(BaseAgent):
             if self._exec_ctl is not None:
                 self._poll_or_raise()
 
-            result = await self._run_milestone_loop(milestone)
+            result = await self._run_milestone_loop(milestone, transport=transport)
             milestone_results.append(result)
             self._log(f"Milestone {idx + 1} result: success={result.success}")
 
@@ -455,7 +456,12 @@ class DareAgent(BaseAgent):
     # Milestone Loop (Layer 2)
     # =========================================================================
 
-    async def _run_milestone_loop(self, milestone: Milestone) -> MilestoneResult:
+    async def _run_milestone_loop(
+        self,
+        milestone: Milestone,
+        *,
+        transport: AgentChannel | None = None,
+    ) -> MilestoneResult:
         """Run the milestone loop - sub-goal tracking."""
         milestone_start = time.perf_counter()
         await self._emit_hook(HookPhase.BEFORE_MILESTONE, {
@@ -488,7 +494,7 @@ class DareAgent(BaseAgent):
 
             # Run execute loop
             self._log("Running execute loop...")
-            execute_result = await self._run_execute_loop(validated_plan)
+            execute_result = await self._run_execute_loop(validated_plan, transport=transport)
             self._log(f"Execute loop done, result keys={list(execute_result.keys())}")
 
             # Handle plan tool encountered
@@ -670,7 +676,12 @@ class DareAgent(BaseAgent):
     # Execute Loop (Layer 4)
     # =========================================================================
 
-    async def _run_execute_loop(self, plan: ValidatedPlan | None) -> dict[str, Any]:
+    async def _run_execute_loop(
+        self,
+        plan: ValidatedPlan | None,
+        *,
+        transport: AgentChannel | None = None,
+    ) -> dict[str, Any]:
         """Run the execute loop - model-driven execution."""
         self._log("Starting execute loop")
         execute_start = time.perf_counter()
@@ -827,6 +838,7 @@ class DareAgent(BaseAgent):
                         capability_id=capability_id,
                         params=tool_call.get("arguments", {}),
                     ),
+                    transport=transport,
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
                     descriptor=descriptor,
@@ -836,6 +848,8 @@ class DareAgent(BaseAgent):
                 result_success = tool_result.get("success", False)
                 result_output = tool_result.get("output", {})
                 result_error = tool_result.get("error", "")
+                # Keep explicit result categories for downstream policy-aware handling.
+                result_status = tool_result.get("status", "success" if result_success else "fail")
 
                 if result_success and self._is_skill_tool_call(descriptor):
                     self._mount_skill_from_result(result_output)
@@ -843,17 +857,18 @@ class DareAgent(BaseAgent):
                 if result_success:
                     self._log(f"   ✅ Success: {result_output}")
                 else:
-                    self._log(f"   ❌ Failed: {result_error}")
+                    self._log(f"   ❌ Failed({result_status}): {result_error}")
 
                 # Add tool result as message to STM (CRITICAL: LLM needs to see result!)
-                tool_result_content = json.dumps({
-                    "success": result_success,
-                    "output": result_output,
-                    "error": result_error,
-                }) if not result_success else json.dumps({
-                    "success": True,
-                    "output": result_output,
-                })
+                tool_result_content = json.dumps(
+                    {
+                        "success": result_success,
+                        "status": result_status,
+                        "output": result_output,
+                        "error": None if result_success else result_error,
+                    },
+                    default=str,
+                )
                 tool_msg = Message(
                     role="tool",
                     name=tool_call_id or capability_id,  # Use tool_call_id for OpenAI API format
@@ -864,7 +879,7 @@ class DareAgent(BaseAgent):
                 outputs.append(tool_result)
 
                 if not result_success:
-                    errors.append(result_error or "tool failed")
+                    errors.append(result_error or ("tool not allowed" if result_status == "not_allow" else "tool failed"))
 
             # Reassemble context with new messages for next iteration
             before_context_dispatch = await self._emit_hook(HookPhase.BEFORE_CONTEXT_ASSEMBLE, {})
@@ -902,6 +917,7 @@ class DareAgent(BaseAgent):
         self,
         request: ToolLoopRequest,
         *,
+        transport: AgentChannel | None = None,
         tool_name: str,
         tool_call_id: str,
         descriptor: Any | None = None,
@@ -921,46 +937,6 @@ class DareAgent(BaseAgent):
             attempts += 1
             self._context.budget_check()
             self._context.budget_use("tool_calls", 1)
-
-            if requires_approval:
-                allowed, approval_error = await self._resolve_tool_approval(
-                    capability_id=request.capability_id,
-                    params=request.params,
-                    session_id=session_id,
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                )
-                if not allowed:
-                    await self._log_event(
-                        "tool.error",
-                        {
-                            "tool_name": tool_name,
-                            "tool_call_id": tool_call_id,
-                            "capability_id": request.capability_id,
-                            "error": approval_error,
-                            "attempt": attempts,
-                        },
-                    )
-                    await self._emit_hook(
-                        HookPhase.AFTER_TOOL,
-                        {
-                            "tool_call_id": tool_call_id,
-                            "tool_name": tool_name,
-                            "capability_id": request.capability_id,
-                            "attempt": attempts,
-                            "success": False,
-                            "error": approval_error,
-                            "approved": False,
-                            "evidence_collected": False,
-                            "duration_ms": 0.0,
-                            "budget_stats": self._budget_stats(),
-                        },
-                    )
-                    return {
-                        "success": False,
-                        "error": approval_error,
-                        "output": {},
-                    }
 
             tool_start = time.perf_counter()
             before_tool_dispatch = await self._emit_hook(
@@ -1008,8 +984,17 @@ class DareAgent(BaseAgent):
             })
 
             try:
-                result = await self._tool_gateway.invoke(
+                approval_ctx = ApprovalInvokeContext(
+                    session_id=session_id,
+                    transport=transport,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    event_logger=self._log_event,
+                    runtime_context=self._context,
+                )
+                result = await self._governed_tool_gateway.invoke(
                     request.capability_id,
+                    approval_ctx,
                     envelope=request.envelope,
                     **request.params,
                 )
@@ -1026,6 +1011,15 @@ class DareAgent(BaseAgent):
                 if hasattr(result, "success") and not result.success:
                     tool_success = False
                 evidence_collected = bool(getattr(result, "evidence", []))
+                denied_status = "fail"
+                denied_output = getattr(result, "output", {})
+                approved = True
+                if not tool_success:
+                    if isinstance(denied_output, dict):
+                        candidate_status = denied_output.get("status")
+                        if isinstance(candidate_status, str) and candidate_status:
+                            denied_status = candidate_status
+                    approved = denied_status != "not_allow"
                 await self._emit_hook(
                     HookPhase.AFTER_TOOL,
                     {
@@ -1035,7 +1029,7 @@ class DareAgent(BaseAgent):
                         "attempt": attempts,
                         "success": tool_success,
                         "error": result.error if hasattr(result, "error") else None,
-                        "approved": True,
+                        "approved": approved,
                         "evidence_collected": evidence_collected,
                         "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
                         "budget_stats": self._budget_stats(),
@@ -1045,8 +1039,9 @@ class DareAgent(BaseAgent):
                 if not tool_success:
                     return {
                         "success": False,
+                        "status": denied_status,
                         "error": result.error or "tool failed",
-                        "output": getattr(result, "output", {}),
+                        "output": denied_output,
                         "result": result,
                     }
 
@@ -1059,6 +1054,7 @@ class DareAgent(BaseAgent):
                 if done_predicate is None or _done_predicate_satisfied(done_predicate, result):
                     return {
                         "success": True,
+                        "status": "success",
                         "output": getattr(result, "output", {}),
                         "error": getattr(result, "error", None),
                         "result": result,
@@ -1067,6 +1063,7 @@ class DareAgent(BaseAgent):
                 if max_calls is not None and attempts >= max_calls:
                     return {
                         "success": False,
+                        "status": "fail",
                         "error": "done predicate not satisfied before budget exhausted",
                         "output": getattr(result, "output", {}),
                         "result": result,
@@ -1105,103 +1102,10 @@ class DareAgent(BaseAgent):
                 )
                 return {
                     "success": False,
+                    "status": "fail",
                     "error": str(e),
                     "output": {},
                 }
-
-    async def _resolve_tool_approval(
-        self,
-        *,
-        capability_id: str,
-        params: dict[str, Any],
-        session_id: str | None,
-        tool_name: str,
-        tool_call_id: str,
-    ) -> tuple[bool, str | None]:
-        if self._approval_manager is None:
-            return False, "tool requires approval but no approval manager is configured"
-
-        evaluation = await self._approval_manager.evaluate(
-            capability_id=capability_id,
-            params=params,
-            session_id=session_id,
-            reason=f"Tool {capability_id} requires approval",
-        )
-        if evaluation.status == ApprovalEvaluationStatus.ALLOW:
-            await self._log_event(
-                "tool.approval",
-                {
-                    "tool_name": tool_name,
-                    "tool_call_id": tool_call_id,
-                    "capability_id": capability_id,
-                    "status": "allow",
-                    "source": "rule",
-                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
-                },
-            )
-            return True, None
-
-        if evaluation.status == ApprovalEvaluationStatus.DENY:
-            await self._log_event(
-                "tool.approval",
-                {
-                    "tool_name": tool_name,
-                    "tool_call_id": tool_call_id,
-                    "capability_id": capability_id,
-                    "status": "deny",
-                    "source": "rule",
-                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
-                },
-            )
-            return False, "tool invocation denied by approval rule"
-
-        if evaluation.request is None:
-            return False, "tool invocation requires approval"
-
-        request_id = evaluation.request.request_id
-        await self._emit_approval_pending_message(
-            request=evaluation.request.to_dict(),
-            capability_id=capability_id,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-        await self._log_event(
-            "exec.waiting_human",
-            {
-                "checkpoint_id": request_id,
-                "reason": evaluation.request.reason,
-                "mode": "approval_memory_wait",
-            },
-        )
-        decision = await self._approval_manager.wait_for_resolution(request_id)
-        await self._log_event(
-            "exec.resume",
-            {
-                "checkpoint_id": request_id,
-                "decision": decision.value,
-            },
-        )
-        await self._log_event(
-            "tool.approval",
-            {
-                "tool_name": tool_name,
-                "tool_call_id": tool_call_id,
-                "capability_id": capability_id,
-                "status": decision.value,
-                "source": "pending_request",
-                "request_id": request_id,
-            },
-        )
-        await self._emit_approval_resolved_message(
-            request_id=request_id,
-            decision=decision.value,
-            capability_id=capability_id,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-        if decision == ApprovalDecision.ALLOW:
-            return True, None
-        return False, "tool invocation denied by human approval"
 
     # =========================================================================
     # Verify
@@ -1486,53 +1390,6 @@ class DareAgent(BaseAgent):
             except Exception:
                 return HookResult(decision=HookDecision.ALLOW)
         return HookResult(decision=HookDecision.ALLOW)
-
-    async def _emit_approval_pending_message(
-        self,
-        *,
-        request: dict[str, Any],
-        capability_id: str,
-        tool_name: str,
-        tool_call_id: str,
-    ) -> None:
-        payload = build_approval_pending_payload(
-            request=request,
-            capability_id=capability_id,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-        await self._send_transport_payload(payload)
-
-    async def _emit_approval_resolved_message(
-        self,
-        *,
-        request_id: str,
-        decision: str,
-        capability_id: str,
-        tool_name: str,
-        tool_call_id: str,
-    ) -> None:
-        payload = build_approval_resolved_payload(
-            request_id=request_id,
-            decision=decision,
-            capability_id=capability_id,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-        await self._send_transport_payload(payload)
-
-    async def _send_transport_payload(self, payload: dict[str, Any]) -> None:
-        channel = self._active_transport
-        if channel is None:
-            return
-        envelope = TransportEnvelope(
-            id=new_envelope_id(),
-            payload=payload,
-        )
-        try:
-            await channel.send(envelope)
-        except Exception:
-            self._logger.exception("agent approval transport send failed")
 
     def _record_token_usage(self, usage: dict[str, Any] | None) -> None:
         if not usage:

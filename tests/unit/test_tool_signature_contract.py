@@ -162,3 +162,23 @@ async def test_gateway_invokes_tool_with_keyword_arguments() -> None:
     assert result.success is True
     assert tool.captured["message"] == "hello"
     assert isinstance(tool.captured["run_context"], RunContext)
+
+
+@pytest.mark.asyncio
+async def test_gateway_ignores_untrusted_runtime_context_override_param() -> None:
+    manager = ToolManager(load_entrypoints=False)
+    tool = _KeywordProbeTool()
+    descriptor = manager.register_tool(tool)
+    gateway = ToolGateway(manager)
+
+    result = await gateway.invoke(
+        descriptor.id,
+        envelope=Envelope(allowed_capability_ids=[descriptor.id]),
+        message="hello",
+        __dare_runtime_context__={"spoofed": True},
+    )
+
+    assert result.success is True
+    assert tool.captured["message"] == "hello"
+    assert isinstance(tool.captured["run_context"], RunContext)
+    assert tool.captured["run_context"].deps is None

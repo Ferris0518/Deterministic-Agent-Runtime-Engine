@@ -154,6 +154,27 @@ def _new_scripted_model() -> _DeterministicCompatTestModel:
     return _DeterministicCompatTestModel()
 
 
+def test_example_10_cli_parse_response_uses_event_type_for_errors() -> None:
+    cli_module = _load_example_cli_module()
+    success, text = cli_module._parse_response(  # type: ignore[attr-defined]
+        TransportEnvelope(
+            id="resp-error",
+            kind=EnvelopeKind.MESSAGE,
+            event_type="error",
+            payload={
+                "kind": "message",
+                "target": "agent",
+                "ok": False,
+                "reason": "boom",
+                "error": "boom",
+                "resp": {"code": "runtime_error", "reason": "boom"},
+            },
+        )
+    )
+    assert success is False
+    assert "boom" in text
+
+
 class _DeterministicSimpleLoopModel(IModelAdapter):
     def __init__(self) -> None:
         self.called_tools: list[str] = []
@@ -365,8 +386,8 @@ async def test_single_agent_demo_transport_message_loop(tmp_path: Path) -> None:
         await bundle.agent.stop()
 
     assert isinstance(response.payload, dict)
+    assert response.event_type == "result"
     payload = response.payload
-    assert payload.get("type") == "result"
     resp = payload.get("resp")
     assert isinstance(resp, dict)
     assert resp.get("success") is True

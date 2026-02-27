@@ -100,7 +100,14 @@ def _parse_response(response: TransportEnvelope) -> tuple[bool, str]:
     payload = response.payload
     if not isinstance(payload, dict):
         return (False, _render_output_text(payload))
-    if payload.get("type") == "error":
+
+    # Prefer envelope-level event typing, fallback to legacy payload.type for
+    # compatibility with older transports.
+    event_type = response.event_type
+    if not isinstance(event_type, str) or not event_type:
+        legacy = payload.get("type")
+        event_type = legacy if isinstance(legacy, str) else None
+    if event_type == "error":
         reason = payload.get("reason") or payload.get("error") or "unknown transport error"
         return (False, str(reason))
 
@@ -108,7 +115,7 @@ def _parse_response(response: TransportEnvelope) -> tuple[bool, str]:
     # callers may still rely on top-level fallbacks.
     resp = payload.get("resp")
     if isinstance(resp, dict):
-        success = bool(resp.get("success", payload.get("success", True)))
+        success = bool(resp.get("success", payload.get("success", payload.get("ok", True))))
         output = resp.get("output", payload.get("output"))
         errors = resp.get("errors", payload.get("errors", []))
         text = _render_output_text(output)
@@ -116,7 +123,7 @@ def _parse_response(response: TransportEnvelope) -> tuple[bool, str]:
             text = f"{text}\nerrors={errors}" if text else f"errors={errors}"
         return (success, text)
 
-    success = bool(payload.get("success", payload.get("ok", True)))
+    success = bool(payload.get("success", payload.get("ok", event_type != "error")))
     return (success, _render_output_text(payload.get("output")))
 
 
