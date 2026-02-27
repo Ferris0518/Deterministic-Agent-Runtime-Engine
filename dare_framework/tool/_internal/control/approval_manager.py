@@ -383,6 +383,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None = None,
+        actor_session_id: str | None = None,
     ) -> ApprovalRule | None:
         return await self._resolve_request(
             request_id=request_id,
@@ -390,6 +391,7 @@ class ToolApprovalManager:
             scope=scope,
             matcher=matcher,
             matcher_value=matcher_value,
+            actor_session_id=actor_session_id,
         )
 
     async def deny(
@@ -399,6 +401,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None = None,
+        actor_session_id: str | None = None,
     ) -> ApprovalRule | None:
         return await self._resolve_request(
             request_id=request_id,
@@ -406,6 +409,7 @@ class ToolApprovalManager:
             scope=scope,
             matcher=matcher,
             matcher_value=matcher_value,
+            actor_session_id=actor_session_id,
         )
 
     async def revoke(self, rule_id: str) -> bool:
@@ -423,6 +427,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None,
+        actor_session_id: str | None = None,
     ) -> ApprovalRule | None:
         # Keep pending-state transitions on the condition lock to avoid mixed styles.
         async with self._pending_state_changed:
@@ -437,6 +442,7 @@ class ToolApprovalManager:
                 scope=scope,
                 matcher=matcher,
                 matcher_value=matcher_value,
+                actor_session_id=actor_session_id,
             )
             if rule is not None:
                 self._append_rule(rule)
@@ -468,6 +474,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None,
+        actor_session_id: str | None,
     ) -> ApprovalRule | None:
         # ONCE only applies to the current pending request, no reusable rule needed.
         if scope == ApprovalScope.ONCE:
@@ -491,7 +498,7 @@ class ToolApprovalManager:
             matcher=matcher,
             matcher_value=normalized_value,
             created_at=self._time_fn(),
-            session_id=request.session_id if scope == ApprovalScope.SESSION else None,
+            session_id=(actor_session_id or request.session_id) if scope == ApprovalScope.SESSION else None,
         )
 
     def _persist_rules_for_scope(self, scope: ApprovalScope) -> None:
