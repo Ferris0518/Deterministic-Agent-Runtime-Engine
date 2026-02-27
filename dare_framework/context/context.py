@@ -209,7 +209,7 @@ class DefaultAssembledContext(IAssembleContext):
             parsed = float(value)
         except (TypeError, ValueError):
             return self._DEFAULT_SOURCE_RATIO
-        if math.isnan(parsed) or parsed < 0:
+        if not math.isfinite(parsed) or parsed < 0:
             return self._DEFAULT_SOURCE_RATIO
         return parsed
 

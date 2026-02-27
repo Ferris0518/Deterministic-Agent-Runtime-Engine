@@ -282,3 +282,29 @@ def test_context_assemble_handles_overflowing_numeric_retrieval_config() -> None
     assembled = ctx.assemble()
 
     assert assembled.metadata["retrieval"]["ltm_requested"] == 3
+
+
+def test_context_assemble_rejects_infinite_ratio_and_keeps_budget_guardrails() -> None:
+    ltm = _FakeRetrieval([Message(role="assistant", content="x" * 220)])
+    config = Config(
+        long_term_memory={
+            "assemble_top_k": 1,
+            "assemble_ratio": float("inf"),
+            "assemble_reserve_tokens": 0,
+        },
+        knowledge={"assemble_top_k": 0},
+    )
+    ctx = Context(
+        config=config,
+        budget=Budget(max_tokens=40),
+        long_term_memory=ltm,
+        knowledge=None,
+    )
+    ctx.stm_add(Message(role="user", content="q"))
+
+    assembled = ctx.assemble()
+
+    contents = [message.content for message in assembled.messages]
+    assert contents == ["q"]
+    assert assembled.metadata["retrieval"]["ltm_count"] == 0
+    assert assembled.metadata["retrieval"]["degraded"] is True
