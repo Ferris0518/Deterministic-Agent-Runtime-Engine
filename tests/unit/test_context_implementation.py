@@ -86,3 +86,88 @@ def test_context_exposes_public_tool_gateway_accessor_and_setter():
 
     ctx.set_tool_gateway(manager)
     assert ctx.tool_gateway is manager
+
+
+class _FakeRetrieval:
+    def __init__(self, messages: list[Message], *, fail: bool = False) -> None:
+        self._messages = list(messages)
+        self._fail = fail
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def get(self, query: str = "", **kwargs: object) -> list[Message]:
+        self.calls.append((query, dict(kwargs)))
+        if self._fail:
+            raise RuntimeError("retrieval failed")
+        return list(self._messages)
+
+    def add(self, message: Message) -> None:
+        self._messages.append(message)
+
+    def clear(self) -> None:
+        self._messages.clear()
+
+    def compress(self, **kwargs: object) -> int:
+        _ = kwargs
+        return 0
+
+
+def test_context_assemble_fuses_ltm_and_knowledge_with_latest_user_query():
+    ltm = _FakeRetrieval([Message(role="assistant", content="ltm-hit")])
+    knowledge = _FakeRetrieval([Message(role="assistant", content="knowledge-hit")])
+    ctx = Context(
+        config=Config(),
+        long_term_memory=ltm,
+        knowledge=knowledge,
+    )
+    ctx.stm_add(Message(role="user", content="old request"))
+    ctx.stm_add(Message(role="assistant", content="ack"))
+    ctx.stm_add(Message(role="user", content="latest request"))
+
+    assembled = ctx.assemble()
+
+    contents = [message.content for message in assembled.messages]
+    assert contents == ["old request", "ack", "latest request", "ltm-hit", "knowledge-hit"]
+    assert ltm.calls and ltm.calls[0][0] == "latest request"
+    assert knowledge.calls and knowledge.calls[0][0] == "latest request"
+    assert assembled.metadata["retrieval"]["ltm_count"] == 1
+    assert assembled.metadata["retrieval"]["knowledge_count"] == 1
+    assert assembled.metadata["retrieval"]["degraded"] is False
+
+
+def test_context_assemble_degrades_when_token_budget_low():
+    ltm = _FakeRetrieval([Message(role="assistant", content="ltm-hit")])
+    knowledge = _FakeRetrieval([Message(role="assistant", content="knowledge-hit")])
+    # Force a low remaining token budget so retrieval should be skipped.
+    budget = Budget(max_tokens=32)
+    ctx = Context(
+        config=Config(),
+        budget=budget,
+        long_term_memory=ltm,
+        knowledge=knowledge,
+    )
+    ctx.stm_add(Message(role="user", content="x" * 160))
+
+    assembled = ctx.assemble()
+
+    contents = [message.content for message in assembled.messages]
+    assert contents == ["x" * 160]
+    assert assembled.metadata["retrieval"]["degraded"] is True
+    assert assembled.metadata["retrieval"]["degrade_reason"] == "token_budget_low"
+
+
+def test_context_assemble_handles_retrieval_exception_gracefully():
+    ltm = _FakeRetrieval([Message(role="assistant", content="ltm-hit")], fail=True)
+    knowledge = _FakeRetrieval([Message(role="assistant", content="knowledge-hit")])
+    ctx = Context(
+        config=Config(),
+        long_term_memory=ltm,
+        knowledge=knowledge,
+    )
+    ctx.stm_add(Message(role="user", content="query"))
+
+    assembled = ctx.assemble()
+
+    contents = [message.content for message in assembled.messages]
+    assert contents == ["query", "knowledge-hit"]
+    assert assembled.metadata["retrieval"]["degraded"] is True
+    assert assembled.metadata["retrieval"]["degrade_reason"] == "ltm_retrieval_failed"

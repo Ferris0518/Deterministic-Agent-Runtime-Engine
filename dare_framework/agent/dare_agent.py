@@ -51,6 +51,11 @@ from dare_framework.tool._internal.governed_tool_gateway import (
     ApprovalInvokeContext,
     GovernedToolGateway,
 )
+from dare_framework.security import DefaultSecurityBoundary, PolicyDecision, RiskLevel, SandboxSpec
+from dare_framework.tool._internal.control.approval_manager import (
+    ApprovalDecision,
+    ApprovalEvaluationStatus,
+)
 from dare_framework.tool.types import CapabilityKind
 
 
@@ -71,6 +76,7 @@ if TYPE_CHECKING:
     from dare_framework.mcp.manager import MCPManager
     from dare_framework.observability.kernel import ITelemetryProvider
     from dare_framework.plan.interfaces import IPlanner, IRemediator, IValidator
+    from dare_framework.security.kernel import ISecurityBoundary
     from dare_framework.tool.interfaces import IExecutionControl
     from dare_framework.tool.kernel import IToolGateway, IToolManager, IToolProvider
     from dare_framework.tool._internal.control.approval_manager import ToolApprovalManager
@@ -112,6 +118,7 @@ class DareAgent(BaseAgent):
         tool_gateway: IToolGateway,
         mcp_manager: MCPManager | None = None,
         execution_control: IExecutionControl | None = None,
+        security_boundary: ISecurityBoundary | None = None,
         approval_manager: ToolApprovalManager | None = None,
         # Plan components (optional - enables full five-layer mode)
         planner: IPlanner | None = None,
@@ -141,6 +148,7 @@ class DareAgent(BaseAgent):
             context: Pre-configured context (required, provided by builder).
             tool_gateway: Tool gateway for invoking tools (required, provided by builder).
             execution_control: Execution control for HITL (optional).
+            security_boundary: Security boundary for trust/policy/sandbox checks (optional).
             approval_manager: Tool approval manager for persisted approval memory (optional).
             planner: Plan generator (optional, enables full five-layer).
             validator: Plan/milestone validator (optional).
@@ -171,6 +179,7 @@ class DareAgent(BaseAgent):
         )
         self._mcp_manager = mcp_manager
         self._exec_ctl = execution_control
+        self._security_boundary = security_boundary or DefaultSecurityBoundary()
         self._approval_manager = approval_manager
 
         # Plan components (optional)
@@ -492,6 +501,26 @@ class DareAgent(BaseAgent):
             validated_plan = await self._run_plan_loop(milestone)
             self._log(f"Plan loop done, validated_plan={validated_plan is not None}")
 
+            plan_policy_error = await self._check_plan_policy(milestone, validated_plan)
+            if plan_policy_error is not None:
+                if self._sandbox is not None and snapshot_id:
+                    self._sandbox.rollback(self._context, snapshot_id)
+                    self._log(f"Rolled back STM snapshot: {snapshot_id}")
+                await self._log_event(
+                    "security.plan.policy",
+                    {
+                        "milestone_id": milestone.milestone_id,
+                        "decision": "deny",
+                        "error": plan_policy_error,
+                    },
+                )
+                return MilestoneResult(
+                    success=False,
+                    outputs=[],
+                    errors=[plan_policy_error],
+                    verify_result=VerifyResult(success=False, errors=[plan_policy_error]),
+                )
+
             # Run execute loop
             self._log("Running execute loop...")
             execute_result = await self._run_execute_loop(validated_plan, transport=transport)
@@ -688,6 +717,9 @@ class DareAgent(BaseAgent):
         await self._emit_hook(HookPhase.BEFORE_EXECUTE, {
             "plan_present": plan is not None,
         })
+        if self._execution_mode == "step_driven":
+            return await self._run_step_driven_execute_loop(plan, execute_start)
+
         # Budget check
         self._context.budget_check()
 
@@ -909,6 +941,72 @@ class DareAgent(BaseAgent):
             "errors": errors,
         })
 
+    async def _run_step_driven_execute_loop(
+        self,
+        plan: ValidatedPlan | None,
+        execute_start: float,
+    ) -> dict[str, Any]:
+        """Run execute loop using validated steps and a step executor."""
+        outputs: list[Any] = []
+        errors: list[str] = []
+
+        # Step-driven mode is strict: a validated plan with steps is required.
+        if plan is None:
+            return await self._finalize_execute(execute_start, {
+                "success": False,
+                "outputs": outputs,
+                "errors": ["step-driven execution requires a validated plan"],
+            })
+        if not plan.success:
+            return await self._finalize_execute(execute_start, {
+                "success": False,
+                "outputs": outputs,
+                "errors": list(plan.errors) or ["validated plan is not successful"],
+            })
+        if not plan.steps:
+            return await self._finalize_execute(execute_start, {
+                "success": False,
+                "outputs": outputs,
+                "errors": ["step-driven execution requires validated plan steps"],
+            })
+
+        step_executor = self._step_executor
+        if step_executor is None:
+            from dare_framework.agent._internal.step_executor import DefaultStepExecutor
+
+            step_executor = DefaultStepExecutor(self._tool_gateway)
+            self._step_executor = step_executor
+
+        previous_results: list[Any] = []
+        for step in plan.steps:
+            self._context.budget_check()
+            if self._exec_ctl is not None:
+                self._poll_or_raise()
+
+            step_result = await step_executor.execute_step(
+                step,
+                self._context,
+                previous_results,
+            )
+            previous_results.append(step_result)
+
+            if step_result.success:
+                outputs.append(step_result.output)
+                continue
+
+            errors.extend(step_result.errors or [f"step {step.step_id} failed"])
+            return await self._finalize_execute(execute_start, {
+                "success": False,
+                "outputs": outputs,
+                "errors": errors,
+            })
+
+        return await self._finalize_execute(execute_start, {
+            "success": True,
+            "outputs": outputs,
+            "errors": errors,
+        })
+
     # =========================================================================
     # Tool Loop (Layer 5)
     # =========================================================================
@@ -938,6 +1036,44 @@ class DareAgent(BaseAgent):
             self._context.budget_check()
             self._context.budget_use("tool_calls", 1)
 
+            trusted_params, trust_error = await self._resolve_tool_security(
+                capability_id=request.capability_id,
+                params=request.params,
+                tool_name=tool_name,
+                risk_level=risk_level,
+                requires_approval=requires_approval,
+            )
+            if trust_error is not None:
+                await self._log_event(
+                    "security.tool.policy",
+                    {
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                        "capability_id": request.capability_id,
+                        "error": trust_error,
+                        "attempt": attempts,
+                    },
+                )
+                await self._emit_hook(
+                    HookPhase.AFTER_TOOL,
+                    {
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "capability_id": request.capability_id,
+                        "attempt": attempts,
+                        "success": False,
+                        "error": trust_error,
+                        "approved": False,
+                        "evidence_collected": False,
+                        "duration_ms": 0.0,
+                        "budget_stats": self._budget_stats(),
+                    },
+                )
+                return {
+                    "success": False,
+                    "error": trust_error,
+                    "output": {},
+                }
             tool_start = time.perf_counter()
             before_tool_dispatch = await self._emit_hook(
                 HookPhase.BEFORE_TOOL,
@@ -992,11 +1128,21 @@ class DareAgent(BaseAgent):
                     event_logger=self._log_event,
                     runtime_context=self._context,
                 )
-                result = await self._governed_tool_gateway.invoke(
-                    request.capability_id,
-                    approval_ctx,
-                    envelope=request.envelope,
-                    **request.params,
+                result = await self._security_boundary.execute_safe(
+                    action="invoke_tool",
+                    fn=lambda: self._governed_tool_gateway.invoke(
+                        request.capability_id,
+                        approval_ctx,
+                        envelope=request.envelope,
+                        **trusted_params,
+                    ),
+                    sandbox=SandboxSpec(
+                        mode="tool_gateway",
+                        details={
+                            "capability_id": request.capability_id,
+                            "tool_name": tool_name,
+                        },
+                    ),
                 )
 
                 await self._log_event("tool.result", {
@@ -1046,7 +1192,11 @@ class DareAgent(BaseAgent):
                     }
 
                 # Collect evidence
-                milestone_state = self._session_state.current_milestone_state
+                milestone_state = (
+                    self._session_state.current_milestone_state
+                    if self._session_state is not None
+                    else None
+                )
                 if milestone_state and hasattr(result, "evidence"):
                     for evidence in result.evidence:
                         milestone_state.add_evidence(evidence)
@@ -1107,6 +1257,165 @@ class DareAgent(BaseAgent):
                     "output": {},
                 }
 
+    async def _check_plan_policy(
+        self,
+        milestone: Milestone,
+        validated_plan: ValidatedPlan | None,
+    ) -> str | None:
+        decision = await self._security_boundary.check_policy(
+            action="execute_plan",
+            resource=milestone.milestone_id,
+            context={
+                "milestone_id": milestone.milestone_id,
+                "plan_present": validated_plan is not None,
+                "plan_success": validated_plan.success if validated_plan is not None else None,
+                "plan_steps_count": len(validated_plan.steps) if validated_plan is not None else 0,
+            },
+        )
+        if decision is PolicyDecision.ALLOW:
+            return None
+        if decision is PolicyDecision.APPROVE_REQUIRED:
+            return "execute plan requires security approval"
+        return "execute plan denied by security policy"
+
+    async def _resolve_tool_security(
+        self,
+        *,
+        capability_id: str,
+        params: dict[str, Any],
+        tool_name: str,
+        risk_level: int,
+        requires_approval: bool,
+    ) -> tuple[dict[str, Any], str | None]:
+        risk_enum = self._coerce_risk_level(risk_level)
+        trusted_input = await self._security_boundary.verify_trust(
+            input=params,
+            context={
+                "capability_id": capability_id,
+                "tool_name": tool_name,
+                "risk_level": risk_enum,
+                "requires_approval": requires_approval,
+            },
+        )
+        decision = await self._security_boundary.check_policy(
+            action="invoke_tool",
+            resource=capability_id,
+            context={
+                "capability_id": capability_id,
+                "tool_name": tool_name,
+                "risk_level": trusted_input.risk_level.value,
+                "requires_approval": requires_approval,
+                **trusted_input.metadata,
+            },
+        )
+        if decision is PolicyDecision.ALLOW:
+            return trusted_input.params, None
+        if decision is PolicyDecision.APPROVE_REQUIRED:
+            return {}, "tool invocation requires security approval"
+        return {}, "tool invocation denied by security policy"
+
+    async def _resolve_tool_approval(
+        self,
+        *,
+        capability_id: str,
+        params: dict[str, Any],
+        session_id: str | None,
+        tool_name: str,
+        tool_call_id: str,
+    ) -> tuple[bool, str | None]:
+        if self._approval_manager is None:
+            return False, "tool requires approval but no approval manager is configured"
+
+        evaluation = await self._approval_manager.evaluate(
+            capability_id=capability_id,
+            params=params,
+            session_id=session_id,
+            reason=f"Tool {capability_id} requires approval",
+        )
+        if evaluation.status == ApprovalEvaluationStatus.ALLOW:
+            await self._log_event(
+                "tool.approval",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": capability_id,
+                    "status": "allow",
+                    "source": "rule",
+                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
+                },
+            )
+            return True, None
+
+        if evaluation.status == ApprovalEvaluationStatus.DENY:
+            await self._log_event(
+                "tool.approval",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": capability_id,
+                    "status": "deny",
+                    "source": "rule",
+                    "rule_id": evaluation.rule.rule_id if evaluation.rule is not None else None,
+                },
+            )
+            return False, "tool invocation denied by approval rule"
+
+        if evaluation.request is None:
+            return False, "tool invocation requires approval"
+
+        request_id = evaluation.request.request_id
+        await self._emit_approval_pending_message(
+            request=evaluation.request.to_dict(),
+            capability_id=capability_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+        )
+        await self._log_event(
+            "exec.waiting_human",
+            {
+                "checkpoint_id": request_id,
+                "reason": evaluation.request.reason,
+                "mode": "approval_memory_wait",
+            },
+        )
+        decision = await self._approval_manager.wait_for_resolution(request_id)
+        await self._log_event(
+            "exec.resume",
+            {
+                "checkpoint_id": request_id,
+                "decision": decision.value,
+            },
+        )
+        await self._log_event(
+            "tool.approval",
+            {
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
+                "capability_id": capability_id,
+                "status": decision.value,
+                "source": "pending_request",
+                "request_id": request_id,
+            },
+        )
+        await self._emit_approval_resolved_message(
+            request_id=request_id,
+            decision=decision.value,
+            capability_id=capability_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+        )
+        if decision == ApprovalDecision.ALLOW:
+            return True, None
+        return False, "tool invocation denied by human approval"
+
+    def _coerce_risk_level(self, risk_level: int) -> RiskLevel:
+        mapping = {
+            1: RiskLevel.READ_ONLY,
+            2: RiskLevel.IDEMPOTENT_WRITE,
+            3: RiskLevel.NON_IDEMPOTENT_EFFECT,
+            4: RiskLevel.COMPENSATABLE,
+        }
+        return mapping.get(risk_level, RiskLevel.READ_ONLY)
     # =========================================================================
     # Verify
     # =========================================================================
