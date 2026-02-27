@@ -371,6 +371,90 @@ async def test_main_run_plan_preview_failure_returns_one(monkeypatch, tmp_path) 
 
 
 @pytest.mark.asyncio
+async def test_main_load_effective_config_failure_returns_two(tmp_path, capsys) -> None:
+    client_main = importlib.import_module("client.main")
+    workspace = tmp_path / "workspace"
+    user_dir = tmp_path / "user"
+    workspace.mkdir(parents=True, exist_ok=True)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    config_dir = workspace / ".dare"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.json").write_text("{malformed json", encoding="utf-8")
+
+    rc = await client_main.main(
+        [
+            "--workspace",
+            str(workspace),
+            "--user-dir",
+            str(user_dir),
+            "--output",
+            "json",
+            "doctor",
+        ]
+    )
+
+    assert rc == 2
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert lines
+    payload = json.loads(lines[-1])
+    assert payload["type"] == "log"
+    assert payload["level"] == "error"
+    assert "invalid config" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_main_bootstrap_failure_returns_one(monkeypatch, tmp_path, capsys) -> None:
+    client_main = importlib.import_module("client.main")
+    workspace = tmp_path / "workspace"
+    user_dir = tmp_path / "user"
+    workspace.mkdir(parents=True, exist_ok=True)
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    config = Config.from_dict(
+        {
+            "workspace_dir": str(workspace),
+            "user_dir": str(user_dir),
+            "llm": {
+                "adapter": "openai",
+                "model": "gpt-4o-mini",
+                "api_key": "dummy",
+            },
+        }
+    )
+
+    def _fake_load_effective_config(_options):  # noqa: ANN001
+        return object(), config
+
+    async def _fake_bootstrap_runtime(_options):  # noqa: ANN001
+        raise RuntimeError("adapter unavailable")
+
+    monkeypatch.setattr(client_main, "load_effective_config", _fake_load_effective_config)
+    monkeypatch.setattr(client_main, "bootstrap_runtime", _fake_bootstrap_runtime)
+
+    rc = await client_main.main(
+        [
+            "--workspace",
+            str(workspace),
+            "--user-dir",
+            str(user_dir),
+            "--output",
+            "json",
+            "run",
+            "--task",
+            "summarize readme",
+        ]
+    )
+
+    assert rc == 1
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert lines
+    payload = json.loads(lines[-1])
+    assert payload["type"] == "log"
+    assert payload["level"] == "error"
+    assert "runtime bootstrap failed" in payload["message"]
+
+
+@pytest.mark.asyncio
 async def test_main_invalid_workspace_path_returns_two(tmp_path, capsys) -> None:
     client_main = importlib.import_module("client.main")
     workspace_file = tmp_path / "workspace_file"
@@ -396,6 +480,73 @@ async def test_main_invalid_workspace_path_returns_two(tmp_path, capsys) -> None
     payload = json.loads(lines[-1])
     assert payload["type"] == "log"
     assert payload["level"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_main_mcp_command_failure_returns_one(monkeypatch, tmp_path, capsys) -> None:
+    client_main = importlib.import_module("client.main")
+    workspace = tmp_path / "workspace"
+    user_dir = tmp_path / "user"
+    workspace.mkdir(parents=True, exist_ok=True)
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    config = Config.from_dict(
+        {
+            "workspace_dir": str(workspace),
+            "user_dir": str(user_dir),
+            "llm": {
+                "adapter": "openai",
+                "model": "gpt-4o-mini",
+                "api_key": "dummy",
+            },
+        }
+    )
+
+    def _fake_load_effective_config(_options):  # noqa: ANN001
+        return object(), config
+
+    class _FakeRuntime:
+        def __init__(self) -> None:
+            self.agent = object()
+            self.channel = object()
+            self.model = object()
+            self.config = config
+            self.client_channel = object()
+
+        async def close(self) -> None:
+            return None
+
+    async def _fake_bootstrap_runtime(_options):  # noqa: ANN001
+        return _FakeRuntime()
+
+    async def _fake_handle_mcp_tokens(_tokens, *, runtime):  # noqa: ANN001
+        _ = runtime
+        raise RuntimeError("manager unavailable")
+
+    monkeypatch.setattr(client_main, "load_effective_config", _fake_load_effective_config)
+    monkeypatch.setattr(client_main, "bootstrap_runtime", _fake_bootstrap_runtime)
+    monkeypatch.setattr(client_main, "handle_mcp_tokens", _fake_handle_mcp_tokens)
+
+    rc = await client_main.main(
+        [
+            "--workspace",
+            str(workspace),
+            "--user-dir",
+            str(user_dir),
+            "--output",
+            "json",
+            "mcp",
+            "reload",
+        ]
+    )
+
+    assert rc == 1
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert lines
+    payload = json.loads(lines[-1])
+    assert payload["type"] == "log"
+    assert payload["level"] == "info"
+    assert "/mcp list|inspect [tool_name]|reload [paths...]|unload" in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -459,6 +610,37 @@ async def test_main_chat_script_missing_file_returns_two(monkeypatch, tmp_path, 
     payload = json.loads(lines[-1])
     assert payload["type"] == "log"
     assert payload["level"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_run_chat_script_returns_nonzero_on_command_error(monkeypatch) -> None:
+    client_main = importlib.import_module("client.main")
+
+    async def _fake_handle_shell_command(*_args, **_kwargs):
+        raise ActionClientError("ACTION_HANDLER_FAILED", "failed", "approvals:list")
+
+    monkeypatch.setattr(client_main, "_handle_shell_command", _fake_handle_shell_command)
+
+    class _FakeClientChannel:
+        async def poll(self, timeout=None):  # noqa: ANN001
+            await asyncio.sleep(0)
+            return None
+
+    class _FakeRuntime:
+        agent = object()
+        channel = object()
+        model = object()
+        config = Config.from_dict({"workspace_dir": ".", "user_dir": "."})
+        client_channel = _FakeClientChannel()
+
+    rc = await client_main._run_chat(
+        runtime=_FakeRuntime(),
+        action_client=object(),
+        output=client_main.OutputFacade("json"),
+        mode="execute",
+        script_lines=["/status"],
+    )
+    assert rc == 1
 
 
 @pytest.mark.asyncio

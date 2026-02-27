@@ -542,9 +542,15 @@ async def _run_cli_loop(
                     background_execute=background_execute,
                 )
             except ActionClientError as exc:
+                # Command failures must affect scripted exit status.
+                state.last_execution_success = False
+                state.execution_failures += 1
                 output.error(str(exc))
                 continue
             except Exception as exc:  # noqa: BLE001
+                # Keep command exceptions visible while preserving deterministic script rc.
+                state.last_execution_success = False
+                state.execution_failures += 1
                 output.error(f"command failed: {exc}")
                 continue
             if quit_requested:
@@ -842,7 +848,11 @@ async def main(argv: list[str] | None = None) -> int:
     exit_code = 0
     try:
         command = args.command
-        provider, config = load_effective_config(options)
+        try:
+            provider, config = load_effective_config(options)
+        except (OSError, ValueError) as exc:
+            output.error(f"invalid config: {exc}")
+            return 2
         _ = provider
 
         output.header("DARE CLIENT CLI")
@@ -864,7 +874,11 @@ async def main(argv: list[str] | None = None) -> int:
             output.emit_data(_serialize(payload))
             return 0 if payload.get("ok") else 3
 
-        runtime = await bootstrap_runtime(options)
+        try:
+            runtime = await bootstrap_runtime(options)
+        except Exception as exc:  # noqa: BLE001
+            output.error(f"runtime bootstrap failed: {exc}")
+            return 1
         action_client = TransportActionClient(runtime.client_channel, timeout_seconds=args.timeout)
 
         if command == "chat":
@@ -977,7 +991,12 @@ async def main(argv: list[str] | None = None) -> int:
                 tokens.append(args.tool_name)
             if args.mcp_cmd == "reload":
                 tokens.extend(args.paths)
-            payload = await handle_mcp_tokens(tokens, runtime=runtime)
+            try:
+                payload = await handle_mcp_tokens(tokens, runtime=runtime)
+            except Exception as exc:  # noqa: BLE001
+                output.error(str(exc))
+                output.info("/mcp list|inspect [tool_name]|reload [paths...]|unload")
+                return 1
             if "tools" in payload:
                 output.info(format_mcp_inspection(payload["tools"]))
             else:
