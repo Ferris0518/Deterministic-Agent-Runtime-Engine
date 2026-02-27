@@ -1473,6 +1473,7 @@ class DareAgent(BaseAgent):
                     )
                     return {
                         "success": False,
+                        "status": "not_allow",
                         "error": trust_error,
                         "output": {},
                     }

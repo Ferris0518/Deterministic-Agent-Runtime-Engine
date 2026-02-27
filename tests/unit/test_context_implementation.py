@@ -261,3 +261,24 @@ def test_context_assemble_reserve_tokens_respects_knowledge_only_config():
     assert contents == ["q", "x" * 64]
     assert assembled.metadata["retrieval"]["knowledge_count"] == 1
     assert assembled.metadata["retrieval"]["degraded"] is False
+
+
+def test_context_assemble_handles_overflowing_numeric_retrieval_config() -> None:
+    ltm = _FakeRetrieval([Message(role="assistant", content="ltm-hit")])
+    config = Config(
+        long_term_memory={
+            "assemble_top_k": float("inf"),
+            "assemble_reserve_tokens": float("inf"),
+        },
+        knowledge={"assemble_top_k": 0},
+    )
+    ctx = Context(
+        config=config,
+        long_term_memory=ltm,
+        knowledge=None,
+    )
+    ctx.stm_add(Message(role="user", content="query"))
+
+    assembled = ctx.assemble()
+
+    assert assembled.metadata["retrieval"]["ltm_requested"] == 3

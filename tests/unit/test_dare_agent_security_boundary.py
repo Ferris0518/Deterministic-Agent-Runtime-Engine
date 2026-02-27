@@ -370,6 +370,7 @@ async def test_tool_loop_denied_by_security_policy() -> None:
     )
 
     assert result["success"] is False
+    assert result["status"] == "not_allow"
     assert "security policy" in str(result["error"])
     assert tool_gateway.invoke_calls == 0
 

@@ -198,7 +198,7 @@ class DefaultAssembledContext(IAssembleContext):
     def _safe_int(self, value: Any, default: int, *, minimum: int | None = None) -> int:
         try:
             parsed = int(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             parsed = default
         if minimum is not None:
             parsed = max(minimum, parsed)
