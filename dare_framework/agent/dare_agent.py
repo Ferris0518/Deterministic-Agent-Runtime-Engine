@@ -42,9 +42,11 @@ from dare_framework.plan.types import (
     Envelope,
     Milestone,
     RunResult,
+    StepResult,
     Task,
     ToolLoopRequest,
     ValidatedPlan,
+    ValidatedStep,
     VerifyResult,
 )
 from dare_framework.tool._internal.governed_tool_gateway import (
@@ -501,7 +503,10 @@ class DareAgent(BaseAgent):
             validated_plan = await self._run_plan_loop(milestone)
             self._log(f"Plan loop done, validated_plan={validated_plan is not None}")
 
-            plan_policy_error = await self._check_plan_policy(milestone, validated_plan)
+            plan_policy_error, plan_policy_decision = await self._check_plan_policy(
+                milestone,
+                validated_plan,
+            )
             if plan_policy_error is not None:
                 if self._sandbox is not None and snapshot_id:
                     self._sandbox.rollback(self._context, snapshot_id)
@@ -510,8 +515,27 @@ class DareAgent(BaseAgent):
                     "security.plan.policy",
                     {
                         "milestone_id": milestone.milestone_id,
-                        "decision": "deny",
+                        "decision": plan_policy_decision,
                         "error": plan_policy_error,
+                    },
+                )
+                await self._log_event(
+                    "milestone.failed",
+                    {
+                        "milestone_id": milestone.milestone_id,
+                        "attempts": attempt + 1,
+                        "reason": "plan_policy",
+                    },
+                )
+                await self._emit_hook(
+                    HookPhase.AFTER_MILESTONE,
+                    {
+                        "milestone_id": milestone.milestone_id,
+                        "success": False,
+                        "attempts": attempt + 1,
+                        "errors": [plan_policy_error],
+                        "duration_ms": (time.perf_counter() - milestone_start) * 1000.0,
+                        "budget_stats": self._budget_stats(),
                     },
                 )
                 return MilestoneResult(
@@ -718,7 +742,11 @@ class DareAgent(BaseAgent):
             "plan_present": plan is not None,
         })
         if self._execution_mode == "step_driven":
-            return await self._run_step_driven_execute_loop(plan, execute_start)
+            return await self._run_step_driven_execute_loop(
+                plan,
+                execute_start,
+                transport=transport,
+            )
 
         # Budget check
         self._context.budget_check()
@@ -945,6 +973,8 @@ class DareAgent(BaseAgent):
         self,
         plan: ValidatedPlan | None,
         execute_start: float,
+        *,
+        transport: AgentChannel | None = None,
     ) -> dict[str, Any]:
         """Run execute loop using validated steps and a step executor."""
         outputs: list[Any] = []
@@ -971,23 +1001,38 @@ class DareAgent(BaseAgent):
             })
 
         step_executor = self._step_executor
-        if step_executor is None:
-            from dare_framework.agent._internal.step_executor import DefaultStepExecutor
+        use_tool_loop_executor = step_executor is None
+        evidence_collector: Any | None = None
+        if use_tool_loop_executor:
+            from dare_framework.agent._internal.step_executor import DefaultEvidenceCollector
 
-            step_executor = DefaultStepExecutor(self._tool_gateway)
-            self._step_executor = step_executor
+            evidence_collector = self._evidence_collector
+            if evidence_collector is None:
+                evidence_collector = DefaultEvidenceCollector()
+                self._evidence_collector = evidence_collector
 
-        previous_results: list[Any] = []
+        previous_results: list[StepResult] = []
         for step in plan.steps:
             self._context.budget_check()
             if self._exec_ctl is not None:
                 self._poll_or_raise()
 
-            step_result = await step_executor.execute_step(
-                step,
-                self._context,
-                previous_results,
-            )
+            if use_tool_loop_executor:
+                step_result = await self._execute_step_via_tool_loop(
+                    step,
+                    previous_results,
+                    transport=transport,
+                    evidence_collector=evidence_collector,
+                )
+            else:
+                # Custom step executors may bypass tool-loop accounting; keep
+                # tool-call budgets aligned with one-step-one-tool execution.
+                self._context.budget_use("tool_calls", 1)
+                step_result = await step_executor.execute_step(
+                    step,
+                    self._context,
+                    previous_results,
+                )
             previous_results.append(step_result)
 
             if step_result.success:
@@ -1006,6 +1051,76 @@ class DareAgent(BaseAgent):
             "outputs": outputs,
             "errors": errors,
         })
+
+    async def _execute_step_via_tool_loop(
+        self,
+        step: ValidatedStep,
+        previous_results: list[StepResult],
+        *,
+        transport: AgentChannel | None,
+        evidence_collector: Any,
+    ) -> StepResult:
+        step_context = self._build_step_context_from_previous(previous_results)
+        descriptor = self._find_capability_descriptor(step.capability_id)
+        request = ToolLoopRequest(
+            capability_id=step.capability_id,
+            params={**step.params, **step_context},
+            envelope=step.envelope or Envelope(risk_level=step.risk_level),
+        )
+        tool_result = await self._run_tool_loop(
+            request,
+            transport=transport,
+            tool_name=step.capability_id,
+            tool_call_id=f"step-{step.step_id}",
+            descriptor=descriptor,
+        )
+        if tool_result.get("success"):
+            result_payload = tool_result.get("result")
+            if result_payload is None:
+                result_payload = tool_result.get("output")
+            evidence = evidence_collector.collect(
+                source=step.capability_id,
+                data={"result": result_payload, "params": step.params},
+                evidence_type="tool_result",
+            )
+            return StepResult(
+                step_id=step.step_id,
+                success=True,
+                output=result_payload,
+                evidence=[evidence],
+            )
+
+        error = str(tool_result.get("error") or f"step {step.step_id} failed")
+        return StepResult(
+            step_id=step.step_id,
+            success=False,
+            output=tool_result.get("output"),
+            errors=[error],
+        )
+
+    def _build_step_context_from_previous(
+        self,
+        previous_results: list[StepResult],
+    ) -> dict[str, Any]:
+        if not previous_results:
+            return {}
+
+        last_success = next(
+            (result for result in reversed(previous_results) if result.success),
+            None,
+        )
+        if last_success is None:
+            return {}
+        return {"_previous_output": last_success.output}
+
+    def _find_capability_descriptor(self, capability_id: str) -> Any | None:
+        try:
+            for descriptor in self._tool_gateway.list_capabilities():
+                if getattr(descriptor, "id", None) == capability_id:
+                    return descriptor
+        except Exception:
+            return None
+        return None
 
     # =========================================================================
     # Tool Loop (Layer 5)
@@ -1035,14 +1150,44 @@ class DareAgent(BaseAgent):
             attempts += 1
             self._context.budget_check()
             self._context.budget_use("tool_calls", 1)
-
-            trusted_params, trust_error = await self._resolve_tool_security(
-                capability_id=request.capability_id,
-                params=request.params,
-                tool_name=tool_name,
-                risk_level=risk_level,
-                requires_approval=requires_approval,
-            )
+            tool_start = time.perf_counter()
+            try:
+                trusted_params, trust_error = await self._resolve_tool_security(
+                    capability_id=request.capability_id,
+                    params=request.params,
+                    tool_name=tool_name,
+                    risk_level=risk_level,
+                    requires_approval=requires_approval,
+                )
+            except Exception as e:
+                await self._log_event("tool.error", {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": request.capability_id,
+                    "error": str(e),
+                    "attempt": attempts,
+                })
+                await self._emit_hook(
+                    HookPhase.AFTER_TOOL,
+                    {
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "capability_id": request.capability_id,
+                        "attempt": attempts,
+                        "success": False,
+                        "error": str(e),
+                        "approved": False,
+                        "evidence_collected": False,
+                        "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
+                        "budget_stats": self._budget_stats(),
+                    },
+                )
+                return {
+                    "success": False,
+                    "status": "fail",
+                    "error": str(e),
+                    "output": {},
+                }
             if trust_error is not None:
                 await self._log_event(
                     "security.tool.policy",
@@ -1065,7 +1210,7 @@ class DareAgent(BaseAgent):
                         "error": trust_error,
                         "approved": False,
                         "evidence_collected": False,
-                        "duration_ms": 0.0,
+                        "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
                         "budget_stats": self._budget_stats(),
                     },
                 )
@@ -1074,7 +1219,6 @@ class DareAgent(BaseAgent):
                     "error": trust_error,
                     "output": {},
                 }
-            tool_start = time.perf_counter()
             before_tool_dispatch = await self._emit_hook(
                 HookPhase.BEFORE_TOOL,
                 {
@@ -1261,7 +1405,7 @@ class DareAgent(BaseAgent):
         self,
         milestone: Milestone,
         validated_plan: ValidatedPlan | None,
-    ) -> str | None:
+    ) -> tuple[str | None, str]:
         decision = await self._security_boundary.check_policy(
             action="execute_plan",
             resource=milestone.milestone_id,
@@ -1273,10 +1417,10 @@ class DareAgent(BaseAgent):
             },
         )
         if decision is PolicyDecision.ALLOW:
-            return None
+            return None, "allow"
         if decision is PolicyDecision.APPROVE_REQUIRED:
-            return "execute plan requires security approval"
-        return "execute plan denied by security policy"
+            return "execute plan requires security approval", "approve_required"
+        return "execute plan denied by security policy", "deny"
 
     async def _resolve_tool_security(
         self,

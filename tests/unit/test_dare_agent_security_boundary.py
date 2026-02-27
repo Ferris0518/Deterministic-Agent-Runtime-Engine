@@ -7,6 +7,8 @@ import pytest
 from dare_framework.agent.dare_agent import DareAgent
 from dare_framework.config import Config
 from dare_framework.context import Context
+from dare_framework.hook.types import HookDecision, HookPhase, HookResult
+from dare_framework.infra.component import ComponentType
 from dare_framework.plan.types import ProposedPlan, Task, ToolLoopRequest, ValidatedPlan
 from dare_framework.security import PolicyDecision, RiskLevel, TrustedInput
 from dare_framework.tool.types import ToolResult
@@ -92,6 +94,20 @@ class _PlanDenyBoundary(_AllowBoundary):
         return PolicyDecision.ALLOW
 
 
+class _PlanApproveRequiredBoundary(_AllowBoundary):
+    async def check_policy(self, *, action: str, resource: str, context: dict[str, Any]) -> PolicyDecision:
+        _ = (resource, context)
+        if action == "execute_plan":
+            return PolicyDecision.APPROVE_REQUIRED
+        return PolicyDecision.ALLOW
+
+
+class _TrustFailureBoundary(_AllowBoundary):
+    async def verify_trust(self, *, input: dict[str, Any], context: dict[str, Any]) -> TrustedInput:
+        _ = (input, context)
+        raise RuntimeError("trust backend unavailable")
+
+
 class _Planner:
     async def plan(self, ctx: Any) -> ProposedPlan:
         _ = ctx
@@ -119,6 +135,36 @@ class _Validator:
         return VerifyResult(success=True)
 
 
+class _RecordingEventLog:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, Any]]] = []
+
+    async def append(self, event_type: str, payload: dict[str, Any]) -> str:
+        self.events.append((event_type, dict(payload)))
+        return f"evt-{len(self.events)}"
+
+
+class _RecordingPhaseHook:
+    def __init__(self) -> None:
+        self.phases: list[HookPhase] = []
+        self.payloads: list[dict[str, Any]] = []
+
+    @property
+    def name(self) -> str:
+        return "recording-phase-hook"
+
+    @property
+    def component_type(self) -> ComponentType:
+        return ComponentType.HOOK
+
+    async def invoke(self, phase: HookPhase, *args: Any, **kwargs: Any) -> HookResult:
+        _ = args
+        payload = kwargs.get("payload", {})
+        self.phases.append(phase)
+        self.payloads.append(payload if isinstance(payload, dict) else {})
+        return HookResult(decision=HookDecision.ALLOW)
+
+
 def _build_agent(
     *,
     boundary: Any,
@@ -126,6 +172,8 @@ def _build_agent(
     planner: Any | None = None,
     validator: Any | None = None,
     tool_gateway: _RecordingToolGateway | None = None,
+    event_log: Any | None = None,
+    hooks: list[Any] | None = None,
 ) -> DareAgent:
     return DareAgent(
         name="security-agent",
@@ -135,6 +183,8 @@ def _build_agent(
         planner=planner,
         validator=validator,
         security_boundary=boundary,
+        event_log=event_log,
+        hooks=hooks,
     )
 
 
@@ -202,3 +252,45 @@ async def test_plan_entry_denied_by_security_policy_stops_before_execute() -> No
     assert result.success is False
     assert any("execute plan denied by security policy" in str(err) for err in result.errors)
     assert model.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_plan_policy_failure_emits_after_milestone_and_precise_decision() -> None:
+    model = _RecordingModel()
+    event_log = _RecordingEventLog()
+    hook = _RecordingPhaseHook()
+    agent = _build_agent(
+        boundary=_PlanApproveRequiredBoundary(),
+        model=model,
+        planner=_Planner(),
+        validator=_Validator(),
+        event_log=event_log,
+        hooks=[hook],
+    )
+
+    result = await agent("run guarded task")
+
+    assert result.success is False
+    assert any("security approval" in str(err) for err in result.errors)
+    policy_events = [payload for event_type, payload in event_log.events if event_type == "security.plan.policy"]
+    assert policy_events
+    assert policy_events[-1].get("decision") == "approve_required"
+    assert any(event_type == "milestone.failed" for event_type, _ in event_log.events)
+    assert HookPhase.AFTER_MILESTONE in hook.phases
+    assert model.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_security_boundary_exception_returns_structured_failure() -> None:
+    tool_gateway = _RecordingToolGateway()
+    agent = _build_agent(boundary=_TrustFailureBoundary(), tool_gateway=tool_gateway)
+
+    result = await agent._run_tool_loop(  # noqa: SLF001
+        ToolLoopRequest(capability_id="tool.echo", params={"value": 1}),
+        tool_name="echo",
+        tool_call_id="tc-security-error",
+    )
+
+    assert result["success"] is False
+    assert "trust backend unavailable" in str(result["error"])
+    assert tool_gateway.invoke_calls == 0

@@ -9,7 +9,7 @@ from dare_framework.config import Config
 from dare_framework.context import Context
 from dare_framework.model.types import ModelInput, ModelResponse
 from dare_framework.plan.types import StepResult, ValidatedPlan, ValidatedStep
-from dare_framework.security.types import RiskLevel
+from dare_framework.security.types import PolicyDecision, RiskLevel, TrustedInput
 from dare_framework.tool.types import ToolResult
 
 
@@ -32,6 +32,31 @@ class _ToolGateway:
     async def invoke(self, capability_id: str, *, envelope: Any, **params: Any) -> ToolResult[dict[str, Any]]:
         _ = (capability_id, envelope, params)
         return ToolResult(success=True, output={"ok": True})
+
+
+class _AllowBoundary:
+    async def verify_trust(self, *, input: dict[str, Any], context: dict[str, Any]) -> TrustedInput:
+        _ = context
+        return TrustedInput(params=dict(input), risk_level=RiskLevel.READ_ONLY)
+
+    async def check_policy(self, *, action: str, resource: str, context: dict[str, Any]) -> PolicyDecision:
+        _ = (action, resource, context)
+        return PolicyDecision.ALLOW
+
+    async def execute_safe(self, *, action: str, fn: Any, sandbox: Any) -> Any:
+        _ = (action, sandbox)
+        value = fn()
+        if hasattr(value, "__await__"):
+            return await value
+        return value
+
+
+class _DenyToolBoundary(_AllowBoundary):
+    async def check_policy(self, *, action: str, resource: str, context: dict[str, Any]) -> PolicyDecision:
+        _ = (resource, context)
+        if action == "invoke_tool":
+            return PolicyDecision.DENY
+        return PolicyDecision.ALLOW
 
 
 class _RecordingStepExecutor:
@@ -58,14 +83,17 @@ def _build_agent(
     model: _RecordingModel,
     step_executor: _RecordingStepExecutor | None = None,
     execution_mode: str = "model_driven",
+    boundary: Any | None = None,
+    context: Context | None = None,
 ) -> DareAgent:
     return DareAgent(
         name="step-mode-agent",
         model=model,
-        context=Context(config=Config()),
+        context=context or Context(config=Config()),
         tool_gateway=_ToolGateway(),
         step_executor=step_executor,
         execution_mode=execution_mode,
+        security_boundary=boundary,
     )
 
 
@@ -140,3 +168,56 @@ async def test_builder_wires_execution_mode_and_step_executor() -> None:
 
     assert getattr(agent, "_execution_mode") == "step_driven"
     assert getattr(agent, "_step_executor") is step_executor
+
+
+@pytest.mark.asyncio
+async def test_step_driven_default_executor_routes_through_security_policy() -> None:
+    model = _RecordingModel()
+    context = Context(config=Config())
+    agent = _build_agent(
+        model=model,
+        execution_mode="step_driven",
+        boundary=_DenyToolBoundary(),
+        context=context,
+    )
+    validated_plan = ValidatedPlan(
+        success=True,
+        plan_description="step plan",
+        steps=[
+            ValidatedStep(step_id="s1", capability_id="tool.one", risk_level=RiskLevel.READ_ONLY),
+        ],
+    )
+
+    result = await agent._run_execute_loop(validated_plan)  # noqa: SLF001 - runtime unit boundary test
+
+    assert result["success"] is False
+    assert any("security policy" in error for error in result.get("errors", []))
+    assert context.budget.used_tool_calls == 1
+    assert model.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_step_driven_custom_executor_still_tracks_tool_call_budget() -> None:
+    model = _RecordingModel()
+    context = Context(config=Config())
+    step_executor = _RecordingStepExecutor()
+    agent = _build_agent(
+        model=model,
+        step_executor=step_executor,
+        execution_mode="step_driven",
+        boundary=_AllowBoundary(),
+        context=context,
+    )
+    validated_plan = ValidatedPlan(
+        success=True,
+        plan_description="step plan",
+        steps=[
+            ValidatedStep(step_id="s1", capability_id="tool.one", risk_level=RiskLevel.READ_ONLY),
+            ValidatedStep(step_id="s2", capability_id="tool.two", risk_level=RiskLevel.READ_ONLY),
+        ],
+    )
+
+    result = await agent._run_execute_loop(validated_plan)  # noqa: SLF001 - runtime unit boundary test
+
+    assert result["success"] is True
+    assert context.budget.used_tool_calls == 2
