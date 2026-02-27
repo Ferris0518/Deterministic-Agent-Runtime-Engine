@@ -53,7 +53,6 @@ async def test_session_loop_delegates_to_internal_runner(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         "dare_framework.agent.dare_agent.run_session_loop",
         _fake_runner,
-        raising=False,
     )
 
     result = await agent._run_session_loop(task)  # noqa: SLF001 - deliberate delegation assertion
@@ -79,7 +78,6 @@ async def test_milestone_loop_delegates_to_internal_runner(monkeypatch: pytest.M
     monkeypatch.setattr(
         "dare_framework.agent.dare_agent.run_milestone_loop",
         _fake_runner,
-        raising=False,
     )
 
     result = await agent._run_milestone_loop(milestone)  # noqa: SLF001 - deliberate delegation assertion
@@ -103,7 +101,6 @@ async def test_execute_loop_delegates_to_internal_runner(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         "dare_framework.agent.dare_agent.run_execute_loop",
         _fake_runner,
-        raising=False,
     )
 
     result = await agent._run_execute_loop(None)  # noqa: SLF001 - deliberate delegation assertion
@@ -136,7 +133,6 @@ async def test_tool_loop_delegates_to_internal_runner(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         "dare_framework.agent.dare_agent.run_tool_loop",
         _fake_runner,
-        raising=False,
     )
 
     result = await agent._run_tool_loop(  # noqa: SLF001 - deliberate delegation assertion
