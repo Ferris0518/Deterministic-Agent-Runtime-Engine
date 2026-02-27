@@ -671,7 +671,9 @@ async def _run_chat(
                 runtime=runtime,
                 action_client=action_client,
                 output=output,
-                background_execute=True,
+                # Script mode must be deterministic: run each task line to completion
+                # so later lines are not skipped behind an active background task.
+                background_execute=False,
             )
             if _is_execution_running(state):
                 output.warn("waiting for last background execution")
@@ -866,12 +868,16 @@ async def main(argv: list[str] | None = None) -> int:
         if command == "run":
             state = CLISessionState(mode=_normalize_mode(args.mode))
             if state.mode == ExecutionMode.PLAN:
-                plan = await preview_plan(
-                    task_text=args.task,
-                    model=runtime.model,
-                    workspace_dir=runtime.config.workspace_dir,
-                    user_dir=runtime.config.user_dir,
-                )
+                try:
+                    plan = await preview_plan(
+                        task_text=args.task,
+                        model=runtime.model,
+                        workspace_dir=runtime.config.workspace_dir,
+                        user_dir=runtime.config.user_dir,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    output.error(f"plan preview failed: {exc}")
+                    return 1
                 output.show_plan(plan)
                 if not args.approve:
                     output.info("plan only (pass --approve to execute)")

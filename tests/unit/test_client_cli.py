@@ -214,6 +214,121 @@ async def test_run_chat_script_returns_nonzero_on_failure(monkeypatch) -> None:
     assert rc == 1
 
 
+@pytest.mark.asyncio
+async def test_run_chat_script_executes_tasks_sequentially(monkeypatch) -> None:
+    client_main = importlib.import_module("client.main")
+    calls: list[str] = []
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    class _FakeResult:
+        success = True
+        output = "ok"
+        errors = None
+
+    async def _fake_run_task(*, agent, task_text, conversation_id=None, transport=None):  # noqa: ANN001
+        _ = (agent, conversation_id, transport)
+        calls.append(task_text)
+        if len(calls) == 1:
+            first_started.set()
+            await release_first.wait()
+        return _FakeResult()
+
+    monkeypatch.setattr(client_main, "run_task", _fake_run_task)
+
+    class _FakeClientChannel:
+        async def poll(self, timeout=None):  # noqa: ANN001
+            await asyncio.sleep(0)
+            return None
+
+    class _FakeRuntime:
+        agent = object()
+        channel = object()
+        model = object()
+        config = Config.from_dict({"workspace_dir": ".", "user_dir": "."})
+        client_channel = _FakeClientChannel()
+
+    task = asyncio.create_task(
+        client_main._run_chat(
+            runtime=_FakeRuntime(),
+            action_client=object(),
+            output=client_main.OutputFacade("json"),
+            mode="execute",
+            script_lines=["task one", "task two"],
+        )
+    )
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    await asyncio.sleep(0)
+    release_first.set()
+    rc = await task
+
+    assert rc == 0
+    assert calls == ["task one", "task two"]
+
+
+@pytest.mark.asyncio
+async def test_main_run_plan_preview_failure_returns_one(monkeypatch, tmp_path) -> None:
+    client_main = importlib.import_module("client.main")
+    workspace = tmp_path / "workspace"
+    user_dir = tmp_path / "user"
+    workspace.mkdir(parents=True, exist_ok=True)
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    config = Config.from_dict(
+        {
+            "workspace_dir": str(workspace),
+            "user_dir": str(user_dir),
+            "llm": {
+                "adapter": "openai",
+                "model": "gpt-4o-mini",
+                "api_key": "dummy",
+            },
+        }
+    )
+
+    def _fake_load_effective_config(_options):  # noqa: ANN001
+        return object(), config
+
+    class _FakeRuntime:
+        def __init__(self) -> None:
+            self.agent = object()
+            self.channel = object()
+            self.model = object()
+            self.config = config
+            self.client_channel = object()
+
+        async def close(self) -> None:
+            return None
+
+    async def _fake_bootstrap_runtime(_options):  # noqa: ANN001
+        return _FakeRuntime()
+
+    async def _fake_preview_plan(*, task_text, model, workspace_dir, user_dir):  # noqa: ANN001
+        _ = (task_text, model, workspace_dir, user_dir)
+        raise RuntimeError("plan adapter unavailable")
+
+    monkeypatch.setattr(client_main, "load_effective_config", _fake_load_effective_config)
+    monkeypatch.setattr(client_main, "bootstrap_runtime", _fake_bootstrap_runtime)
+    monkeypatch.setattr(client_main, "preview_plan", _fake_preview_plan)
+
+    rc = await client_main.main(
+        [
+            "--workspace",
+            str(workspace),
+            "--user-dir",
+            str(user_dir),
+            "--output",
+            "json",
+            "run",
+            "--task",
+            "summarize readme",
+            "--mode",
+            "plan",
+        ]
+    )
+    assert rc == 1
+
+
 def test_output_facade_json_schema(capsys) -> None:
     client_main = importlib.import_module("client.main")
     output = client_main.OutputFacade("json")
