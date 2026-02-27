@@ -7,6 +7,32 @@ cd "$ROOT_DIR"
 
 failures=0
 
+if command -v rg >/dev/null 2>&1; then
+  SEARCH_BIN="rg"
+else
+  SEARCH_BIN="grep"
+fi
+
+search_has_match() {
+  local pattern="$1"
+  shift
+  if [[ "$SEARCH_BIN" == "rg" ]]; then
+    rg -q -- "$pattern" "$@"
+  else
+    grep -Eq -- "$pattern" "$@"
+  fi
+}
+
+search_list_matches() {
+  local pattern="$1"
+  shift
+  if [[ "$SEARCH_BIN" == "rg" ]]; then
+    rg -n -- "$pattern" "$@"
+  else
+    grep -En -- "$pattern" "$@"
+  fi
+}
+
 require_file() {
   local path="$1"
   if [[ ! -f "$path" ]]; then
@@ -19,7 +45,7 @@ require_pattern_in_file() {
   local pattern="$1"
   local file="$2"
   local label="$3"
-  if ! rg -q "$pattern" "$file"; then
+  if ! search_has_match "$pattern" "$file"; then
     echo "[design-doc-drift] missing required pattern ($label) in $file"
     failures=$((failures + 1))
   fi
@@ -30,7 +56,7 @@ reject_pattern_in_targets() {
   local label="$2"
   shift 2
   local targets=("$@")
-  if rg -n "$pattern" "${targets[@]}" >/tmp/design-doc-drift-match.log 2>/dev/null; then
+  if search_list_matches "$pattern" "${targets[@]}" >/tmp/design-doc-drift-match.log 2>/dev/null; then
     echo "[design-doc-drift] stale claim detected ($label):"
     cat /tmp/design-doc-drift-match.log
     failures=$((failures + 1))
@@ -47,7 +73,7 @@ require_pattern_in_file "Design_Reconstruction_SOP\\.md" "docs/design/Architectu
 
 echo "[design-doc-drift] checking module status labels..."
 for file in docs/design/modules/*/README.md; do
-  if ! rg -q "## 能力状态（landed / partial / planned）" "$file"; then
+  if ! search_has_match "## 能力状态（landed / partial / planned）" "$file"; then
     echo "[design-doc-drift] missing status labels section in $file"
     failures=$((failures + 1))
   fi
