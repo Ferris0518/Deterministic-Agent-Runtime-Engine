@@ -79,4 +79,27 @@ def normalize_run_output(output: Any) -> str | None:
     return normalized or None
 
 
-__all__ = ["extract_text_payload", "normalize_run_output"]
+def build_output_envelope(
+    output: Any,
+    *,
+    metadata: dict[str, Any] | None = None,
+    usage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a normalized RunResult.output envelope.
+
+    Envelope schema:
+    - content: str
+    - metadata: dict
+    - usage: dict | None
+    """
+    content = normalize_run_output(output) or ""
+    envelope_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    envelope_usage = usage if isinstance(usage, dict) else None
+    return {
+        "content": content,
+        "metadata": envelope_metadata,
+        "usage": envelope_usage,
+    }
+
+
+__all__ = ["build_output_envelope", "extract_text_payload", "normalize_run_output"]

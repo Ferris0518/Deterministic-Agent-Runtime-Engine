@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from dare_framework.agent._internal.output_normalizer import build_output_envelope
 from dare_framework.agent.base_agent import BaseAgent
 from dare_framework.context import Context, Message
 from dare_framework.model import IModelAdapter, ModelInput
@@ -119,10 +120,11 @@ class ReactAgent(BaseAgent):
                     final_text = "模型未返回可显示的文本回复。请重试，或明确要求先调用 ask_user 再继续。"
                 assistant_message = Message(role="assistant", content=final_text)
                 self._context.stm_add(assistant_message)
+                output = build_output_envelope(final_text)
                 return RunResult(
                     success=True,
-                    output=final_text,
-                    output_text=final_text,
+                    output=output,
+                    output_text=output["content"],
                 )
 
             current_signature = _tool_calls_signature(response.tool_calls)
@@ -135,7 +137,8 @@ class ReactAgent(BaseAgent):
             if repeated_tool_rounds >= 3:
                 loop_guard = "模型连续重复调用相同工具，已停止自动循环。请换一种描述，或明确要求先调用 ask_user 再继续。"
                 self._context.stm_add(Message(role="assistant", content=loop_guard))
-                return RunResult(success=True, output=loop_guard, output_text=loop_guard)
+                output = build_output_envelope(loop_guard)
+                return RunResult(success=True, output=output, output_text=output["content"])
 
             assistant_msg = Message(
                 role="assistant",
@@ -170,10 +173,11 @@ class ReactAgent(BaseAgent):
                 self._context.stm_add(tool_msg)
 
         final_message = "模型在工具循环中未收敛（达到最大轮次）。请缩小范围，或明确要求先调用 ask_user 再继续。"
+        output = build_output_envelope(final_message)
         return RunResult(
             success=True,
-            output=final_message,
-            output_text=final_message,
+            output=output,
+            output_text=output["content"],
         )
 
 

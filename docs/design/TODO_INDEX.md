@@ -4,6 +4,11 @@
 >
 > 用途：集中查看当前架构/模块设计文档中的 TODO，便于分工与追踪。
 
+## Current Sprint (Agent)
+- [x] A-103 统一输出数据形状（`RunResult.output` envelope: `content/metadata/usage`）
+- [ ] A-101 DareAgent 结构化拆分（最小可落地版本）
+- [ ] A-102 step-driven 路径策略定稿（实现最小闭环 或 明确下线）
+
 ## agent
 - [ ] 将 ValidatedPlan.steps 驱动 Execute Loop（计划执行一致性）。(`docs/design/modules/agent/README.md`)
 - [ ] 引入 plan attempt snapshot/rollback，实现失败计划隔离。(`docs/design/modules/agent/README.md`)
