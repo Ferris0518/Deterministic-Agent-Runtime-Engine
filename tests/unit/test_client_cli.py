@@ -823,6 +823,20 @@ def test_sync_main_wraps_async_main(monkeypatch: pytest.MonkeyPatch) -> None:
     assert rc == 7
 
 
+def test_default_auto_approve_tools_are_runtime_tool_subset() -> None:
+    client_main = importlib.import_module("client.main")
+    runtime_bootstrap = importlib.import_module("client.runtime.bootstrap")
+
+    runtime_tool_names = {
+        runtime_bootstrap.ReadFileTool().name,
+        runtime_bootstrap.WriteFileTool().name,
+        runtime_bootstrap.SearchCodeTool().name,
+        runtime_bootstrap.RunCommandTool().name,
+    }
+
+    assert client_main.DEFAULT_AUTO_APPROVE_TOOLS.issubset(runtime_tool_names)
+
+
 def test_cli_raises_system_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     client_main = importlib.import_module("client.main")
     monkeypatch.setattr(client_main, "sync_main", lambda argv=None: 5)

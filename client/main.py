@@ -258,11 +258,10 @@ class _ApprovalWatchState:
 DEFAULT_AUTO_APPROVE_TOOLS: frozenset[str] = frozenset(
     {
         # Low-risk built-in tools; callers can extend with --auto-approve-tool.
+        # Keep this set aligned with currently registered runtime tool names.
         "read_file",
         "search_code",
-        "search_file",
         "write_file",
-        "edit_line",
     }
 )
 
