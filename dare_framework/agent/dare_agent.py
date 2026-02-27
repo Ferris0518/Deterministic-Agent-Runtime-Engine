@@ -167,6 +167,13 @@ class DareAgent(BaseAgent):
             execution_mode: "model_driven" (default) or "step_driven".
         """
         super().__init__(name, agent_channel=agent_channel)
+        normalized_execution_mode = execution_mode.strip().lower()
+        if normalized_execution_mode not in {"model_driven", "step_driven"}:
+            raise ValueError("execution_mode must be 'model_driven' or 'step_driven'")
+        # Planner output in step-driven mode must pass validator-derived trust/policy metadata.
+        if normalized_execution_mode == "step_driven" and planner is not None and validator is None:
+            raise ValueError("step_driven execution with planner requires validator")
+
         self._model = model
         self._logger = logging.getLogger("dare.agent")
         self._context = context
@@ -193,7 +200,7 @@ class DareAgent(BaseAgent):
         self._sandbox = sandbox
         self._step_executor = step_executor
         self._evidence_collector = evidence_collector
-        self._execution_mode = execution_mode
+        self._execution_mode = normalized_execution_mode
 
         # Create default sandbox if not provided
         if self._sandbox is None:

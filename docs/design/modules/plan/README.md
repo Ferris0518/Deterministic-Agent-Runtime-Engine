@@ -63,6 +63,7 @@ flowchart TD
 ## 7. 约束与限制
 
 - 当前运行时已支持 `execution_mode="step_driven"`：`ValidatedPlan.steps` 由 `IStepExecutor` 顺序执行；默认仍为 `model_driven`。
+- 当 `execution_mode="step_driven"` 且启用了 `planner` 时，MUST 同时配置 `validator`；运行时在构造阶段对该组合执行 fail-fast 校验。
 - `plan/kernel.py` 为空壳，稳定 surface 主要位于 interfaces/types。
 - 默认 `IPlanAttemptSandbox` 实现位于 `dare_framework/agent/_internal/sandbox.py`，尚未下沉为 plan domain 内建默认实现。
 

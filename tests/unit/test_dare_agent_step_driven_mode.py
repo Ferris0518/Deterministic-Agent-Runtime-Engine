@@ -118,6 +118,12 @@ class _RecordingStepExecutor:
         )
 
 
+class _NoOpPlanner:
+    async def plan(self, context: Any) -> Any:
+        _ = context
+        raise RuntimeError("planner should not be called in this test")
+
+
 def _build_agent(
     *,
     model: _RecordingModel,
@@ -126,12 +132,16 @@ def _build_agent(
     boundary: Any | None = None,
     context: Context | None = None,
     tool_gateway: Any | None = None,
+    planner: Any | None = None,
+    validator: Any | None = None,
 ) -> DareAgent:
     return DareAgent(
         name="step-mode-agent",
         model=model,
         context=context or Context(config=Config()),
         tool_gateway=tool_gateway or _ToolGateway(),
+        planner=planner,
+        validator=validator,
         step_executor=step_executor,
         execution_mode=execution_mode,
         security_boundary=boundary,
@@ -209,6 +219,29 @@ async def test_builder_wires_execution_mode_and_step_executor() -> None:
 
     assert getattr(agent, "_execution_mode") == "step_driven"
     assert getattr(agent, "_step_executor") is step_executor
+
+
+def test_constructor_rejects_step_driven_planner_without_validator() -> None:
+    model = _RecordingModel()
+    with pytest.raises(ValueError, match="step_driven execution with planner requires validator"):
+        _build_agent(
+            model=model,
+            planner=_NoOpPlanner(),
+            execution_mode="step_driven",
+        )
+
+
+@pytest.mark.asyncio
+async def test_builder_rejects_step_driven_planner_without_validator() -> None:
+    model = _RecordingModel()
+    with pytest.raises(ValueError, match="step_driven execution with planner requires validator"):
+        await (
+            BaseAgent.dare_agent_builder("builder-step-mode-no-validator")
+            .with_model(model)
+            .with_execution_mode("step_driven")
+            .with_planner(_NoOpPlanner())
+            .build()
+        )
 
 
 @pytest.mark.asyncio

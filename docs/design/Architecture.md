@@ -262,7 +262,7 @@ sequenceDiagram
 4. **Execute Loop**：执行模式可切换（默认模型驱动；可选 step-driven）
 5. **Tool Loop**：WorkUnit 闭环（Envelope + DonePredicate）
 
-> 现状说明：Plan Loop 与 step-driven Execute Loop 均已接入；默认模式仍是 model-driven，step-driven 场景覆盖仍在扩展。
+> 现状说明：Plan Loop 与 step-driven Execute Loop 均已接入；默认模式仍是 model-driven，step-driven 场景覆盖仍在扩展。若 step-driven 同时启用 planner，必须配置 validator（构造期 fail-fast）。
 
 ### 3.3 核心约束：Plan Attempt Isolation（失败计划隔离）
 
