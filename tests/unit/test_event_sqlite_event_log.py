@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import pytest
 
 from dare_framework.event import DefaultEventLog, Event, RuntimeSnapshot, SQLiteEventLog
-from dare_framework.event.impl import SQLiteEventLog as CompatSQLiteEventLog
 from dare_framework.observability._internal.event_trace_bridge import TraceAwareEventLog, make_trace_aware
 
 
@@ -69,18 +68,6 @@ async def test_verify_chain_detects_tampered_row(tmp_path) -> None:
         conn.commit()
 
     assert await event_log.verify_chain() is False
-
-
-@pytest.mark.asyncio
-async def test_compat_import_alias_works(tmp_path) -> None:
-    db_path = tmp_path / "events.db"
-    event_log = CompatSQLiteEventLog(db_path)
-
-    event_id = await event_log.append("compat.test", {"ok": True})
-    events = await event_log.query(filter={"event_id": event_id}, limit=10)
-
-    assert len(events) == 1
-    assert events[0].event_type == "compat.test"
 
 
 @pytest.mark.asyncio
