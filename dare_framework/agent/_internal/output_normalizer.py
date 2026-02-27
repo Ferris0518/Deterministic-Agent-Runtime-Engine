@@ -67,6 +67,8 @@ def extract_text_payload(value: Any) -> str | None:
 
 def normalize_run_output(output: Any) -> str | None:
     """Normalize RunResult.output for display/logging channels."""
+    if output is None:
+        return None
     text = extract_text_payload(output)
     if text:
         return text
