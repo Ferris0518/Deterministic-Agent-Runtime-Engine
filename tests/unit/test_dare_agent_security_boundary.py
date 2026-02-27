@@ -372,3 +372,21 @@ async def test_tool_policy_context_preserves_canonical_fields_over_metadata() ->
 
     assert trusted_params == {}
     assert "security policy" in str(trust_error)
+
+
+@pytest.mark.asyncio
+async def test_plan_policy_check_skipped_when_plan_is_absent() -> None:
+    model = _RecordingModel()
+    event_log = _RecordingEventLog()
+    agent = _build_agent(
+        boundary=_PlanDenyBoundary(),
+        model=model,
+        event_log=event_log,
+    )
+
+    result = await agent("run task without planner")
+
+    assert result.success is True
+    assert model.calls == 1
+    policy_events = [payload for event_type, payload in event_log.events if event_type == "security.plan.policy"]
+    assert policy_events == []

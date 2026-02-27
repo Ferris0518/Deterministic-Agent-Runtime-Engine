@@ -415,3 +415,32 @@ async def test_step_driven_custom_executor_still_tracks_tool_call_budget() -> No
 
     assert result["success"] is True
     assert context.budget.used_tool_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_step_driven_custom_executor_respects_security_policy() -> None:
+    model = _RecordingModel()
+    context = Context(config=Config())
+    step_executor = _RecordingStepExecutor()
+    agent = _build_agent(
+        model=model,
+        step_executor=step_executor,
+        execution_mode="step_driven",
+        boundary=_DenyToolBoundary(),
+        context=context,
+    )
+    validated_plan = ValidatedPlan(
+        success=True,
+        plan_description="step plan",
+        steps=[
+            ValidatedStep(step_id="s1", capability_id="tool.one", risk_level=RiskLevel.READ_ONLY),
+        ],
+    )
+
+    result = await agent._run_execute_loop(validated_plan)  # noqa: SLF001 - runtime unit boundary test
+
+    assert result["success"] is False
+    assert any("security policy" in error for error in result.get("errors", []))
+    assert step_executor.step_ids == []
+    assert context.budget.used_tool_calls == 1
+    assert model.calls == 0

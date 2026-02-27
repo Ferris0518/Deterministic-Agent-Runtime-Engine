@@ -510,16 +510,19 @@ class DareAgent(BaseAgent):
             validated_plan = await self._run_plan_loop(milestone)
             self._log(f"Plan loop done, validated_plan={validated_plan is not None}")
 
-            try:
-                plan_policy_error, plan_policy_decision = await self._check_plan_policy(
-                    milestone,
-                    validated_plan,
-                )
-            except Exception as exc:
-                # Preserve milestone-level failure semantics when policy backends
-                # are unavailable instead of aborting the whole run.
-                plan_policy_error = f"plan policy evaluation failed: {exc}"
-                plan_policy_decision = "error"
+            plan_policy_error: str | None = None
+            plan_policy_decision = "not_applicable"
+            if validated_plan is not None:
+                try:
+                    plan_policy_error, plan_policy_decision = await self._check_plan_policy(
+                        milestone,
+                        validated_plan,
+                    )
+                except Exception as exc:
+                    # Preserve milestone-level failure semantics when policy backends
+                    # are unavailable instead of aborting the whole run.
+                    plan_policy_error = f"plan policy evaluation failed: {exc}"
+                    plan_policy_decision = "error"
             if plan_policy_error is not None:
                 if self._sandbox is not None and snapshot_id:
                     self._sandbox.rollback(self._context, snapshot_id)
@@ -1041,9 +1044,9 @@ class DareAgent(BaseAgent):
                 # Custom step executors may bypass tool-loop accounting; keep
                 # tool-call budgets aligned with one-step-one-tool execution.
                 self._context.budget_use("tool_calls", 1)
-                step_result = await step_executor.execute_step(
+                step_result = await self._execute_step_via_custom_executor(
+                    step_executor,
                     step,
-                    self._context,
                     previous_results,
                 )
             previous_results.append(step_result)
@@ -1113,6 +1116,85 @@ class DareAgent(BaseAgent):
             success=False,
             output=tool_result.get("output"),
             errors=[error],
+        )
+
+    async def _execute_step_via_custom_executor(
+        self,
+        step_executor: IStepExecutor,
+        step: ValidatedStep,
+        previous_results: list[StepResult],
+    ) -> StepResult:
+        """Execute custom step executors behind the same security gates."""
+        step_context = self._build_step_context_from_previous(previous_results)
+        descriptor = self._find_capability_descriptor(step.capability_id)
+        envelope = step.envelope or Envelope(risk_level=step.risk_level)
+        risk_level = max(
+            self._risk_level_value(descriptor),
+            self._risk_level_value_from_envelope(envelope),
+        )
+        requires_approval = self._requires_approval(descriptor)
+        metadata_requires_approval = step.metadata.get("requires_approval")
+        if isinstance(metadata_requires_approval, bool):
+            requires_approval = requires_approval or metadata_requires_approval
+
+        try:
+            trusted_params, trust_error = await self._resolve_tool_security(
+                capability_id=step.capability_id,
+                params={**step.params, **step_context},
+                tool_name=step.capability_id,
+                risk_level=risk_level,
+                requires_approval=requires_approval,
+            )
+        except Exception as exc:
+            return StepResult(
+                step_id=step.step_id,
+                success=False,
+                output=None,
+                errors=[str(exc)],
+            )
+
+        if trust_error is not None:
+            return StepResult(
+                step_id=step.step_id,
+                success=False,
+                output=None,
+                errors=[trust_error],
+            )
+
+        secured_step = replace(step, params=trusted_params, envelope=envelope)
+        try:
+            result = await self._security_boundary.execute_safe(
+                action="invoke_tool",
+                fn=lambda: step_executor.execute_step(
+                    secured_step,
+                    self._context,
+                    previous_results,
+                ),
+                sandbox=SandboxSpec(
+                    mode="step_executor",
+                    details={
+                        "capability_id": step.capability_id,
+                        "step_id": step.step_id,
+                        "executor": step_executor.__class__.__name__,
+                    },
+                ),
+            )
+        except Exception as exc:
+            return StepResult(
+                step_id=step.step_id,
+                success=False,
+                output=None,
+                errors=[str(exc)],
+            )
+
+        if isinstance(result, StepResult):
+            return result
+
+        return StepResult(
+            step_id=step.step_id,
+            success=False,
+            output=None,
+            errors=["step executor returned invalid StepResult"],
         )
 
     def _build_step_context_from_previous(
