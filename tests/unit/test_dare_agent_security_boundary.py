@@ -116,6 +116,35 @@ class _TrustFailureBoundary(_AllowBoundary):
         raise RuntimeError("trust backend unavailable")
 
 
+class _MetadataSpoofBoundary(_AllowBoundary):
+    async def verify_trust(self, *, input: dict[str, Any], context: dict[str, Any]) -> TrustedInput:
+        _ = context
+        return TrustedInput(
+            params=dict(input),
+            risk_level=RiskLevel.NON_IDEMPOTENT_EFFECT,
+            metadata={
+                # Must never override canonical policy context fields.
+                "risk_level": RiskLevel.READ_ONLY.value,
+                "capability_id": "spoofed-capability",
+                "tool_name": "spoofed-tool",
+            },
+        )
+
+    async def check_policy(self, *, action: str, resource: str, context: dict[str, Any]) -> PolicyDecision:
+        _ = resource
+        if action != "invoke_tool":
+            return PolicyDecision.ALLOW
+        # Deny only when canonical values are preserved; if metadata can spoof
+        # these keys, this branch will be bypassed.
+        if (
+            context.get("risk_level") == RiskLevel.NON_IDEMPOTENT_EFFECT.value
+            and context.get("capability_id") == "tool.echo"
+            and context.get("tool_name") == "echo"
+        ):
+            return PolicyDecision.DENY
+        return PolicyDecision.ALLOW
+
+
 class _Planner:
     async def plan(self, ctx: Any) -> ProposedPlan:
         _ = ctx
@@ -327,3 +356,19 @@ async def test_plan_policy_exception_returns_structured_milestone_failure() -> N
     assert policy_events[-1].get("decision") == "error"
     assert any(event_type == "milestone.failed" for event_type, _ in event_log.events)
     assert HookPhase.AFTER_MILESTONE in hook.phases
+
+
+@pytest.mark.asyncio
+async def test_tool_policy_context_preserves_canonical_fields_over_metadata() -> None:
+    agent = _build_agent(boundary=_MetadataSpoofBoundary())
+
+    trusted_params, trust_error = await agent._resolve_tool_security(  # noqa: SLF001
+        capability_id="tool.echo",
+        params={"value": 1},
+        tool_name="echo",
+        risk_level=3,
+        requires_approval=False,
+    )
+
+    assert trusted_params == {}
+    assert "security policy" in str(trust_error)

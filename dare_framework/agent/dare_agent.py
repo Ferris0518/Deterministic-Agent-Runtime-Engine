@@ -1459,11 +1459,12 @@ class DareAgent(BaseAgent):
             action="invoke_tool",
             resource=capability_id,
             context={
+                # Canonical policy keys must not be overridden by metadata.
+                **trusted_input.metadata,
                 "capability_id": capability_id,
                 "tool_name": tool_name,
                 "risk_level": trusted_input.risk_level.value,
                 "requires_approval": requires_approval,
-                **trusted_input.metadata,
             },
         )
         if decision is PolicyDecision.ALLOW:
