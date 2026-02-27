@@ -64,6 +64,7 @@ from dare_framework.plan.interfaces import (
     IValidator,
     IValidatorManager,
 )
+from dare_framework.security import ISecurityBoundary
 from dare_framework.skill import Skill, ISkillLoader, ISkillStore, SkillStoreBuilder
 from dare_framework.skill._internal.action_handler import SkillsActionHandler
 from dare_framework.skill._internal.filesystem_skill_loader import FileSystemSkillLoader
@@ -603,6 +604,7 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
         self._execution_control: IExecutionControl | None = None
         self._execution_mode: str = "model_driven"
         self._step_executor: IStepExecutor | None = None
+        self._security_boundary: ISecurityBoundary | None = None
         self._hooks: list[IHook] = []
         self._telemetry: ITelemetryProvider | None = None
         self._verbose: bool = False
@@ -636,6 +638,10 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
 
     def with_step_executor(self, step_executor: IStepExecutor) -> DareAgentBuilder:
         self._step_executor = step_executor
+        return self
+
+    def with_security_boundary(self, security_boundary: ISecurityBoundary) -> DareAgentBuilder:
+        self._security_boundary = security_boundary
         return self
 
     def add_hooks(self, *hooks: IHook) -> DareAgentBuilder:
@@ -749,6 +755,7 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
             telemetry=telemetry,
             step_executor=self._step_executor,
             execution_mode=self._execution_mode,
+            security_boundary=self._security_boundary,
             agent_channel=agent_channel,
             verbose=self._verbose,
             approval_manager=approval_manager,

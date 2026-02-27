@@ -193,6 +193,22 @@ async def test_builder_wires_execution_mode_and_step_executor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_builder_wires_security_boundary() -> None:
+    model = _RecordingModel()
+    boundary = _DenyToolBoundary()
+
+    agent = (
+        BaseAgent.dare_agent_builder("builder-security-boundary")
+        .with_model(model)
+        .with_security_boundary(boundary)
+        .build()
+    )
+    agent = await agent
+
+    assert getattr(agent, "_security_boundary") is boundary
+
+
+@pytest.mark.asyncio
 async def test_step_driven_default_executor_routes_through_security_policy() -> None:
     model = _RecordingModel()
     context = Context(config=Config())
