@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import re
+import tarfile
 import tomllib
 import zipfile
 from pathlib import Path
@@ -43,6 +45,20 @@ def _wheel_filename(project: dict) -> str:
     name = _normalize_dist_name(str(project["name"]))
     version = str(project["version"])
     return f"{name}-{version}-py3-none-any.whl"
+
+
+def _normalize_sdist_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _sdist_root_dir(project: dict) -> str:
+    name = _normalize_sdist_name(str(project["name"]))
+    version = str(project["version"])
+    return f"{name}-{version}"
+
+
+def _sdist_filename(project: dict) -> str:
+    return f"{_sdist_root_dir(project)}.tar.gz"
 
 
 def _metadata_text(project: dict) -> str:
@@ -90,6 +106,33 @@ def _package_files() -> Iterable[Path]:
         for path in sorted(base.rglob("*")):
             if path.is_file() and path.suffix == ".py":
                 yield path
+
+
+def _sdist_files() -> Iterable[Path]:
+    root = _project_root()
+    seen: set[Path] = set()
+
+    def _yield(path: Path) -> Iterable[Path]:
+        if not path.exists() or not path.is_file():
+            return ()
+        if path in seen:
+            return ()
+        seen.add(path)
+        return (path,)
+
+    for candidate in (
+        root / "pyproject.toml",
+        root / "_local_backend.py",
+        root / "requirements.txt",
+        root / "pytest.ini",
+        root / "client" / "README.md",
+    ):
+        yield from _yield(candidate)
+
+    for file_path in _package_files():
+        if file_path not in seen:
+            seen.add(file_path)
+            yield file_path
 
 
 def _hash_and_size(payload: bytes) -> tuple[str, int]:
@@ -152,6 +195,33 @@ def _write_metadata_directory(metadata_directory: str) -> str:
     return dist_info
 
 
+def build_sdist(
+    sdist_directory: str,
+    config_settings: dict | None = None,
+) -> str:
+    _ = config_settings
+    sdist_dir = Path(sdist_directory)
+    sdist_dir.mkdir(parents=True, exist_ok=True)
+
+    project = _load_project_metadata()
+    filename = _sdist_filename(project)
+    root_dir = _sdist_root_dir(project)
+    artifact_path = sdist_dir / filename
+    project_root = _project_root()
+
+    with tarfile.open(artifact_path, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        for file_path in _sdist_files():
+            relpath = file_path.relative_to(project_root).as_posix()
+            archive.add(file_path, arcname=f"{root_dir}/{relpath}", recursive=False)
+
+        metadata_payload = _metadata_text(project).encode("utf-8")
+        pkg_info = tarfile.TarInfo(name=f"{root_dir}/PKG-INFO")
+        pkg_info.size = len(metadata_payload)
+        archive.addfile(pkg_info, io.BytesIO(metadata_payload))
+
+    return filename
+
+
 def build_wheel(
     wheel_directory: str,
     config_settings: dict | None = None,
@@ -176,6 +246,11 @@ def get_requires_for_build_wheel(config_settings: dict | None = None) -> list[st
 
 
 def get_requires_for_build_editable(config_settings: dict | None = None) -> list[str]:
+    _ = config_settings
+    return []
+
+
+def get_requires_for_build_sdist(config_settings: dict | None = None) -> list[str]:
     _ = config_settings
     return []
 

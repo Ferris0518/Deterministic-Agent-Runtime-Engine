@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import json
 
@@ -271,6 +272,39 @@ async def test_run_chat_script_executes_tasks_sequentially(monkeypatch) -> None:
 
     assert rc == 0
     assert calls == ["task one", "task two"]
+
+
+@pytest.mark.asyncio
+async def test_approve_keeps_pending_plan_when_background_execution_is_running() -> None:
+    client_main = importlib.import_module("client.main")
+    state = client_main.CLISessionState(mode=client_main.ExecutionMode.PLAN)
+    state.status = client_main.SessionStatus.AWAITING_APPROVAL
+    state.pending_plan = {"steps": []}
+    state.pending_task_description = "do pending task"
+
+    blocker = asyncio.Event()
+
+    async def _running_task() -> None:
+        await blocker.wait()
+
+    state.active_execution_task = asyncio.create_task(_running_task())
+    try:
+        quit_requested = await client_main._handle_shell_command(
+            Command(type=CommandType.APPROVE, args=[], raw_input="/approve"),
+            state=state,
+            runtime=object(),
+            action_client=object(),
+            output=client_main.OutputFacade("json"),
+            background_execute=True,
+        )
+        assert quit_requested is False
+        assert state.pending_plan == {"steps": []}
+        assert state.pending_task_description == "do pending task"
+    finally:
+        if state.active_execution_task is not None:
+            state.active_execution_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await state.active_execution_task
 
 
 @pytest.mark.asyncio

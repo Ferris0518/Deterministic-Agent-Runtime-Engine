@@ -71,9 +71,8 @@
 client/
 ├── __init__.py
 ├── __main__.py                 # python -m client
-├── main.py                     # 顶层 argv -> subcommand dispatch
-├── config.py                   # CLI 参数与 Config 覆盖合并
-├── app.py                      # 启动/关闭 Runtime（生命周期编排）
+├── main.py                     # 顶层 argv -> subcommand dispatch（含 chat/run/script 主路径）
+├── README.md                   # 使用说明与退出码约定
 ├── session.py                  # CLISessionState / ExecutionMode / SessionStatus
 ├── parser/
 │   ├── command.py              # 交互命令解析（/mode /approve ...）
@@ -84,17 +83,9 @@ client/
 │   ├── action_client.py        # action/control 请求封装
 │   └── event_stream.py         # unsolicited transport 消息消费
 ├── commands/
-│   ├── chat.py
-│   ├── run.py
-│   ├── script.py
 │   ├── approvals.py
+│   ├── info.py                 # tools/skills/config/model/doctor/control 查询与控制
 │   ├── mcp.py
-│   ├── tools.py
-│   ├── skills.py
-│   ├── config_cmd.py
-│   ├── model.py
-│   ├── control.py
-│   └── doctor.py
 └── render/
     ├── human.py
     └── json.py
@@ -149,9 +140,9 @@ dare doctor
 
 1. `agent`：由 `DareAgentBuilder` 构建。
 2. `channel`：`AgentChannel.build(DirectClientChannel)`。
-3. `client`：发送 action/control 请求与事件轮询。
-4. `display`：human/json 渲染器。
-5. `session_state`：模式、pending plan、后台任务句柄等。
+3. `client_channel`：对外 action/control 请求与事件轮询通道。
+4. `config_provider`、`config`：最终生效配置与来源。
+5. `model`、`options`：模型适配器实例与 CLI 运行参数。
 
 ### 6.2 执行模式
 
@@ -198,11 +189,10 @@ CLI 层不自行定义“平行配置模型”，只对 `Config` 做覆盖合并
 ### 8.2 标准退出码
 
 1. `0`：成功
-2. `1`：业务执行失败（任务失败/审批拒绝导致失败）
-3. `2`：CLI 参数错误
-4. `3`：配置错误（缺失/非法）
-5. `4`：模型连接或鉴权错误
-6. `130`：用户中断（Ctrl+C / interrupt）
+2. `1`：业务执行失败（任务失败、审批超时/拒绝、运行时 action 错误）
+3. `2`：参数或输入错误（argparse 参数错误、路径/脚本读取错误）
+4. `3`：`doctor` 检查失败（环境或配置探测失败）
+5. `130`：用户中断（Ctrl+C）
 
 ## 9. 安全与边界
 

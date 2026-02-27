@@ -425,11 +425,11 @@ async def _handle_shell_command(
             output.warn("no pending plan")
             return False
         task_text = state.pending_task_description
+        if background_execute and _is_execution_running(state):
+            output.warn("another execution is running")
+            return False
         state.clear_pending()
         if background_execute:
-            if _is_execution_running(state):
-                output.warn("another execution is running")
-                return False
             state.status = SessionStatus.RUNNING
             state.active_execution_description = task_text
             state.active_execution_task = asyncio.create_task(

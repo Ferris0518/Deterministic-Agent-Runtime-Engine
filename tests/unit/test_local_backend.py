@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -32,3 +33,24 @@ def test_local_backend_build_wheel_includes_cli_sources(tmp_path: Path) -> None:
         assert "client/main.py" in names
         assert "dare_framework/__init__.py" in names
         assert any(name.endswith(".dist-info/RECORD") for name in names)
+
+
+def test_local_backend_build_sdist_includes_core_sources(tmp_path: Path) -> None:
+    backend = importlib.import_module("_local_backend")
+    sdist_name = backend.build_sdist(str(tmp_path))
+    sdist_path = tmp_path / sdist_name
+    assert sdist_path.exists()
+    assert sdist_path.suffixes[-2:] == [".tar", ".gz"]
+
+    with tarfile.open(sdist_path, "r:gz") as archive:
+        names = set(archive.getnames())
+        assert any(name.endswith("/pyproject.toml") for name in names)
+        assert any(name.endswith("/_local_backend.py") for name in names)
+        assert any(name.endswith("/client/main.py") for name in names)
+        assert any(name.endswith("/dare_framework/__init__.py") for name in names)
+        assert any(name.endswith("/PKG-INFO") for name in names)
+
+
+def test_local_backend_reports_no_extra_requirements_for_build_sdist() -> None:
+    backend = importlib.import_module("_local_backend")
+    assert backend.get_requires_for_build_sdist() == []
