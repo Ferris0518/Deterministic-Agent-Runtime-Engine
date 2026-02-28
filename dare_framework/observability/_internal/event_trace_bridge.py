@@ -32,9 +32,10 @@ def extract_trace_context() -> TraceContext | None:
         return None
 
     ctx = trace.get_current_span().get_span_context()
-    is_valid_attr = getattr(ctx, "is_valid", None)
-    is_valid = is_valid_attr() if callable(is_valid_attr) else bool(is_valid_attr)
-    if not is_valid:
+    is_valid = getattr(ctx, "is_valid", None)
+    # OpenTelemetry has exposed `is_valid` as either a bool property or a method across versions.
+    valid = is_valid() if callable(is_valid) else bool(is_valid)
+    if not valid:
         return None
 
     return TraceContext(
