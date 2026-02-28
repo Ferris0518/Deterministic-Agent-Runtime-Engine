@@ -29,7 +29,9 @@ This skill supersedes `documentation-lifecycle-governance` for documentation gov
 
 3. Enforce governance metadata
 - ensure frontmatter exists for governance-tracked docs
-- required keys: `change_ids`, `doc_kind`, `topics`, `created`, `updated`, `status`
+- required keys (OpenSpec mode): `change_ids`, `doc_kind`, `topics`, `created`, `updated`, `status`
+- required keys (TODO fallback mode): `topic_slug`, `mode: todo_fallback`, `doc_kind`, `topics`, `created`, `updated`, `status`
+- when fallback assets are migrated into OpenSpec, add `change_ids` and retain `topic_slug` as historical linkage when useful
 
 4. Enforce archive policy
 - completed feature entries move to `docs/features/archive/`

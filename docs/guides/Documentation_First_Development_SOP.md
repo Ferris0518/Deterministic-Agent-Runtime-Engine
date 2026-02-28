@@ -15,6 +15,7 @@
    - 异常与错误处理
 4. 任何 Bug/Feature/Refactor，必须先判断是否为设计约束不清或缺失；是则先补文档。
 5. 开发闭环必须是：文档更新 -> gap 分析 -> TODO 清单 -> OpenSpec 执行 -> TODO 回写 -> 文档归档。
+6. `docs/**` 是全量事实源；`openspec/**` 仅是执行过程记录。OpenSpec 结果必须回写到 `docs/**`，禁止只留在 OpenSpec。
 
 ## 2. 产物规范（必须）
 
@@ -23,7 +24,7 @@
 - 设计质量标准：`docs/design/Design_Doc_Minimum_Standard.md`
 - 差异分析：`docs/todos/YYYY-MM-DD_<topic>_design_code_gap_analysis.md`
 - 执行清单：`docs/todos/YYYY-MM-DD_<topic>_design_code_gap_todo.md`
-- OpenSpec 变更：`openspec/changes/<change-id>/{proposal.md,design.md,tasks.md}`
+- OpenSpec 变更记录（过程）：`openspec/changes/<change-id>/{proposal.md,design.md,tasks.md}`
 - 归档产物：分析文档、TODO 文档在完成后标记 `done/archived`，并补证据链接。
 - 可重建追踪矩阵：`docs/design/Design_Reconstructability_Traceability_Matrix.md`
 - 重建执行 SOP：`docs/guides/Design_Reconstruction_SOP.md`
@@ -108,6 +109,7 @@
 2. 创建或更新 `docs/features/<change-id>.md`，并登记 proposal/design/specs/tasks 链接。
 3. 按 OpenSpec tasks 逐项执行，每个任务回写证据到 feature 聚合文档与 TODO 文档。
 4. 完成后执行 verify + archive，并迁移聚合文档到 `docs/features/archive/`。
+5. 确认最终可读性以 `docs/**` 为准：架构/流程/接口变更已在 docs 中可独立理解，OpenSpec 仅保留追踪链接。
 
 ### Mode B: 无 OpenSpec 回退（TODO-driven）
 

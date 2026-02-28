@@ -8,6 +8,13 @@ The documentation system MUST satisfy both goals:
 - Reconstructability: system behavior can be rebuilt from docs.
 - Traceability: any active change can be traced end-to-end in minutes.
 
+### 1.1 Source-of-Truth Boundary
+
+- `docs/**` is the canonical, full repository documentation source of truth.
+- `openspec/**` is the change-execution process record (proposal/design/spec delta/tasks/evidence trace), not a replacement for canonical docs.
+- Any OpenSpec execution outcome that affects long-term understanding MUST be written back into `docs/**` (especially design, feature aggregation, and TODO/analysis ledgers).
+- Readers should be able to understand current architecture and behavior from `docs/**` without relying on OpenSpec internals beyond trace links.
+
 ## 2. Directory Taxonomy (Single Source)
 
 | Layer | Path | Purpose | Lifecycle |
@@ -65,7 +72,7 @@ Governance-tracked docs MUST include frontmatter with:
 ```yaml
 ---
 change_ids: ["<change-id>"]
-doc_kind: feature|analysis|todo|standard|temporary
+doc_kind: feature|analysis|todo|standard|design|temporary
 topics: ["..."]
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -77,6 +84,7 @@ Notes:
 - `status` on non-aggregation docs is informational only.
 - Aggregation doc is the status source of truth.
 - Explicit exceptions, if any, must be declared in the governing standard document for that doc family.
+- TODO fallback mode exception: before OpenSpec change-id exists, fallback docs MUST provide `topic_slug` and `mode: todo_fallback`; `change_ids` becomes mandatory after migration into OpenSpec.
 
 ## 7. Checkpoint-to-Skill Mapping
 
