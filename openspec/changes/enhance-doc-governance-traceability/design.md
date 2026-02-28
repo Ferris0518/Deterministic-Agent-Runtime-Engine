@@ -89,7 +89,7 @@ PR #113 已明确把“文档治理哲学互学”拆分为独立变更执行。
 
 ## Open Questions
 
-- frontmatter 字段名统一使用 `feature_ids` 还是 `change_ids` 作为主字段？
+- `change_ids` 已作为主字段统一；是否需要提供历史 `feature_ids` 的批量迁移脚本与兼容读取窗口？
 - 聚合文档目录命名是否固定为 `docs/features/`，还是放入 `docs/governance/`？
 - 是否在后续迭代增加自动生成聚合骨架（由脚本从 OpenSpec change 初始化）？
 - 是否在下一迭代提供脚手架命令自动生成 `documentation-management` / `development-workflow` 的最小执行模板？
