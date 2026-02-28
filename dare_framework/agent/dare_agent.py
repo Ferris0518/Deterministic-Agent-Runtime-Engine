@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from dare_framework.agent._internal.output_normalizer import build_output_envelope
 from dare_framework.agent._internal.execute_engine import run_execute_loop
 from dare_framework.agent._internal.milestone_orchestrator import run_milestone_loop
 from dare_framework.agent._internal.orchestration import MilestoneResult, SessionState
@@ -232,7 +233,12 @@ class DareAgent(BaseAgent):
         # Runtime state (set during execution)
         self._session_state: SessionState | None = None
         self._conversation_id: str | None = None
-        self._token_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+        self._token_usage: dict[str, int] = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_tokens": 0,
+            "total_tokens": 0,
+        }
 
     @property
     def context(self) -> IContext:
@@ -321,7 +327,12 @@ class DareAgent(BaseAgent):
         if task_obj.task_id is None:
             task_obj = replace(task_obj, task_id=uuid4().hex[:8])
         self._session_state = SessionState(task_id=task_obj.task_id)
-        self._token_usage = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+        self._token_usage = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_tokens": 0,
+            "total_tokens": 0,
+        }
         execution_mode = "five_layer"
         await self._emit_hook(
             HookPhase.BEFORE_RUN,
@@ -336,6 +347,7 @@ class DareAgent(BaseAgent):
         error: Exception | None = None
         try:
             result = await self._run_session_loop(task_obj, transport=transport)
+            result = self._with_output_envelope(result)
             return self._with_normalized_output_text(result)
         except Exception as exc:
             error = exc
@@ -351,8 +363,7 @@ class DareAgent(BaseAgent):
             token_usage = {
                 "input_tokens": self._token_usage.get("input_tokens", 0),
                 "output_tokens": self._token_usage.get("output_tokens", 0),
-                "total_tokens": self._token_usage.get("input_tokens", 0)
-                + self._token_usage.get("output_tokens", 0),
+                "total_tokens": self._token_usage.get("total_tokens", 0),
                 "cached_tokens": self._token_usage.get("cached_tokens", 0),
             }
             payload = {
@@ -1492,21 +1503,31 @@ class DareAgent(BaseAgent):
     def _record_token_usage(self, usage: dict[str, Any] | None) -> None:
         if not usage:
             return
+
+        def _safe_int(value: Any) -> int:
+            try:
+                return int(value or 0)
+            except (TypeError, ValueError):
+                return 0
+
         input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
         output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
         cached_tokens = usage.get("cached_tokens", 0)
-        try:
-            self._token_usage["input_tokens"] += int(input_tokens or 0)
-        except (TypeError, ValueError):
-            pass
-        try:
-            self._token_usage["output_tokens"] += int(output_tokens or 0)
-        except (TypeError, ValueError):
-            pass
-        try:
-            self._token_usage["cached_tokens"] += int(cached_tokens or 0)
-        except (TypeError, ValueError):
-            pass
+        parsed_input_tokens = _safe_int(input_tokens)
+        parsed_output_tokens = _safe_int(output_tokens)
+        parsed_cached_tokens = _safe_int(cached_tokens)
+        self._token_usage["input_tokens"] += parsed_input_tokens
+        self._token_usage["output_tokens"] += parsed_output_tokens
+        self._token_usage["cached_tokens"] += parsed_cached_tokens
+
+        # Some adapters only report total_tokens; keep that signal so output envelope usage is not dropped.
+        total_tokens = usage.get("total_tokens")
+        parsed_total_tokens = _safe_int(total_tokens)
+        if total_tokens is None or (
+            parsed_total_tokens == 0 and (parsed_input_tokens or parsed_output_tokens)
+        ):
+            parsed_total_tokens = parsed_input_tokens + parsed_output_tokens
+        self._token_usage["total_tokens"] += parsed_total_tokens
 
     def _total_tokens_from_usage(self, usage: dict[str, Any]) -> int:
         total_tokens = usage.get("total_tokens")
@@ -1537,6 +1558,31 @@ class DareAgent(BaseAgent):
             if budget.max_time_seconds is None
             else max(0.0, budget.max_time_seconds - budget.used_time_seconds),
         }
+
+    def _with_output_envelope(self, result: RunResult) -> RunResult:
+        usage = self._run_usage_summary()
+        output = build_output_envelope(
+            result.output,
+            metadata=result.metadata,
+            usage=usage,
+        )
+        return replace(result, output=output, output_text=output["content"])
+
+    def _run_usage_summary(self) -> dict[str, Any] | None:
+        input_tokens = self._token_usage.get("input_tokens", 0)
+        output_tokens = self._token_usage.get("output_tokens", 0)
+        cached_tokens = self._token_usage.get("cached_tokens", 0)
+        total_tokens = self._token_usage.get("total_tokens", input_tokens + output_tokens)
+        if not any((input_tokens, output_tokens, cached_tokens, total_tokens)):
+            return None
+        summary: dict[str, Any] = {"total_tokens": total_tokens}
+        if input_tokens:
+            summary["input_tokens"] = input_tokens
+        if output_tokens:
+            summary["output_tokens"] = output_tokens
+        if cached_tokens:
+            summary["cached_tokens"] = cached_tokens
+        return summary
 
     async def _finalize_execute(self, start_time: float, result: dict[str, Any]) -> dict[str, Any]:
         await self._emit_hook(HookPhase.AFTER_EXECUTE, {

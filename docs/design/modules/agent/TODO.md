@@ -12,7 +12,7 @@
 
 ### 1.2 可延期（不阻塞当前轮次）
 
-- [ ] A-103 统一输出数据形状（output envelope）
+- [x] A-103 统一输出数据形状（output envelope）
 
 ## 2. 任务详情与验收
 
@@ -53,12 +53,20 @@
 - 建议结构：
   - `{"content": str, "metadata": dict, "usage": dict | None}`
 - 验收标准：
-  - [ ] Simple/React/Dare 输出结构一致。
-  - [ ] `output_text` 与 `output.content` 关系文档化并有回归测试。
+  - [x] Simple/React/Dare 输出结构一致。
+  - [x] `output_text` 与 `output.content` 关系文档化并有回归测试。
+- 交付证据：
+  - `dare_framework/agent/_internal/output_normalizer.py`（新增 envelope 构造 helper）
+  - `dare_framework/agent/simple_chat.py`
+  - `dare_framework/agent/react_agent.py`
+  - `dare_framework/agent/dare_agent.py`
+  - `tests/unit/test_agent_output_envelope.py`
+  - 回归：`tests/unit/test_five_layer_agent.py`、`tests/unit/test_builder_tool_gateway.py`
+  - 设计同步：`docs/design/modules/agent/README.md`、`docs/design/Interfaces.md`
 
 ## 3. 决策记录（每轮更新）
 
-- [x] 本轮选定范围：`A-101`
-- [x] 本轮延期项：`A-102 / A-103`
-- [x] 延期原因：`按“单项单PR”节奏先完成结构化拆分与回归闭环，避免并发变更放大风险。`
-- [x] 目标落地版本：`codex/a101-agent-structure-split`
+- [x] 本轮选定范围：`A-103`
+- [x] 本轮延期项：`无`
+- [x] 延期原因：`无`
+- [x] 目标落地版本：`codex/a103-output-envelope`
