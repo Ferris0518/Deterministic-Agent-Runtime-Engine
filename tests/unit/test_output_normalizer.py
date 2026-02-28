@@ -18,6 +18,17 @@ def test_build_output_envelope_preserves_raw_string_content() -> None:
     assert envelope["content"] == raw_output
 
 
+def test_build_output_envelope_preserves_raw_string_content_from_dict_text_field() -> None:
+    raw_output = '["a","b"]'
+    envelope = build_output_envelope({"content": raw_output})
+    assert envelope["content"] == raw_output
+
+
+def test_build_output_envelope_keeps_structured_fallback_for_empty_text_with_diagnostics() -> None:
+    envelope = build_output_envelope({"content": "", "error": "timeout"})
+    assert '"error": "timeout"' in envelope["content"]
+
+
 def test_normalize_run_output_returns_none_for_dict_with_only_empty_text() -> None:
     assert normalize_run_output({"content": ""}) is None
 

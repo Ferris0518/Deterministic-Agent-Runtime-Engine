@@ -75,6 +75,16 @@ def _has_meaningful_fallback_value(value: Any) -> bool:
     return True
 
 
+def _extract_raw_text_field(output: Any) -> str | None:
+    if not isinstance(output, dict):
+        return None
+    for key in ("content", "text", "output", "message", "result"):
+        value = output.get(key)
+        if isinstance(value, str):
+            return value
+    return None
+
+
 def normalize_run_output(output: Any) -> str | None:
     """Normalize RunResult.output for display/logging channels."""
     if output is None:
@@ -119,10 +129,16 @@ def build_output_envelope(
     - metadata: dict
     - usage: dict | None
     """
-    # Preserve exact model text when output is already a string; normalizer is
-    # intentionally display-oriented and may parse serialized containers.
+    # Preserve exact model text when available; normalizer is intentionally
+    # display-oriented and may parse serialized containers.
     if isinstance(output, str):
         content = output
+    elif isinstance(output, dict):
+        raw_text = _extract_raw_text_field(output)
+        if isinstance(raw_text, str) and raw_text.strip():
+            content = raw_text
+        else:
+            content = normalize_run_output(output) or ""
     else:
         content = normalize_run_output(output) or ""
     envelope_metadata = dict(metadata) if isinstance(metadata, dict) else {}
