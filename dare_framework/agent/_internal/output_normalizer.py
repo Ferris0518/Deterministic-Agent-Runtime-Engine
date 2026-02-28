@@ -119,7 +119,12 @@ def build_output_envelope(
     - metadata: dict
     - usage: dict | None
     """
-    content = normalize_run_output(output) or ""
+    # Preserve exact model text when output is already a string; normalizer is
+    # intentionally display-oriented and may parse serialized containers.
+    if isinstance(output, str):
+        content = output
+    else:
+        content = normalize_run_output(output) or ""
     envelope_metadata = dict(metadata) if isinstance(metadata, dict) else {}
     envelope_usage = usage if isinstance(usage, dict) else None
     return {

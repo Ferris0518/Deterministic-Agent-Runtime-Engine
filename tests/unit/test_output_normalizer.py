@@ -12,6 +12,12 @@ def test_build_output_envelope_uses_empty_content_for_missing_output() -> None:
     assert envelope["content"] == ""
 
 
+def test_build_output_envelope_preserves_raw_string_content() -> None:
+    raw_output = '["a","b"]'
+    envelope = build_output_envelope(raw_output)
+    assert envelope["content"] == raw_output
+
+
 def test_normalize_run_output_returns_none_for_dict_with_only_empty_text() -> None:
     assert normalize_run_output({"content": ""}) is None
 
