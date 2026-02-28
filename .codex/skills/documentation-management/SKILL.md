@@ -42,6 +42,11 @@ This skill supersedes `documentation-lifecycle-governance` for documentation gov
 - ensure documentation dependencies are explicit and consistent:
   - `standards -> feature aggregation -> design -> gap analysis -> TODO -> execution evidence -> archive`
 
+6. Maintain planning-to-execution mapping
+- ensure master TODO ledger exists before execution slicing
+- for each OpenSpec change, record covered TODO subset (`todo_ids` or equivalent linkage)
+- prevent one change from claiming unrelated TODO scope
+
 ## Output expectations
 For each management action, provide:
 - affected files

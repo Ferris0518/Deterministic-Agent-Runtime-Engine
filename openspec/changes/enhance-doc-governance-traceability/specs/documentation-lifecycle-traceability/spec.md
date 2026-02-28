@@ -55,3 +55,19 @@
 - **WHEN** OpenSpec 工具不可用
 - **THEN** 维护者可按 TODO-driven 回退模式继续执行文档治理任务
 - **AND** 一旦 OpenSpec 恢复可用，回退资产可迁移并回写到 OpenSpec change
+
+### Requirement: OpenSpec 执行必须以分析与总体 TODO 为输入
+治理执行 MUST 先完成全局分析并生成总体 TODO 主清单，再以 TODO 切片创建一个或多个 OpenSpec change 执行。
+
+#### Scenario: 大改动通过多 OpenSpec 切片推进
+- **WHEN** 维护者处理一个范围较大的 bug/feature/refactor
+- **THEN** 先在 `docs/todos/` 维护总体 TODO 主清单
+- **AND** 按 TODO 子集拆分为多个 OpenSpec change，而不是将全部范围塞入单一 change
+
+### Requirement: docs 必须作为全量事实源
+治理流程 MUST 将 `docs/**` 作为全量事实源，`openspec/**` 作为执行过程记录；OpenSpec 关键结论 MUST 回写到 docs。
+
+#### Scenario: 不依赖 OpenSpec 也可理解当前系统
+- **WHEN** 评审者仅阅读 `docs/**`
+- **THEN** 可以理解当前架构、流程和接口的最终状态
+- **AND** OpenSpec 仅用于查看执行轨迹与切片证据

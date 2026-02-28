@@ -11,12 +11,15 @@
 - [ ] 2.2 Update `docs/guides/Development_Constraints.md` to require governance aggregation entry + machine-checkable mapping.
 - [ ] 2.3 Update `docs/design/Design_Reconstructability_Traceability_Matrix.md` to include links to governance aggregation entries.
 - [ ] 2.4 Update standards to explicitly define OpenSpec default collaboration and TODO-driven fallback collaboration.
+- [ ] 2.5 Update standards to explicitly define `docs/**` as canonical full record and `openspec/**` as execution trace record.
+- [ ] 2.6 Define analysis-first + master-TODO-first workflow and multi-change OpenSpec slicing policy.
 
 ## 3. Automation and CI checkpoint implementation
 
 - [ ] 3.1 Implement or extend CI checks to validate aggregation entry existence when governance-scoped files change.
 - [ ] 3.2 Implement or extend CI checks to validate required frontmatter fields for governance-tracked docs.
 - [ ] 3.3 Implement or extend CI checks to validate gap/TODO -> OpenSpec task mapping completeness.
+- [ ] 3.4 Implement or extend CI checks to validate master TODO -> OpenSpec change-slice mapping consistency.
 
 ## 4. SOP skillization implementation
 

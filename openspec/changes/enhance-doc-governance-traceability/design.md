@@ -14,6 +14,7 @@ PR #113 已明确把“文档治理哲学互学”拆分为独立变更执行。
 - 将关键门禁（文档更新、gap/TODO 映射、聚合完整性）转化为可自动检查的 checkpoint。
 - 将文档治理 SOP 关键阶段 skill 化，使治理执行不仅“有规范”，且“可调用、可复用、可审计”。
 - 明确 OpenSpec 与 TODO fallback 的协作边界及迁移策略。
+- 明确“分析 + master TODO + docs 更新”是 OpenSpec 输入，OpenSpec 作为执行切片层而非全量事实源。
 
 **Non-Goals:**
 - 不引入新的运行时能力或 agent 执行路径变更。
@@ -47,9 +48,14 @@ PR #113 已明确把“文档治理哲学互学”拆分为独立变更执行。
 - 理由：仅文档约束容易漂移；双技能拆分可降低职责耦合并增强复用，skill 化可以将治理流程变成可执行协议并支持自动审计。
 
 ### Decision 6: 采用双协作模式但以 OpenSpec 为默认主干
-- 方案 A（采用）：OpenSpec 作为默认执行模式；无 OpenSpec 时允许 TODO-driven fallback，并要求后续迁移回 OpenSpec。
+- 方案 A（采用）：OpenSpec 作为默认执行模式；无 OpenSpec 时允许 TODO-driven fallback，并要求后续迁移回 OpenSpec。OpenSpec change 的粒度为 TODO 切片，允许一个大改动拆分为多个 change-id。
 - 方案 B（不采用）：仅允许 OpenSpec，不提供回退。
 - 理由：在工具受限场景下需要保留最小可执行治理流程，但必须可回收进入统一主干。
+
+### Decision 7: docs 为全量事实源，OpenSpec 为过程记录层
+- 方案 A（采用）：`docs/**` 作为可独立重建的全量事实源；`openspec/**` 记录执行过程与切片追踪，并将关键结论回写 docs。
+- 方案 B（不采用）：将 OpenSpec 作为主事实源并由 docs 被动引用。
+- 理由：长期维护应依赖稳定文档层，执行过程记录应服务追踪与审计，不应替代最终知识载体。
 
 ## Risks / Trade-offs
 

@@ -51,19 +51,30 @@ Status transitions:
 ### 5.1 OpenSpec Mode (Default)
 
 Use this whenever OpenSpec is available:
-1. Create/continue `openspec/changes/<change-id>/`.
-2. Create/update `docs/features/<change-id>.md` and link proposal/design/specs/tasks.
-3. Execute tasks iteratively; write evidence into feature aggregation + TODO ledger.
-4. Verify with tests/checks; update docs consistency.
-5. Archive change and migrate feature doc to `docs/features/archive/` when complete.
+1. Perform full-scope analysis and maintain a master TODO backlog in `docs/todos/`.
+2. Update canonical docs (`docs/design/**` and related governance docs) before execution.
+3. Select one TODO slice and create/continue `openspec/changes/<change-id>/` for that slice.
+4. Create/update `docs/features/<change-id>.md` and link proposal/design/specs/tasks.
+5. Execute tasks iteratively; write evidence into feature aggregation + TODO ledger.
+6. Verify with tests/checks; update docs consistency.
+7. Archive the completed change and migrate feature doc to `docs/features/archive/`.
+8. Repeat with next TODO slice until master TODO backlog is fully completed.
 
 ### 5.2 No-OpenSpec Fallback Mode (TODO-driven)
 
 Use only when OpenSpec cannot be used (tooling/environment constraint):
-1. Create `docs/features/<topic-slug>.md` with `mode: todo_fallback` in frontmatter.
-2. Create dated gap/TODO pair in `docs/todos/`.
-3. Execute against TODO checklist with evidence updates per task.
-4. When OpenSpec becomes available, migrate fallback assets into an OpenSpec change and link migration evidence.
+1. Perform full-scope analysis and maintain a master TODO backlog in `docs/todos/`.
+2. Update canonical docs (`docs/design/**` and related governance docs) before execution.
+3. Create `docs/features/<topic-slug>.md` with `mode: todo_fallback` in frontmatter.
+4. Execute against TODO checklist with evidence updates per task.
+5. When OpenSpec becomes available, migrate fallback assets into one or more OpenSpec slice changes and link migration evidence.
+
+### 5.3 OpenSpec Slicing Policy (Large Changes)
+
+- OpenSpec change is an execution slice unit, not a full initiative container.
+- A large feature/refactor/bug campaign SHOULD be split into multiple change-ids.
+- Master TODO backlog in `docs/todos/` is the upstream planning input for slice creation.
+- Each change MUST declare which TODO subset it consumes and must not claim unrelated TODO items.
 
 ## 6. Frontmatter Contract (Governance-tracked docs)
 
@@ -79,6 +90,11 @@ updated: YYYY-MM-DD
 status: draft|active|done|archived
 ---
 ```
+
+Recommended optional fields:
+- `todo_ids`: list of master TODO item IDs covered by this document/change slice
+- `mode`: `openspec` or `todo_fallback`
+- `topic_slug`: required in fallback mode before `change_ids` is assigned
 
 Notes:
 - `status` on non-aggregation docs is informational only.

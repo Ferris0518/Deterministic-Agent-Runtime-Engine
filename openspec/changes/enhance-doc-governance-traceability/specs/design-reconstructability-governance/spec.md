@@ -52,3 +52,11 @@
 - **WHEN** CI 或评审检查同一 change 的多份文档状态
 - **THEN** 聚合文档状态与关联文档不会出现冲突主状态
 - **AND** 若存在冲突，检查会报告并阻断合入
+
+### Requirement: 总体 TODO 必须驱动多 change 切片追踪
+可重建性治理 MUST 维护总体 TODO 与 OpenSpec change 切片的映射关系；当单个 change 无法覆盖全部目标时，MUST 拆分为多个 change 并保持映射可追踪。
+
+#### Scenario: 大型改动的切片映射可审计
+- **WHEN** 评审者检查大型治理变更
+- **THEN** 可以从总体 TODO 定位到多个 change 的覆盖边界
+- **AND** 每个 change 仅声明其负责的 TODO 子集与证据

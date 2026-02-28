@@ -16,34 +16,40 @@ Do not use this skill for document-only relocation/classification tasks; use `do
 ## Collaboration mode selection
 
 1. OpenSpec mode (default)
-- bind work to `openspec/changes/<change-id>/`
-- maintain `docs/features/<change-id>.md` as the single status source
+- build from docs-first inputs: analysis + master TODO + updated design docs
+- bind one TODO slice to `openspec/changes/<change-id>/`
+- maintain `docs/features/<change-id>.md` as the single status source for that slice
 - treat OpenSpec artifacts as execution records; keep canonical outcomes written in `docs/**`
 
 2. TODO fallback mode (only if OpenSpec unavailable)
+- still start from analysis + master TODO + updated design docs
 - create `docs/features/<topic-slug>.md` with `mode: todo_fallback`
 - create dated gap/TODO pair in `docs/todos/`
-- once OpenSpec is available, migrate fallback assets into an OpenSpec change
+- once OpenSpec is available, migrate fallback assets into one or more OpenSpec slice changes
 
 ## Lifecycle checkpoints
 
 1. kickoff
 - classify request as `bug` / `feature` / `refactor`
 - choose collaboration mode (OpenSpec default, TODO fallback only when OpenSpec unavailable)
+- complete global analysis before execution
+- build/update a master TODO backlog that covers the full scope
 - update `docs/design/**` first (no implementation before design update)
-- create/update gap analysis and TODO ledger before implementation
 - create or refresh feature aggregation doc as the status source
+- for OpenSpec mode, select one TODO slice as current change scope
 - run `documentation-management` to validate type/path/frontmatter baseline
 
 2. execution-sync
-- OpenSpec mode: execute in small increments `TODO item -> OpenSpec task -> implementation -> evidence`
+- OpenSpec mode: execute in small increments `TODO slice item -> OpenSpec task -> implementation -> evidence`
 - TODO fallback mode: execute in small increments `TODO item -> implementation -> evidence`, and record pending OpenSpec migration mapping
-- keep TODO status and feature aggregation evidence aligned in all modes
+- keep master TODO status and feature aggregation evidence aligned in all modes
 - after each completed task, update linked design/gap/TODO docs and implementation evidence
+- for large initiatives, continue by opening the next TODO slice in a new OpenSpec change instead of overloading one change
 
 3. verification
 - OpenSpec mode checks: `openspec validate`, `openspec status`, tests, and repo doc checks
 - TODO fallback mode checks: tests, repo doc checks, TODO ledger completeness, and migration debt note completeness
+- verify current OpenSpec slice only claims TODO items actually completed in this slice
 - verify coverage of interface contracts and error branches for changed behavior
 - verify status consistency: feature doc is source of truth, linked docs are non-conflicting
 - verify `docs/**` can stand alone as the current-state record without depending on OpenSpec internals
@@ -54,6 +60,7 @@ Do not use this skill for document-only relocation/classification tasks; use `do
 - update TODO/archive indexes (for example `docs/todos/README.md` when applicable)
 - OpenSpec mode: complete OpenSpec archive when the change is finished
 - TODO fallback mode: archive fallback docs/ledgers and keep an explicit migration plan/status until OpenSpec migration is completed
+- if master TODO still has pending slices, keep initiative active and start next slice workflow
 - ensure archived entries stay discoverable via index/evidence links
 
 ## Output expectations
