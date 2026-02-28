@@ -308,3 +308,27 @@ def test_context_assemble_rejects_infinite_ratio_and_keeps_budget_guardrails() -
     assert contents == ["q"]
     assert assembled.metadata["retrieval"]["ltm_count"] == 0
     assert assembled.metadata["retrieval"]["degraded"] is True
+
+
+def test_context_assemble_handles_overflowing_numeric_ratio_config() -> None:
+    ltm = _FakeRetrieval([Message(role="assistant", content="ltm-hit")])
+    config = Config(
+        long_term_memory={
+            "assemble_top_k": 1,
+            "assemble_ratio": 10**10000,
+            "assemble_reserve_tokens": 0,
+        },
+        knowledge={"assemble_top_k": 0},
+    )
+    ctx = Context(
+        config=config,
+        long_term_memory=ltm,
+        knowledge=None,
+    )
+    ctx.stm_add(Message(role="user", content="query"))
+
+    assembled = ctx.assemble()
+
+    contents = [message.content for message in assembled.messages]
+    assert contents == ["query", "ltm-hit"]
+    assert assembled.metadata["retrieval"]["ltm_count"] == 1

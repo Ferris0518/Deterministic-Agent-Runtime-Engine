@@ -207,7 +207,7 @@ class DefaultAssembledContext(IAssembleContext):
     def _safe_ratio(self, value: Any) -> float:
         try:
             parsed = float(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return self._DEFAULT_SOURCE_RATIO
         if not math.isfinite(parsed) or parsed < 0:
             return self._DEFAULT_SOURCE_RATIO
