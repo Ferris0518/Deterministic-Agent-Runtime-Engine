@@ -30,10 +30,12 @@ Unify documentation management structure, lifecycle governance, and SOP-to-skill
 ## Evidence
 
 ### Commands
+- `./scripts/ci/check_governance_evidence_truth.sh`
 - `openspec validate --changes enhance-doc-governance-traceability`
 - `openspec status --change enhance-doc-governance-traceability --json`
 
 ### Results
+- governance-evidence-truth: passed.
 - validate: passed (all changes validated).
 - status: `isComplete: true` for `enhance-doc-governance-traceability`.
 

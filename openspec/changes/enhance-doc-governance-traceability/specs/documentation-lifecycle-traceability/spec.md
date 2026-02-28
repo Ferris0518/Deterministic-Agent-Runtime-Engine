@@ -39,6 +39,7 @@
 - **WHEN** 变更触达治理范围文件但缺失聚合入口或 frontmatter 关键字段
 - **THEN** CI 校验失败并输出可操作修复提示
 - **AND** PR 在补齐治理资产前不得通过完整 gate
+- **AND** `./scripts/ci/check_governance_evidence_truth.sh` 作为结构化证据门禁命令可被本地与 CI 一致执行
 
 ### Requirement: 治理 SOP 关键阶段必须 skill 化
 治理流程中的关键阶段（至少包含 kickoff、completion、verification）MUST 对应到可调用 skill，并维护 checkpoint 到 skill 的稳定映射关系；该映射 MUST 至少包含两个职责分离 skill：`documentation-management` 与 `development-workflow`。

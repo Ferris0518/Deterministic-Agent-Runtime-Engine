@@ -18,5 +18,14 @@
 - Gap analysis + TODO evidence
 - Verification evidence (commands/results)
 
-4. Archive
+4. Required evidence truth structure
+- `## Evidence`
+- `### Commands`
+- `### Results`
+- `### Behavior Verification`
+- `### Risks and Rollback`
+- `### Review and Merge Gate Links`
+- CI gate command: `./scripts/ci/check_governance_evidence_truth.sh`
+
+5. Archive
 - Move completed docs to `docs/features/archive/` after closeout.

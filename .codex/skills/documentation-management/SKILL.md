@@ -56,6 +56,7 @@ This skill supersedes `documentation-lifecycle-governance` for documentation gov
 7. Keep CI gate scope complete (not skill-only)
 - enforce that CI checks include metadata, link resolution, evidence completeness, and TODO/change trace mapping
 - treat skill-file existence/mapping as one gate dimension, not the full governance gate
+- align checks and rollout with `docs/guides/Evidence_Truth_Implementation_Strategy.md`
 
 ## Output expectations
 For each management action, provide:

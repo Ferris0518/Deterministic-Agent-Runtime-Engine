@@ -30,6 +30,7 @@
 - 可重建追踪矩阵：`docs/design/Design_Reconstructability_Traceability_Matrix.md`
 - 重建执行 SOP：`docs/guides/Design_Reconstruction_SOP.md`
 - 文档治理模型：`docs/governance/Documentation_Management_Model.md`
+- Evidence Truth 策略：`docs/guides/Evidence_Truth_Implementation_Strategy.md`
 
 ## 3. 标准流程（一步不可省）
 
@@ -69,6 +70,13 @@
   - 对应 `docs/todos/*_master_todo.md` 与 `docs/todos/*_todo.md` 状态与证据
   - 对应 OpenSpec `tasks.md` 状态
 - 验证至少覆盖：测试、接口契约、错误分支、文档一致性。
+- `docs/features/<change-id>.md`（或 fallback 的 `<topic-slug>.md`）必须按 Evidence Truth 模板回写：
+  - `Commands`
+  - `Results`
+  - `Behavior Verification`（happy path + error branch）
+  - `Risks and Rollback`
+  - `Review and Merge Gate Links`
+- 必须执行并通过：`./scripts/ci/check_governance_evidence_truth.sh`。
 
 ### Step 7: 归档
 - 总体 TODO 全部切片完成后：

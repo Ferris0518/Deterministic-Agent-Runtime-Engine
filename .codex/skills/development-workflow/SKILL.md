@@ -36,6 +36,8 @@ Each active feature aggregation doc MUST contain an `## Evidence` section with a
 - risks and rollback notes
 - review/merge-gate evidence links (review request, key review threads, merge gate result)
 
+Reference contract: `docs/guides/Evidence_Truth_Implementation_Strategy.md`.
+
 ## Lifecycle checkpoints
 
 1. kickoff

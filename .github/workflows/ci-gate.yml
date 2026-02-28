@@ -132,3 +132,13 @@ jobs:
 
       - name: Check design documentation drift
         run: ./scripts/ci/check_design_doc_drift.sh
+
+  governance-evidence-truth:
+    name: governance-evidence-truth
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check governance evidence truth contract
+        run: ./scripts/ci/check_governance_evidence_truth.sh

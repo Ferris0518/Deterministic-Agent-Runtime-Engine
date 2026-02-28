@@ -20,6 +20,7 @@
 - [ ] 3.2 Implement or extend CI checks to validate required frontmatter fields for governance-tracked docs.
 - [ ] 3.3 Implement or extend CI checks to validate gap/TODO -> OpenSpec task mapping completeness.
 - [ ] 3.4 Implement or extend CI checks to validate master TODO -> OpenSpec change-slice mapping consistency.
+- [ ] 3.5 Implement evidence truth structural gate (`scripts/ci/check_governance_evidence_truth.sh`) and wire it into `ci-gate`.
 
 ## 4. SOP skillization implementation
 

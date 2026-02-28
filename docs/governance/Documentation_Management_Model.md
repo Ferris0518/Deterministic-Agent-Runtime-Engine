@@ -21,6 +21,7 @@ The documentation system MUST satisfy both goals:
 - Operational truth: actual runtime behavior in code + tests.
 - Evidence truth: verification, review, and merge-gate records used for audit and regression prevention.
 - Governance checks MUST preserve consistency across all three layers.
+- Evidence-truth implementation and rollout strategy is defined in `docs/guides/Evidence_Truth_Implementation_Strategy.md`.
 
 ## 2. Directory Taxonomy (Single Source)
 
@@ -145,6 +146,7 @@ CI MUST validate:
 - governance frontmatter required keys by mode (OpenSpec vs TODO fallback) are present,
 - feature aggregation links to real OpenSpec artifact paths,
 - evidence block required fields (commands/results/behavior checks/risks/rollback/review links) are present for active items,
+- evidence-truth gate command `./scripts/ci/check_governance_evidence_truth.sh` passes,
 - required assets and linkages are present.
 
 ## 8. Effectiveness Criteria

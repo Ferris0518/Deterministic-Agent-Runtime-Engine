@@ -12,6 +12,7 @@ These rules apply to all agent-generated changes in this repository.
 7. 默认采用 OpenSpec 协作；OpenSpec 不可用时仅可使用 TODO-driven 回退模式，并需补迁移证据。
 8. 文档创建/迁移/归档时必须执行双技能流程：`.codex/skills/documentation-management/SKILL.md` + `.codex/skills/development-workflow/SKILL.md`。
 9. `docs/features/<change-id>.md` 是特性状态单一真相源，其他文档不得写冲突状态。
+10. Evidence Truth 必须结构化落盘并通过 `./scripts/ci/check_governance_evidence_truth.sh`（详见 `docs/guides/Evidence_Truth_Implementation_Strategy.md`）。
 
 ## Operating Notes
 - Keep diffs small to reduce merge conflicts in multi-agent parallel work.
