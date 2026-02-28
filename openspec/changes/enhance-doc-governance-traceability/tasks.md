@@ -16,8 +16,14 @@
 - [ ] 3.2 Implement or extend CI checks to validate required frontmatter fields for governance-tracked docs.
 - [ ] 3.3 Implement or extend CI checks to validate gap/TODO -> OpenSpec task mapping completeness.
 
-## 4. Pilot backfill and closure evidence
+## 4. SOP skillization implementation
 
-- [ ] 4.1 Backfill one active governance change using the new aggregation + frontmatter contract as pilot evidence.
-- [ ] 4.2 Run governance check scripts and capture passing command output in PR evidence.
-- [ ] 4.3 Update TODO/archive records and mark this OpenSpec change as complete with evidence links.
+- [ ] 4.1 Define and publish a checkpoint-to-skill mapping document for governance lifecycle stages.
+- [ ] 4.2 Add or update governance skills for kickoff/completion/verification stages under repository-managed skills.
+- [ ] 4.3 Add CI validation to ensure required governance checkpoint-skill mappings are present and non-stale.
+
+## 5. Pilot backfill and closure evidence
+
+- [ ] 5.1 Backfill one active governance change using the new aggregation + frontmatter + skill mapping contract as pilot evidence.
+- [ ] 5.2 Run governance check scripts and capture passing command output in PR evidence.
+- [ ] 5.3 Update TODO/archive records and mark this OpenSpec change as complete with evidence links.

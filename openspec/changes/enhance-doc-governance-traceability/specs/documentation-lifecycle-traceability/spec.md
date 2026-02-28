@@ -31,3 +31,11 @@
 - **WHEN** 变更触达治理范围文件但缺失聚合入口或 frontmatter 关键字段
 - **THEN** CI 校验失败并输出可操作修复提示
 - **AND** PR 在补齐治理资产前不得通过完整 gate
+
+### Requirement: 治理 SOP 关键阶段必须 skill 化
+治理流程中的关键阶段（至少包含 kickoff、completion、verification）MUST 对应到可调用 skill，并维护 checkpoint 到 skill 的稳定映射关系。
+
+#### Scenario: 治理任务可由 skill 驱动执行
+- **WHEN** 维护者或 agent 执行治理类变更
+- **THEN** 可定位到对应阶段的 skill 入口与使用说明
+- **AND** 能从映射关系中确认该阶段对应的 gate/checkpoint
