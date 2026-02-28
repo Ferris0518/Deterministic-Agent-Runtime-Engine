@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -54,10 +54,22 @@ from dare_framework.plan.types import (
     ValidatedStep,
     VerifyResult,
 )
+from dare_framework.security import (
+    DefaultSecurityBoundary,
+    ISecurityBoundary,
+    PolicyDecision,
+    RiskLevel,
+    SandboxSpec,
+    SECURITY_APPROVAL_MANAGER_MISSING,
+    SECURITY_POLICY_CHECK_FAILED,
+    SECURITY_POLICY_DENIED,
+    SECURITY_TRUST_DERIVATION_FAILED,
+    SecurityBoundaryError,
+    TrustedInput,
+)
 from dare_framework.tool._internal.governed_tool_gateway import (
     GovernedToolGateway,
 )
-from dare_framework.security import DefaultSecurityBoundary, PolicyDecision, RiskLevel, SandboxSpec
 from dare_framework.tool._internal.control.approval_manager import (
     ApprovalDecision,
     ApprovalEvaluationStatus,
@@ -74,7 +86,13 @@ from dare_framework.transport.types import (
     new_envelope_id,
 )
 
+@dataclass(frozen=True)
+class SecurityPreflightResult:
+    """Outcome of tool security preflight checks."""
 
+    trusted_input: TrustedInput
+    decision: PolicyDecision
+    reason: str | None = None
 if TYPE_CHECKING:
     from dare_framework.config.types import Config
     from dare_framework.context.kernel import IContext
@@ -163,6 +181,7 @@ class DareAgent(BaseAgent):
             event_log: Event log for audit (optional).
             hooks: Hook implementations invoked at lifecycle phases (optional).
             telemetry: Telemetry provider for traces/metrics/logs (optional).
+            security_boundary: Security boundary used for trust/policy preflight.
             max_milestone_attempts: Max retries per milestone.
             max_plan_attempts: Max plan generation attempts.
             max_tool_iterations: Max tool call iterations per execute loop.
@@ -646,6 +665,7 @@ class DareAgent(BaseAgent):
             tool_call_id=f"step-{step.step_id}",
             descriptor=descriptor,
             requires_approval_override=requires_approval_override,
+            trusted_risk_level_override=step.risk_level,
         )
         if tool_result.get("success"):
             # Expose plain tool output for step chaining; `result` carries
@@ -733,6 +753,7 @@ class DareAgent(BaseAgent):
                 tool_name=tool_name,
                 risk_level=risk_level,
                 requires_approval=requires_approval,
+                trusted_risk_level=self._coerce_risk_level(risk_level),
             )
         except Exception as exc:
             error_text = str(exc)
@@ -919,11 +940,14 @@ class DareAgent(BaseAgent):
         tool_call_id: str,
         descriptor: Any | None = None,
         requires_approval_override: bool | None = None,
+        trusted_risk_level_override: RiskLevel | None = None,
     ) -> dict[str, Any]:
         """Run the tool loop - single tool invocation."""
         extra_kwargs: dict[str, Any] = {}
         if requires_approval_override is not None:
             extra_kwargs["requires_approval_override"] = requires_approval_override
+        if trusted_risk_level_override is not None:
+            extra_kwargs["trusted_risk_level_override"] = trusted_risk_level_override
         return await run_tool_loop(
             self,
             request,
@@ -963,34 +987,29 @@ class DareAgent(BaseAgent):
         tool_name: str,
         risk_level: int,
         requires_approval: bool,
+        trusted_risk_level: RiskLevel | None = None,
     ) -> tuple[dict[str, Any], str | None]:
-        risk_enum = self._coerce_risk_level(risk_level)
-        trusted_input = await self._security_boundary.verify_trust(
-            input=params,
-            context={
-                "capability_id": capability_id,
-                "tool_name": tool_name,
-                "risk_level": risk_enum,
-                "requires_approval": requires_approval,
-            },
-        )
-        decision = await self._security_boundary.check_policy(
-            action="invoke_tool",
-            resource=capability_id,
-            context={
-                # Canonical policy keys must not be overridden by metadata.
-                **trusted_input.metadata,
-                "capability_id": capability_id,
-                "tool_name": tool_name,
-                "risk_level": trusted_input.risk_level.value,
-                "requires_approval": requires_approval,
-            },
-        )
-        if decision is PolicyDecision.ALLOW:
-            return trusted_input.params, None
-        if decision is PolicyDecision.APPROVE_REQUIRED:
-            return trusted_input.params, "tool invocation requires security approval"
-        return {}, "tool invocation denied by security policy"
+        try:
+            preflight = await self._evaluate_tool_security(
+                request=ToolLoopRequest(
+                    capability_id=capability_id,
+                    params=dict(params),
+                ),
+                descriptor=self._find_capability_descriptor(capability_id),
+                tool_name=tool_name,
+                tool_call_id=f"security-preflight:{capability_id}",
+                attempt=1,
+                requires_approval_override=requires_approval,
+                trusted_risk_level_override=trusted_risk_level,
+            )
+        except SecurityBoundaryError as exc:
+            return {}, str(exc).strip() or "tool invocation denied by security policy"
+
+        if preflight.decision is PolicyDecision.ALLOW:
+            return dict(preflight.trusted_input.params), None
+        if preflight.decision is PolicyDecision.APPROVE_REQUIRED:
+            return dict(preflight.trusted_input.params), "tool invocation requires security approval"
+        return {}, preflight.reason or "tool invocation denied by security policy"
 
     async def _resolve_tool_approval(
         self,
@@ -1346,6 +1365,162 @@ class DareAgent(BaseAgent):
                 scripts=script_map,
             )
         )
+
+    async def _evaluate_tool_security(
+        self,
+        *,
+        request: ToolLoopRequest,
+        descriptor: Any | None,
+        tool_name: str,
+        tool_call_id: str,
+        attempt: int,
+        requires_approval_override: bool | None = None,
+        trusted_risk_level_override: RiskLevel | None = None,
+    ) -> SecurityPreflightResult:
+        requires_approval = self._requires_approval(descriptor)
+        if isinstance(requires_approval_override, bool):
+            requires_approval = requires_approval or requires_approval_override
+        trust_context: dict[str, Any] = {
+            "capability_id": request.capability_id,
+            "tool_name": tool_name,
+            "tool_call_id": tool_call_id,
+            "attempt": attempt,
+            "descriptor": descriptor,
+            "requires_approval": requires_approval,
+        }
+        if trusted_risk_level_override is not None:
+            trust_context["risk_level"] = trusted_risk_level_override
+        try:
+            trusted_input = await self._security_boundary.verify_trust(
+                input=dict(request.params),
+                context=trust_context,
+            )
+        except SecurityBoundaryError as exc:
+            await self._log_event(
+                "security.trust_verified",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": request.capability_id,
+                    "status": "failed",
+                    "code": exc.code,
+                    "reason": exc.reason,
+                },
+            )
+            raise
+        except Exception as exc:
+            message = str(exc).strip() or "security trust verification failed"
+            await self._log_event(
+                "security.trust_verified",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": request.capability_id,
+                    "status": "failed",
+                    "code": SECURITY_TRUST_DERIVATION_FAILED,
+                    "reason": message,
+                },
+            )
+            raise SecurityBoundaryError(
+                code=SECURITY_TRUST_DERIVATION_FAILED,
+                message=message,
+                reason=message,
+            ) from exc
+
+        await self._log_event(
+            "security.trust_verified",
+            {
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
+                "capability_id": request.capability_id,
+                "status": "verified",
+                "risk_level": trusted_input.risk_level.value,
+                "requires_approval": bool(trusted_input.metadata.get("requires_approval", False)),
+            },
+        )
+
+        policy_context = {
+            **trust_context,
+            "trusted_input": trusted_input,
+            "risk_level": trusted_input.risk_level.value,
+            "requires_approval": bool(trusted_input.metadata.get("requires_approval", False)),
+            "metadata": dict(trusted_input.metadata),
+        }
+        try:
+            decision = await self._security_boundary.check_policy(
+                action="invoke_tool",
+                resource=request.capability_id,
+                context=policy_context,
+            )
+            if not isinstance(decision, PolicyDecision):
+                raw_value = getattr(decision, "value", decision)
+                try:
+                    decision = PolicyDecision(str(raw_value))
+                except ValueError as exc:
+                    raise SecurityBoundaryError(
+                        code=SECURITY_POLICY_CHECK_FAILED,
+                        message=f"unsupported policy decision: {raw_value!r}",
+                        reason="security boundary returned unknown policy decision",
+                    ) from exc
+        except SecurityBoundaryError:
+            raise
+        except Exception as exc:
+            message = str(exc).strip() or "security policy check failed"
+            raise SecurityBoundaryError(
+                code=SECURITY_POLICY_CHECK_FAILED,
+                message=message,
+                reason=message,
+            ) from exc
+
+        reason = self._derive_policy_reason(
+            decision=decision,
+            capability_id=request.capability_id,
+            trusted_input=trusted_input,
+        )
+        await self._log_event(
+            "security.policy_checked",
+            {
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
+                "capability_id": request.capability_id,
+                "decision": decision.value,
+                "reason": reason,
+            },
+        )
+        return SecurityPreflightResult(
+            trusted_input=trusted_input,
+            decision=decision,
+            reason=reason,
+        )
+
+    def _derive_policy_reason(
+        self,
+        *,
+        decision: PolicyDecision,
+        capability_id: str,
+        trusted_input: TrustedInput,
+    ) -> str | None:
+        metadata = dict(trusted_input.metadata)
+        if decision is PolicyDecision.ALLOW:
+            return None
+        if decision is PolicyDecision.APPROVE_REQUIRED:
+            raw_reason = metadata.get("approval_reason")
+            if isinstance(raw_reason, str) and raw_reason.strip():
+                return raw_reason.strip()
+            return f"security policy requires approval for capability '{capability_id}'"
+        raw_reason = metadata.get("deny_reason")
+        if isinstance(raw_reason, str) and raw_reason.strip():
+            return raw_reason.strip()
+        return f"security policy denied capability '{capability_id}'"
+
+    def _risk_level_from_trusted_input(self, trusted_input: TrustedInput) -> int:
+        mapping = {
+            "read_only": 1,
+            "idempotent_write": 2,
+            "non_idempotent_effect": 3,
+            "compensatable": 4,
+        }
+        return mapping.get(trusted_input.risk_level.value, 1)
 
     def _risk_level_value(self, descriptor: Any | None) -> int:
         if descriptor is None or descriptor.metadata is None:

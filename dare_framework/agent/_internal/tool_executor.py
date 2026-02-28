@@ -10,13 +10,20 @@ from typing import Any, Protocol
 
 from dare_framework.hook.types import HookDecision, HookPhase
 from dare_framework.plan.types import DonePredicate, ToolLoopRequest
-from dare_framework.security import SandboxSpec
+from dare_framework.security import (
+    PolicyDecision,
+    SandboxSpec,
+    SECURITY_APPROVAL_MANAGER_MISSING,
+    SECURITY_POLICY_DENIED,
+    SecurityBoundaryError,
+)
 from dare_framework.tool._internal.governed_tool_gateway import ApprovalInvokeContext
 
 
 class ToolExecutorAgent(Protocol):
     """Minimal DareAgent contract required by tool-loop execution."""
 
+    _approval_manager: Any
     _context: Any
     _governed_tool_gateway: Any
     _security_boundary: Any
@@ -24,32 +31,25 @@ class ToolExecutorAgent(Protocol):
 
     async def _emit_hook(self, phase: HookPhase, payload: dict[str, Any]) -> Any: ...
 
-    async def _log_event(self, event_type: str, payload: dict[str, Any]) -> None: ...
-
-    async def _resolve_tool_approval(
+    async def _evaluate_tool_security(
         self,
         *,
-        capability_id: str,
-        params: dict[str, Any],
-        session_id: str | None,
+        request: ToolLoopRequest,
+        descriptor: Any | None,
         tool_name: str,
         tool_call_id: str,
-        transport: Any | None,
-    ) -> tuple[bool, str | None]: ...
+        attempt: int,
+        requires_approval_override: bool | None = None,
+        trusted_risk_level_override: Any | None = None,
+    ) -> Any: ...
 
-    async def _resolve_tool_security(
-        self,
-        *,
-        capability_id: str,
-        params: dict[str, Any],
-        tool_name: str,
-        risk_level: int,
-        requires_approval: bool,
-    ) -> tuple[dict[str, Any], str | None]: ...
+    async def _log_event(self, event_type: str, payload: dict[str, Any]) -> None: ...
 
     def _budget_stats(self) -> dict[str, Any]: ...
 
     def _requires_approval(self, descriptor: Any | None) -> bool: ...
+
+    def _risk_level_from_trusted_input(self, trusted_input: Any) -> int: ...
 
     def _risk_level_value(self, descriptor: Any | None) -> int: ...
 
@@ -67,6 +67,7 @@ async def run_tool_loop(
     tool_call_id: str,
     descriptor: Any | None = None,
     requires_approval_override: bool | None = None,
+    trusted_risk_level_override: Any | None = None,
 ) -> dict[str, Any]:
     """Run the tool loop for a single tool invocation request."""
     agent._context.budget_check()
@@ -74,15 +75,14 @@ async def run_tool_loop(
     done_predicate = request.envelope.done_predicate
     max_calls = agent._tool_loop_max_calls(request.envelope)
     attempts = 0
-    # Use the strictest risk level from descriptor metadata and envelope
-    # constraints to avoid silently downgrading policy checks.
+    # Start from the strictest declared risk and let trusted metadata tighten it.
     risk_level = max(
         agent._risk_level_value(descriptor),
         agent._risk_level_value_from_envelope(request.envelope),
     )
     descriptor_requires_approval = agent._requires_approval(descriptor)
     metadata_requires_approval = requires_approval_override is True
-    requires_approval = descriptor_requires_approval
+    requires_approval = descriptor_requires_approval or metadata_requires_approval
     session_id = agent._session_state.run_id if agent._session_state is not None else None
 
     while True:
@@ -90,88 +90,6 @@ async def run_tool_loop(
         agent._context.budget_check()
         agent._context.budget_use("tool_calls", 1)
         tool_start = time.perf_counter()
-        try:
-            trusted_params, trust_error = await agent._resolve_tool_security(
-                capability_id=request.capability_id,
-                params=request.params,
-                tool_name=tool_name,
-                risk_level=risk_level,
-                requires_approval=descriptor_requires_approval or metadata_requires_approval,
-            )
-        except Exception as e:
-            await agent._log_event(
-                "tool.error",
-                {
-                    "tool_name": tool_name,
-                    "tool_call_id": tool_call_id,
-                    "capability_id": request.capability_id,
-                    "error": str(e),
-                    "attempt": attempts,
-                },
-            )
-            await agent._emit_hook(
-                HookPhase.AFTER_TOOL,
-                {
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "capability_id": request.capability_id,
-                    "attempt": attempts,
-                    "success": False,
-                    "error": str(e),
-                    "approved": False,
-                    "evidence_collected": False,
-                    "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
-                    "budget_stats": agent._budget_stats(),
-                },
-            )
-            return {
-                "success": False,
-                "status": "fail",
-                "error": str(e),
-                "output": {},
-            }
-
-        approval_required_by_policy = trust_error == "tool invocation requires security approval"
-        requires_approval = (
-            descriptor_requires_approval
-            or metadata_requires_approval
-            or approval_required_by_policy
-        )
-        if trust_error is not None:
-            if approval_required_by_policy:
-                trust_error = None
-            if trust_error is not None:
-                await agent._log_event(
-                    "security.tool.policy",
-                    {
-                        "tool_name": tool_name,
-                        "tool_call_id": tool_call_id,
-                        "capability_id": request.capability_id,
-                        "error": trust_error,
-                        "attempt": attempts,
-                    },
-                )
-                await agent._emit_hook(
-                    HookPhase.AFTER_TOOL,
-                    {
-                        "tool_call_id": tool_call_id,
-                        "tool_name": tool_name,
-                        "capability_id": request.capability_id,
-                        "attempt": attempts,
-                        "success": False,
-                        "error": trust_error,
-                        "approved": False,
-                        "evidence_collected": False,
-                        "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
-                        "budget_stats": agent._budget_stats(),
-                    },
-                )
-                return {
-                    "success": False,
-                    "status": "not_allow",
-                    "error": trust_error,
-                    "output": {},
-                }
 
         before_tool_dispatch = await agent._emit_hook(
             HookPhase.BEFORE_TOOL,
@@ -211,51 +129,152 @@ async def run_tool_loop(
                 "output": {},
             }
 
-        # Descriptor-gated approvals are enforced by governed gateway invoke;
-        # policy-only / metadata approvals need explicit checks per attempt.
-        if requires_approval and not descriptor_requires_approval:
-            approved, approval_error = await agent._resolve_tool_approval(
-                capability_id=request.capability_id,
-                params=trusted_params,
-                session_id=session_id,
+        try:
+            preflight = await agent._evaluate_tool_security(
+                request=request,
+                descriptor=descriptor,
                 tool_name=tool_name,
                 tool_call_id=tool_call_id,
-                transport=transport,
+                attempt=attempts,
+                requires_approval_override=requires_approval_override,
+                trusted_risk_level_override=trusted_risk_level_override,
             )
-            if not approved:
-                approval_error_text = approval_error or "tool invocation requires security approval"
-                status = "not_allow" if "denied" in approval_error_text.lower() else "fail"
-                await agent._log_event(
-                    "security.tool.policy",
-                    {
-                        "tool_name": tool_name,
-                        "tool_call_id": tool_call_id,
-                        "capability_id": request.capability_id,
-                        "error": approval_error_text,
-                        "attempt": attempts,
-                    },
-                )
-                await agent._emit_hook(
-                    HookPhase.AFTER_TOOL,
-                    {
-                        "tool_call_id": tool_call_id,
-                        "tool_name": tool_name,
-                        "capability_id": request.capability_id,
-                        "attempt": attempts,
-                        "success": False,
-                        "error": approval_error_text,
-                        "approved": False,
-                        "evidence_collected": False,
-                        "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
-                        "budget_stats": agent._budget_stats(),
-                    },
-                )
-                return {
+        except SecurityBoundaryError as exc:
+            denied_error = str(exc).strip() or "security policy denied tool invocation"
+            await agent._log_event(
+                "security.policy_denied",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": request.capability_id,
+                    "code": exc.code,
+                    "reason": exc.reason,
+                    "error": denied_error,
+                },
+            )
+            denied_status = "not_allow"
+            await agent._emit_hook(
+                HookPhase.AFTER_TOOL,
+                {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "capability_id": request.capability_id,
+                    "attempt": attempts,
                     "success": False,
-                    "error": approval_error_text,
-                    "status": status,
-                    "output": {},
-                }
+                    "error": denied_error,
+                    "approved": False,
+                    "policy_decision": PolicyDecision.DENY.value,
+                    "security_code": exc.code,
+                    "evidence_collected": False,
+                    "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
+                    "budget_stats": agent._budget_stats(),
+                },
+            )
+            return {
+                "success": False,
+                "status": denied_status,
+                "error": denied_error,
+                "output": {
+                    "status": denied_status,
+                    "code": exc.code,
+                    "message": denied_error,
+                },
+            }
+
+        trusted_input = preflight.trusted_input
+        risk_level = agent._risk_level_from_trusted_input(trusted_input)
+        effective_params = dict(trusted_input.params)
+        policy_decision = preflight.decision.value
+        force_approval = (
+            metadata_requires_approval
+            or preflight.decision is PolicyDecision.APPROVE_REQUIRED
+        )
+        requires_approval = descriptor_requires_approval or force_approval
+
+        if preflight.decision is PolicyDecision.DENY:
+            denied_error = preflight.reason or "tool invocation denied by security policy"
+            await agent._log_event(
+                "security.policy_denied",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": request.capability_id,
+                    "code": SECURITY_POLICY_DENIED,
+                    "reason": preflight.reason,
+                },
+            )
+            denied_status = "not_allow"
+            await agent._emit_hook(
+                HookPhase.AFTER_TOOL,
+                {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "capability_id": request.capability_id,
+                    "attempt": attempts,
+                    "success": False,
+                    "error": denied_error,
+                    "approved": False,
+                    "policy_decision": policy_decision,
+                    "security_code": SECURITY_POLICY_DENIED,
+                    "evidence_collected": False,
+                    "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
+                    "budget_stats": agent._budget_stats(),
+                },
+            )
+            return {
+                "success": False,
+                "status": denied_status,
+                "error": denied_error,
+                "output": {
+                    "status": denied_status,
+                    "code": SECURITY_POLICY_DENIED,
+                    "message": denied_error,
+                },
+            }
+
+        if (
+            force_approval
+            and not descriptor_requires_approval
+            and agent._approval_manager is None
+        ):
+            denied_error = "tool invocation requires approval but no approval manager is configured"
+            await agent._log_event(
+                "security.policy_denied",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": request.capability_id,
+                    "code": SECURITY_APPROVAL_MANAGER_MISSING,
+                    "reason": "approval manager missing",
+                },
+            )
+            await agent._emit_hook(
+                HookPhase.AFTER_TOOL,
+                {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "capability_id": request.capability_id,
+                    "attempt": attempts,
+                    "success": False,
+                    "error": denied_error,
+                    "approved": False,
+                    "policy_decision": policy_decision,
+                    "security_code": SECURITY_APPROVAL_MANAGER_MISSING,
+                    "evidence_collected": False,
+                    "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
+                    "budget_stats": agent._budget_stats(),
+                },
+            )
+            return {
+                "success": False,
+                "status": "fail",
+                "error": denied_error,
+                "output": {
+                    "status": "fail",
+                    "code": SECURITY_APPROVAL_MANAGER_MISSING,
+                    "message": denied_error,
+                },
+            }
 
         await agent._log_event(
             "tool.invoke",
@@ -264,10 +283,22 @@ async def run_tool_loop(
                 "tool_call_id": tool_call_id,
                 "capability_id": request.capability_id,
                 "attempt": attempts,
+                "policy_decision": policy_decision,
             },
         )
 
         try:
+            async def approval_observer(payload: dict[str, Any]) -> None:
+                await agent._log_event(
+                    "security.policy_approval",
+                    {
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                        "capability_id": request.capability_id,
+                        **payload,
+                    },
+                )
+
             approval_ctx = ApprovalInvokeContext(
                 session_id=session_id,
                 transport=transport,
@@ -275,6 +306,13 @@ async def run_tool_loop(
                 tool_call_id=tool_call_id,
                 event_logger=agent._log_event,
                 runtime_context=agent._context,
+                force_approval=force_approval,
+                approval_reason=(
+                    preflight.reason
+                    if preflight.decision is PolicyDecision.APPROVE_REQUIRED
+                    else None
+                ),
+                approval_observer=approval_observer,
             )
             result = await agent._security_boundary.execute_safe(
                 action="invoke_tool",
@@ -282,7 +320,7 @@ async def run_tool_loop(
                     request.capability_id,
                     approval_ctx,
                     envelope=request.envelope,
-                    **trusted_params,
+                    **effective_params,
                 ),
                 sandbox=SandboxSpec(
                     mode="tool_gateway",
@@ -301,6 +339,7 @@ async def run_tool_loop(
                     "capability_id": request.capability_id,
                     "success": getattr(result, "success", True),
                     "attempt": attempts,
+                    "policy_decision": policy_decision,
                 },
             )
 
@@ -327,6 +366,7 @@ async def run_tool_loop(
                     "success": tool_success,
                     "error": result.error if hasattr(result, "error") else None,
                     "approved": approved,
+                    "policy_decision": policy_decision,
                     "evidence_collected": evidence_collected,
                     "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
                     "budget_stats": agent._budget_stats(),
@@ -369,22 +409,23 @@ async def run_tool_loop(
                     "result": result,
                 }
 
-        except Exception as e:
+        except Exception as exc:
             await agent._log_event(
                 "tool.error",
                 {
                     "tool_name": tool_name,
                     "tool_call_id": tool_call_id,
                     "capability_id": request.capability_id,
-                    "error": str(e),
+                    "error": str(exc),
                     "attempt": attempts,
+                    "policy_decision": policy_decision,
                 },
             )
             approved = True
             try:
                 from dare_framework.tool.exceptions import HumanApprovalRequired
 
-                if isinstance(e, HumanApprovalRequired):
+                if isinstance(exc, HumanApprovalRequired):
                     approved = False
             except Exception:
                 approved = True
@@ -396,8 +437,9 @@ async def run_tool_loop(
                     "capability_id": request.capability_id,
                     "attempt": attempts,
                     "success": False,
-                    "error": str(e),
+                    "error": str(exc),
                     "approved": approved,
+                    "policy_decision": policy_decision,
                     "evidence_collected": False,
                     "duration_ms": (time.perf_counter() - tool_start) * 1000.0,
                     "budget_stats": agent._budget_stats(),
@@ -406,7 +448,7 @@ async def run_tool_loop(
             return {
                 "success": False,
                 "status": "fail",
-                "error": str(e),
+                "error": str(exc),
                 "output": {},
             }
 
@@ -418,10 +460,4 @@ def _done_predicate_satisfied(done_predicate: DonePredicate, result: Any) -> boo
     output = getattr(result, "output", None)
     if not isinstance(output, dict):
         return False
-    for key in required_keys:
-        if key not in output:
-            return False
-    return True
-
-
-__all__ = ["run_tool_loop"]
+    return all(key in output for key in required_keys)

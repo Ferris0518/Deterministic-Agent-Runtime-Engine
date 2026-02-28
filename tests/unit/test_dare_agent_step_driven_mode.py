@@ -11,6 +11,7 @@ from dare_framework.hook.types import HookDecision, HookPhase, HookResult
 from dare_framework.infra.component import ComponentType
 from dare_framework.model.types import ModelInput, ModelResponse
 from dare_framework.plan.types import StepResult, ValidatedPlan, ValidatedStep
+from dare_framework.security import PolicySecurityBoundary
 from dare_framework.security.types import PolicyDecision, RiskLevel, TrustedInput
 from dare_framework.tool._internal.control.approval_manager import (
     ApprovalDecision,
@@ -455,6 +456,35 @@ async def test_step_driven_uses_step_risk_level_when_descriptor_missing() -> Non
 
     assert result["success"] is False
     assert any("security policy" in error for error in result.get("errors", []))
+    assert context.budget.used_tool_calls == 1
+    assert model.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_step_driven_trusts_validated_step_risk_metadata_under_strict_boundary() -> None:
+    model = _RecordingModel()
+    context = Context(config=Config())
+    agent = _build_agent(
+        model=model,
+        execution_mode="step_driven",
+        boundary=PolicySecurityBoundary(require_trusted_metadata=True),
+        context=context,
+    )
+    validated_plan = ValidatedPlan(
+        success=True,
+        plan_description="strict trust plan",
+        steps=[
+            ValidatedStep(
+                step_id="s1",
+                capability_id="tool.one",
+                risk_level=RiskLevel.READ_ONLY,
+            ),
+        ],
+    )
+
+    result = await agent._run_execute_loop(validated_plan)  # noqa: SLF001 - runtime unit boundary test
+
+    assert result["success"] is True
     assert context.budget.used_tool_calls == 1
     assert model.calls == 0
 

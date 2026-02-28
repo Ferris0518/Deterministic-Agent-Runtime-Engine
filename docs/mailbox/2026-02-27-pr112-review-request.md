@@ -57,4 +57,3 @@ pytest -q tests/unit: 375 passed, 9 skipped
 **Tradeoff**: PR scope is larger than the initial approval-manager fix.
 **Open Questions**: Should we split PR #112 to reduce review surface area?
 **Next Action**: Please review and approve PR #112 for merge.
-
