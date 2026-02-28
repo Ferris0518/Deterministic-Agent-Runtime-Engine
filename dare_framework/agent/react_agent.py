@@ -106,15 +106,19 @@ class ReactAgent(BaseAgent):
                 metadata=assembled.metadata,
             )
             response = await self._model.generate(model_input)
-            # Preserve the latest non-empty usage; some adapters emit {}
-            # on intermediate/final rounds and should not erase prior totals.
-            if isinstance(response.usage, dict) and response.usage:
-                latest_usage = response.usage
+            usage = response.usage if isinstance(response.usage, dict) and response.usage else None
+            if usage is not None:
+                usage_total_tokens = _usage_total_tokens(usage)
+                # Keep the latest meaningful usage totals. Some adapters emit
+                # placeholder zero usage in later rounds and should not erase
+                # previously reported non-zero usage.
+                if usage_total_tokens > 0 or latest_usage is None:
+                    latest_usage = usage
             n_tools = len(response.tool_calls) if response.tool_calls else 0
             print(f"[{self.name}] 模型返回, tool_calls={n_tools}", flush=True)
 
-            if response.usage:
-                tokens = response.usage.get("total_tokens", 0)
+            if usage is not None:
+                tokens = _usage_total_tokens(usage)
                 if tokens:
                     self._context.budget_use("tokens", tokens)
             self._context.budget_check()
@@ -199,6 +203,22 @@ def _normalize_tool_args(raw_args: Any) -> dict[str, Any]:
     if isinstance(raw_args, dict):
         return raw_args
     return {}
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _usage_total_tokens(usage: dict[str, Any]) -> int:
+    total_tokens = usage.get("total_tokens")
+    if total_tokens is None:
+        input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+        output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+        return _safe_int(input_tokens) + _safe_int(output_tokens)
+    return _safe_int(total_tokens)
 
 
 def _tool_calls_signature(tool_calls: list[dict[str, Any]]) -> tuple[str, ...]:

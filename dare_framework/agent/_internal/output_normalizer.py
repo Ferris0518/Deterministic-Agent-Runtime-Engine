@@ -146,7 +146,7 @@ def build_output_envelope(
     else:
         content = normalize_run_output(output) or ""
     envelope_metadata = dict(metadata) if isinstance(metadata, dict) else {}
-    envelope_usage = usage if isinstance(usage, dict) else None
+    envelope_usage = dict(usage) if isinstance(usage, dict) and usage else None
     return {
         "content": content,
         "metadata": envelope_metadata,
