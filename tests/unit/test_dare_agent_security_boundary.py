@@ -333,6 +333,23 @@ class _PendingWaitErrorApprovalManager:
         raise RuntimeError("approval wait channel unavailable")
 
 
+class _RuleDenyApprovalManager:
+    def __init__(self) -> None:
+        self.evaluate_calls = 0
+
+    async def evaluate(
+        self,
+        *,
+        capability_id: str,
+        params: dict[str, Any],
+        session_id: str | None,
+        reason: str,
+    ) -> ApprovalEvaluation:
+        _ = (capability_id, params, session_id, reason)
+        self.evaluate_calls += 1
+        return ApprovalEvaluation(status=ApprovalEvaluationStatus.DENY, reason="rule denied")
+
+
 def _build_agent(
     *,
     boundary: Any,
@@ -503,6 +520,29 @@ async def test_tool_loop_policy_approve_required_rechecks_approval_on_retry() ->
     # Policy-driven approval requirement should be enforced on each retry.
     assert approval_manager.evaluate_calls == 2
     assert approval_manager.wait_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_policy_approval_deny_preserves_not_allow_status() -> None:
+    tool_gateway = _RecordingToolGateway()
+    approval_manager = _RuleDenyApprovalManager()
+    agent = _build_agent(
+        boundary=_ApproveToolBoundary(),
+        tool_gateway=tool_gateway,
+        approval_manager=approval_manager,
+    )
+
+    result = await agent._run_tool_loop(  # noqa: SLF001
+        ToolLoopRequest(capability_id="tool.echo", params={"value": 1}),
+        tool_name="echo",
+        tool_call_id="tc-security-approval-deny-status",
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "not_allow"
+    assert "approval rule" in str(result["error"])
+    assert approval_manager.evaluate_calls == 1
+    assert tool_gateway.invoke_calls == 0
 
 
 @pytest.mark.asyncio

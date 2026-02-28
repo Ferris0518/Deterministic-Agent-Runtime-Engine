@@ -18,7 +18,7 @@ from dare_framework.tool._internal.control.approval_manager import (
     ApprovalEvaluationStatus,
     PendingApprovalRequest,
 )
-from dare_framework.tool.types import ToolResult
+from dare_framework.tool.types import CapabilityKind, ToolResult
 
 
 class _RecordingModel:
@@ -456,6 +456,42 @@ async def test_step_driven_uses_step_risk_level_when_descriptor_missing() -> Non
     assert result["success"] is False
     assert any("security policy" in error for error in result.get("errors", []))
     assert context.budget.used_tool_calls == 1
+    assert model.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_step_driven_plan_tool_step_triggers_replan_signal_without_tool_invocation() -> None:
+    model = _RecordingModel()
+    context = Context(config=Config())
+    gateway = _ChainingToolGateway()
+    agent = _build_agent(
+        model=model,
+        execution_mode="step_driven",
+        boundary=_AllowBoundary(),
+        context=context,
+        tool_gateway=gateway,
+    )
+    validated_plan = ValidatedPlan(
+        success=True,
+        plan_description="plan-tool step",
+        steps=[
+            ValidatedStep(
+                step_id="s1",
+                capability_id="tool.plan",
+                risk_level=RiskLevel.READ_ONLY,
+                metadata={"capability_kind": CapabilityKind.PLAN_TOOL.value},
+            ),
+        ],
+    )
+
+    result = await agent._run_execute_loop(validated_plan)  # noqa: SLF001 - runtime unit boundary test
+
+    assert result["success"] is False
+    assert result.get("encountered_plan_tool") is True
+    assert result.get("plan_tool_name") == "tool.plan"
+    assert result.get("outputs") == []
+    assert result.get("errors") == []
+    assert gateway.calls == 0
     assert model.calls == 0
 
 

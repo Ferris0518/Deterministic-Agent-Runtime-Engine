@@ -1045,6 +1045,25 @@ class DareAgent(BaseAgent):
             if self._exec_ctl is not None:
                 self._poll_or_raise()
 
+            descriptor = self._find_capability_descriptor(step.capability_id)
+            step_capability_kind = None
+            if isinstance(step.metadata, dict):
+                step_capability_kind = step.metadata.get("capability_kind")
+                if hasattr(step_capability_kind, "value"):
+                    step_capability_kind = step_capability_kind.value
+
+            if (
+                self._is_plan_tool_call(step.capability_id, descriptor)
+                or str(step_capability_kind) == CapabilityKind.PLAN_TOOL.value
+            ):
+                return await self._finalize_execute(execute_start, {
+                    "success": False,
+                    "outputs": outputs,
+                    "errors": errors,
+                    "encountered_plan_tool": True,
+                    "plan_tool_name": step.capability_id,
+                })
+
             if use_tool_loop_executor:
                 step_result = await self._execute_step_via_tool_loop(
                     step,
@@ -1528,6 +1547,7 @@ class DareAgent(BaseAgent):
                 )
                 if not approved:
                     approval_error_text = approval_error or "tool invocation requires security approval"
+                    status = "not_allow" if "denied" in approval_error_text.lower() else "fail"
                     await self._log_event(
                         "security.tool.policy",
                         {
@@ -1556,6 +1576,7 @@ class DareAgent(BaseAgent):
                     return {
                         "success": False,
                         "error": approval_error_text,
+                        "status": status,
                         "output": {},
                     }
             await self._log_event("tool.invoke", {
