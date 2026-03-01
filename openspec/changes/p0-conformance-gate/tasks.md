@@ -9,7 +9,10 @@
 - [ ] 2.1 新增集成测试覆盖安全门控主链路（allow/deny/approve_required）。
 - [ ] 2.2 新增集成测试覆盖 `step_driven` 执行闭环。
 - [ ] 2.3 新增集成测试覆盖默认 event log hash-chain/replay。
-- [ ] 2.4 增加关键单测确保契约字段与错误码稳定。
+- [x] 2.4 增加关键单测确保契约字段与错误码稳定。  
+  Evidence: `dare_framework/transport/_internal/adapters.py`，`tests/unit/test_transport_adapters.py`（新增 slash 命令到 `resource:action` 的标准化与审批参数提取断言）  
+  Commands: `.venv/bin/pytest -q tests/unit/test_transport_adapters.py::test_stdio_slash_command_maps_to_resource_action_id tests/unit/test_transport_adapters.py::test_stdio_slash_command_extracts_approval_action_params` => `2 passed`；`.venv/bin/pytest -q tests/unit/test_transport_adapters.py tests/unit/test_interaction_dispatcher.py tests/unit/test_transport_channel.py tests/integration/test_client_cli_flow.py` => `33 passed, 1 warning`  
+  Last Updated: `2026-03-01`
 
 ## 3. CI Integration
 

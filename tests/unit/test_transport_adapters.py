@@ -31,6 +31,65 @@ async def test_stdio_single_slash_maps_to_action_discovery(monkeypatch: pytest.M
     assert sent[0].payload == "actions:list"
 
 
+@pytest.mark.asyncio
+async def test_stdio_slash_command_maps_to_resource_action_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[TransportEnvelope] = []
+    stdio = StdioClientChannel()
+
+    async def sender(msg: TransportEnvelope) -> None:
+        sent.append(msg)
+
+    stdio.attach_agent_envelope_sender(sender)
+
+    lines = iter(["/approvals list", "/quit"])
+
+    async def fake_to_thread(_fn, _prompt):
+        return next(lines)
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    await stdio.start()
+
+    assert len(sent) == 1
+    assert sent[0].kind == EnvelopeKind.ACTION
+    assert sent[0].payload == "approvals:list"
+    assert sent[0].meta == {}
+
+
+@pytest.mark.asyncio
+async def test_stdio_slash_command_extracts_approval_action_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[TransportEnvelope] = []
+    stdio = StdioClientChannel()
+
+    async def sender(msg: TransportEnvelope) -> None:
+        sent.append(msg)
+
+    stdio.attach_agent_envelope_sender(sender)
+
+    lines = iter(
+        [
+            "/approvals grant req-1 scope=workspace matcher=exact_params session_id=session-42",
+            "/quit",
+        ]
+    )
+
+    async def fake_to_thread(_fn, _prompt):
+        return next(lines)
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    await stdio.start()
+
+    assert len(sent) == 1
+    envelope = sent[0]
+    assert envelope.kind == EnvelopeKind.ACTION
+    assert envelope.payload == "approvals:grant"
+    assert envelope.meta == {
+        "request_id": "req-1",
+        "scope": "workspace",
+        "matcher": "exact_params",
+        "session_id": "session-42",
+    }
+
+
 class _DummyWS:
     async def send(self, _msg) -> None:  # pragma: no cover - not used in this test
         return None

@@ -12,7 +12,7 @@
 
 - 测试基线（审查时）：`.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`。
 - 关键问题聚类：
-  - 交互动作枚举与 MCP action handler 契约不一致。
+  - 交互动作枚举与 transport slash-action 解析契约存在边界不一致（待持续回归监控）。
   - CLI 审批命令调用参数方式与 handler 签名不一致。
   - 内置 prompt 与测试约定不一致。
   - 若干 package `__init__.py` 不满足 facade 约束。
@@ -26,7 +26,10 @@
   Status: `done`  
   Evidence: `.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`；`.venv/bin/pytest -q tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_evaluate_exception_returns_structured_failure tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_wait_exception_returns_structured_failure` => `2 passed`；`dare_framework/tool/_internal/governed_tool_gateway.py`（审批异常语义回归修复）  
   Last Updated: `2026-03-01`
-- [ ] T0-2 统一 `ResourceAction` 与 action handler 动作契约。
+- [x] T0-2 统一 `ResourceAction` 与 action handler 动作契约。  
+  Status: `done`  
+  Evidence: `dare_framework/transport/_internal/adapters.py`（`/approvals list` 规范化为 `approvals:list`，并提取审批 action 参数）；`tests/unit/test_transport_adapters.py`（新增契约回归）；`.venv/bin/pytest -q tests/unit/test_transport_adapters.py tests/unit/test_interaction_dispatcher.py tests/unit/test_transport_channel.py tests/integration/test_client_cli_flow.py` => `33 passed, 1 warning`  
+  Last Updated: `2026-03-01`
 - [ ] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
