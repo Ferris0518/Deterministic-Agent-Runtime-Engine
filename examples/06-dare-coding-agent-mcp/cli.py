@@ -538,10 +538,9 @@ def _approvals_usage(display: CLIDisplay) -> None:
 async def _invoke_approval_action(
     approval_client: DirectClientChannel,
     action: ResourceAction,
-    *,
-    params: dict[str, Any] | None = None,
+    **params: Any,
 ) -> dict[str, Any]:
-    meta = dict(params or {})
+    meta = dict(params)
     request = TransportEnvelope(
         id=new_envelope_id(),
         kind=EnvelopeKind.ACTION,
@@ -666,7 +665,7 @@ async def _handle_approvals_command(
             result = await _invoke_approval_action(
                 approval_client,
                 ResourceAction.APPROVALS_POLL,
-                params=params,
+                **params,
             )
             request = result.get("request")
             if isinstance(request, dict):
@@ -688,7 +687,7 @@ async def _handle_approvals_command(
                 else ResourceAction.APPROVALS_DENY
             )
             params = _build_approval_action_params(request_id=request_id, trailing_args=args[2:])
-            result = await _invoke_approval_action(approval_client, action, params=params)
+            result = await _invoke_approval_action(approval_client, action, **params)
             display.ok(f"{subcommand} applied: {request_id}")
             print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
             return
@@ -702,7 +701,7 @@ async def _handle_approvals_command(
             result = await _invoke_approval_action(
                 approval_client,
                 ResourceAction.APPROVALS_REVOKE,
-                params={"rule_id": rule_id},
+                rule_id=rule_id,
             )
             if result.get("removed"):
                 display.ok(f"revoked rule: {rule_id}")

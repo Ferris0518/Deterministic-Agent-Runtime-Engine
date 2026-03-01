@@ -204,6 +204,30 @@ async def test_handle_approvals_command_grant_forwards_session_id_mcp_cli() -> N
 
 
 @pytest.mark.asyncio
+async def test_invoke_approval_action_accepts_kwargs_params_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_invoke_kwargs",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    approval_client = _CaptureApprovalClient()
+    result = await cli_mcp._invoke_approval_action(  # type: ignore[attr-defined]
+        approval_client,
+        ResourceAction.APPROVALS_GRANT,
+        request_id="req-1",
+        scope="workspace",
+        matcher="exact_params",
+        session_id="session-42",
+    )
+    assert result == {"request": None}
+    assert approval_client.last_meta == {
+        "request_id": "req-1",
+        "scope": "workspace",
+        "matcher": "exact_params",
+        "session_id": "session-42",
+    }
+
+
+@pytest.mark.asyncio
 async def test_handle_approvals_poll_forwards_session_filter_mcp_cli() -> None:
     cli_mcp = _load_cli_module(
         "examples_06_cli_poll_filter",

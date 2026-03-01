@@ -30,7 +30,11 @@
   Status: `done`  
   Evidence: `dare_framework/transport/_internal/adapters.py`（`/approvals list` 规范化为 `approvals:list`，并提取审批 action 参数）；`tests/unit/test_transport_adapters.py`（新增契约回归）；`.venv/bin/pytest -q tests/unit/test_transport_adapters.py tests/unit/test_interaction_dispatcher.py tests/unit/test_transport_channel.py tests/integration/test_client_cli_flow.py` => `33 passed, 1 warning`  
   Last Updated: `2026-03-01`
-- [ ] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。
+- [x] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。  
+  Status: `done`  
+  Evidence: `examples/05-dare-coding-agent-enhanced/cli.py`、`examples/06-dare-coding-agent-mcp/cli.py`（`_invoke_approval_action` 统一为 `invoke(action, **params)` 形态，移除 `params={...}` 调用分叉）；`tests/unit/test_examples_cli.py`、`tests/unit/test_examples_cli_mcp.py`（新增 kwargs 调用契约回归）  
+  Commands: `.venv/bin/pytest -q tests/unit/test_examples_cli.py tests/unit/test_examples_cli_mcp.py` => `22 passed, 1 warning`  
+  Last Updated: `2026-03-01`
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
 
