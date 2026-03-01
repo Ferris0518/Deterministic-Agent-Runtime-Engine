@@ -20,6 +20,7 @@ class SQLiteEventLog(IEventLog):
     The storage is append-only and maintains a hash-chain using
     ``prev_hash`` -> ``event_hash`` for tamper detection.
     """
+    _HASH_VERSION = 1
 
     def __init__(self, db_path: str | Path) -> None:
         self._path = Path(db_path)
@@ -38,11 +39,20 @@ class SQLiteEventLog(IEventLog):
                 event_type TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
                 timestamp_iso TEXT NOT NULL,
+                hash_version INTEGER NOT NULL DEFAULT 1,
                 prev_hash TEXT,
                 event_hash TEXT NOT NULL
             )
             """
         )
+        columns = self._conn.execute("PRAGMA table_info(events)").fetchall()
+        column_names = {str(row["name"]) for row in columns}
+        if "hash_version" not in column_names:
+            # Forward-compatible migration for legacy sqlite files created before
+            # hash-version tagging was introduced.
+            self._conn.execute(
+                "ALTER TABLE events ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1"
+            )
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type)")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_events_id ON events(event_id)")
         self._conn.commit()
@@ -59,14 +69,23 @@ class SQLiteEventLog(IEventLog):
                 event_type=event.event_type,
                 timestamp_iso=timestamp_iso,
                 payload_json=payload_json,
+                hash_version=event.hash_version,
                 prev_hash=prev_hash,
             )
             self._conn.execute(
                 (
-                    "INSERT INTO events (event_id, event_type, payload_json, timestamp_iso, prev_hash, event_hash) "
-                    "VALUES (?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO events (event_id, event_type, payload_json, timestamp_iso, hash_version, prev_hash, event_hash) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)"
                 ),
-                (event.event_id, event.event_type, payload_json, timestamp_iso, prev_hash, event_hash),
+                (
+                    event.event_id,
+                    event.event_type,
+                    payload_json,
+                    timestamp_iso,
+                    event.hash_version,
+                    prev_hash,
+                    event_hash,
+                ),
             )
             self._conn.commit()
             return event.event_id
@@ -96,7 +115,7 @@ class SQLiteEventLog(IEventLog):
             params.append(event_id)
 
         sql = (
-            "SELECT event_id, event_type, payload_json, timestamp_iso, prev_hash, event_hash "
+            "SELECT event_id, event_type, payload_json, timestamp_iso, hash_version, prev_hash, event_hash "
             "FROM events"
         )
         if clauses:
@@ -118,7 +137,7 @@ class SQLiteEventLog(IEventLog):
                 raise ValueError(f"from_event_id not found: {from_event_id}")
             rows = self._conn.execute(
                 (
-                    "SELECT event_id, event_type, payload_json, timestamp_iso, prev_hash, event_hash "
+                    "SELECT event_id, event_type, payload_json, timestamp_iso, hash_version, prev_hash, event_hash "
                     "FROM events WHERE seq >= ? ORDER BY seq ASC"
                 ),
                 (int(anchor["seq"]),),
@@ -131,7 +150,7 @@ class SQLiteEventLog(IEventLog):
         async with self._lock:
             rows = self._conn.execute(
                 (
-                    "SELECT event_id, event_type, payload_json, timestamp_iso, prev_hash, event_hash "
+                    "SELECT event_id, event_type, payload_json, timestamp_iso, hash_version, prev_hash, event_hash "
                     "FROM events ORDER BY seq ASC"
                 )
             ).fetchall()
@@ -148,6 +167,7 @@ class SQLiteEventLog(IEventLog):
                 event_type=row["event_type"],
                 timestamp_iso=row["timestamp_iso"],
                 payload_json=row["payload_json"],
+                hash_version=int(row["hash_version"]),
                 prev_hash=row_prev_hash,
             )
             if row_event_hash != expected_hash:
@@ -176,6 +196,7 @@ class SQLiteEventLog(IEventLog):
             event_type=row["event_type"],
             payload=payload,
             timestamp=timestamp,
+            hash_version=int(row["hash_version"]),
             prev_hash=row["prev_hash"],
             event_hash=row["event_hash"],
         )
@@ -190,8 +211,11 @@ class SQLiteEventLog(IEventLog):
         event_type: str,
         timestamp_iso: str,
         payload_json: str,
+        hash_version: int,
         prev_hash: str | None,
     ) -> str:
+        if hash_version != self._HASH_VERSION:
+            raise ValueError(f"unsupported event hash_version: {hash_version}")
         prev_segment = prev_hash or ""
         raw = "\n".join([event_id, event_type, timestamp_iso, payload_json, prev_segment])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()

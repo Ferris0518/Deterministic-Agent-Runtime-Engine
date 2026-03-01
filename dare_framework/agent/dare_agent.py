@@ -86,6 +86,11 @@ from dare_framework.transport.types import (
     new_envelope_id,
 )
 
+
+class EventLogWriteError(RuntimeError):
+    """Raised when runtime event persistence fails."""
+
+
 @dataclass(frozen=True)
 class SecurityPreflightResult:
     """Outcome of tool security preflight checks."""
@@ -1780,11 +1785,18 @@ class DareAgent(BaseAgent):
             payload = {
                 "task_id": self._session_state.task_id,
                 "run_id": self._session_state.run_id,
+                "session_id": self._session_state.run_id,
                 **payload,
             }
 
         if self._event_log is not None:
-            await self._event_log.append(event_type, payload)
+            try:
+                await self._event_log.append(event_type, payload)
+            except Exception as exc:  # pragma: no cover - exercised via tests
+                self._logger.exception("event log append failed: %s", event_type)
+                raise EventLogWriteError(
+                    f"event log append failed for {event_type}: {exc}"
+                ) from exc
 
     def _extract_conversation_id(self, task: Task) -> str | None:
         metadata = task.metadata if isinstance(task.metadata, dict) else {}
@@ -1819,4 +1831,4 @@ def _format_tool_result(tool_result: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=True)
 
 
-__all__ = ["DareAgent"]
+__all__ = ["DareAgent", "EventLogWriteError"]

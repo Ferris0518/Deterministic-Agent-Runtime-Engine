@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from dare_framework.agent import DareAgent
+from dare_framework.agent.dare_agent import EventLogWriteError
 from dare_framework.config import Config
 from dare_framework.context import Budget, Context, Message
 from dare_framework.model.types import ModelInput, ModelResponse
@@ -307,6 +308,21 @@ class TestDareAgentExecution:
         event_types = [e[0] for e in event_log.events]
         assert "session.start" in event_types
         assert "session.complete" in event_types
+
+    @pytest.mark.asyncio
+    async def test_event_log_write_failure_is_not_silent(self) -> None:
+        """Event write errors surface with event context for debugging."""
+
+        class FailingEventLog:
+            async def append(self, event_type: str, payload: dict[str, Any]) -> str:
+                _ = payload
+                raise RuntimeError(f"disk full while writing {event_type}")
+
+        model = MockModelAdapter()
+        agent = _make_agent(name="test-agent", model=model, event_log=FailingEventLog())
+
+        with pytest.raises(EventLogWriteError, match="session.start"):
+            await agent("Test task")
 
     @pytest.mark.asyncio
     async def test_budget_check_called(self) -> None:
@@ -993,6 +1009,7 @@ class TestFiveLayerMode:
         assert session_start
         assert session_start[0][1].get("task_id")
         assert session_start[0][1].get("run_id")
+        assert session_start[0][1].get("session_id") == session_start[0][1].get("run_id")
 
     @pytest.mark.asyncio
     async def test_milestone_attempt_count_is_persisted_on_state(self) -> None:

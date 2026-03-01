@@ -60,6 +60,10 @@ class TraceAwareEventLog(IEventLog):
                 "span_id": trace_ctx.span_id,
                 "trace_flags": trace_ctx.trace_flags,
             }
+            # Keep correlation fields queryable without JSON-subpath filters.
+            enhanced_payload.setdefault("trace_id", trace_ctx.trace_id)
+            enhanced_payload.setdefault("span_id", trace_ctx.span_id)
+            enhanced_payload.setdefault("trace_flags", trace_ctx.trace_flags)
 
         event_id = await self._inner.append(event_type, enhanced_payload)
 

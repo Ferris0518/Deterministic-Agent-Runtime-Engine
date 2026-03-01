@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from dare_framework.agent._internal.orchestration import MilestoneState, SessionState
 from dare_framework.context import Message
-from dare_framework.plan.types import RunResult, Task
+from dare_framework.plan.types import MilestoneSummary, RunResult, SessionSummary, Task
 
 
 class SessionOrchestratorAgent(Protocol):
@@ -47,7 +47,8 @@ async def run_session_loop(
         agent._session_state = SessionState(
             task_id=task.task_id or uuid4().hex[:8],
         )
-    session_start = time.perf_counter()
+    session_start_monotonic = time.perf_counter()
+    session_started_at = time.time()
     from dare_framework.hook.types import HookPhase
 
     await agent._emit_hook(HookPhase.BEFORE_SESSION, {
@@ -115,7 +116,7 @@ async def run_session_loop(
     })
     await agent._emit_hook(HookPhase.AFTER_SESSION, {
         "success": success,
-        "duration_ms": (time.perf_counter() - session_start) * 1000.0,
+        "duration_ms": (time.perf_counter() - session_start_monotonic) * 1000.0,
         "budget_stats": agent._budget_stats(),
     })
 
@@ -125,10 +126,43 @@ async def run_session_loop(
         if last_result.outputs:
             output = last_result.outputs[-1]
 
+    milestone_summaries: list[MilestoneSummary] = []
+    for idx, result in enumerate(milestone_results):
+        state = agent._session_state.milestone_states[idx]
+        milestone_summaries.append(
+            MilestoneSummary(
+                milestone_id=state.milestone.milestone_id,
+                description=state.milestone.description,
+                attempts=state.attempts,
+                success=result.success,
+                outputs=list(result.outputs),
+                errors=list(result.errors),
+                evidence_count=len(state.evidence_collected),
+                reflections_count=len(state.reflections),
+            )
+        )
+
+    session_ended_at = time.time()
+    session_summary = SessionSummary(
+        session_id=agent._session_state.run_id,
+        task_id=agent._session_state.task_id,
+        success=success,
+        started_at=session_started_at,
+        ended_at=session_ended_at,
+        duration_ms=(time.perf_counter() - session_start_monotonic) * 1000.0,
+        milestones=milestone_summaries,
+        final_output=output,
+        errors=list(errors),
+        metadata={"milestone_count": len(milestones)},
+    )
+    await agent._log_event("session.summary", {"summary": session_summary.to_dict()})
+
     return RunResult(
         success=success,
         output=output,
         errors=errors,
+        session_id=agent._session_state.run_id,
+        session_summary=session_summary,
     )
 
 

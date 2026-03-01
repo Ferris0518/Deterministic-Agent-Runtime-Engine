@@ -22,3 +22,10 @@
 - [ ] 4.1 更新开发文档，说明本地运行与故障排查流程。
 - [ ] 4.2 在发布流程增加 `p0-gate` 结果归档步骤。
 - [ ] 4.3 制定 flaky 用例处理规则与时限。
+
+## 5. Baseline Recovery Evidence
+
+- [x] 5.1 修复审批异常语义回归，恢复安全门控关键失败分支的结构化错误前缀契约。
+  Evidence: `dare_framework/tool/_internal/governed_tool_gateway.py`
+  Commands: `.venv/bin/pytest -q tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_evaluate_exception_returns_structured_failure tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_wait_exception_returns_structured_failure` => `2 passed`；`.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`
+  Last Updated: `2026-03-01`
