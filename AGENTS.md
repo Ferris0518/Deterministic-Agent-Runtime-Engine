@@ -18,8 +18,8 @@
   - key interfaces
   - exception/error handling
 - For any bug fix, feature, or refactor, follow the SOP sequence:
-  1. update design docs
-  2. generate design-code gap analysis
-  3. derive TODO list from the analysis
-  4. execute fixes via OpenSpec workflow task-by-task
+  1. perform full-scope analysis and create a master TODO backlog
+  2. update design docs and governance docs (docs are canonical)
+  3. slice TODO backlog into one or more OpenSpec changes
+  4. execute fixes via OpenSpec workflow task-by-task per slice
   5. update TODO/evidence and archive analysis artifacts
