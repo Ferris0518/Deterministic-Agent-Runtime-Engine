@@ -12,4 +12,4 @@
 ## 3. Verification And Evidence
 
 - [x] 3.1 增加 `control-stdin` happy path、unknown action、handler failure、session edge case 的测试。
-- [ ] 3.2 验证 Slice B headless event envelope 未被控制面引入回归破坏，并回写 `docs/features/client-external-control-plane-v1.md` 的 Evidence 区块。
+- [x] 3.2 验证 Slice B headless event envelope 未被控制面引入回归破坏，并回写 `docs/features/client-external-control-plane-v1.md` 的 Evidence 区块。
