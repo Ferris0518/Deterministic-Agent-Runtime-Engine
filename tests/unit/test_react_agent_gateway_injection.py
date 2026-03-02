@@ -220,3 +220,36 @@ async def test_react_agent_emits_intermediate_transport_events_in_order() -> Non
     assert payloads[1]["resp"]["name"] == "tool:echo"
     assert payloads[2]["resp"]["success"] is True
     assert payloads[3]["resp"]["output"] == "final answer"
+
+
+@pytest.mark.asyncio
+async def test_react_agent_transport_loop_emits_single_terminal_result_event() -> None:
+    context = Context(config=Config())
+    gateway = _RecordingGateway("injected")
+    transport = _RecordingTransport()
+
+    agent = ReactAgent(
+        name="react-test-transport-loop-terminal",
+        model=_ThinkingSequenceModel(),
+        context=context,
+        tool_gateway=gateway,
+        agent_channel=transport,
+    )
+
+    await agent._execute_polled_message(
+        "test",
+        channel=transport,
+        envelope_id="req_1",
+    )
+
+    event_types = [getattr(envelope, "event_type", None) for envelope in transport.sent]
+    assert event_types == [
+        TransportEventType.THINKING.value,
+        TransportEventType.TOOL_CALL.value,
+        TransportEventType.TOOL_RESULT.value,
+        TransportEventType.RESULT.value,
+    ]
+
+    terminal_payload = getattr(transport.sent[-1], "payload", {})
+    assert terminal_payload.get("resp", {}).get("success") is True
+    assert terminal_payload.get("resp", {}).get("output", {}).get("content") == "final answer"

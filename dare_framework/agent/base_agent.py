@@ -44,6 +44,7 @@ class BaseAgent(IAgent, IAgentOrchestration, ABC):
         self._agent_channel = agent_channel
         self._loop_task: asyncio.Task[None] | None = None
         self._in_flight_task: asyncio.Task[None] | None = None
+        self._transport_loop_execution = False
         self._started = False
         self._status = AgentStatus.INIT
         self._logger = logging.getLogger("dare.agent")
@@ -237,9 +238,17 @@ class BaseAgent(IAgent, IAgentOrchestration, ABC):
         envelope_id: str | None,
     ) -> None:
         """Execute one polled message and send response envelope through channel."""
-        result = await self.execute(task, transport=channel)
+        self._transport_loop_execution = True
+        try:
+            result = await self.execute(task, transport=channel)
+        finally:
+            self._transport_loop_execution = False
         result = self._with_normalized_output_text(result)
         await self._send_transport_result(result, task=task, transport=channel, reply_to=envelope_id)
+
+    def _is_transport_loop_execution(self, *, transport: AgentChannel | None) -> bool:
+        """Return whether execute() is currently running under the transport loop."""
+        return bool(transport is not None and self._transport_loop_execution)
 
     def _with_normalized_output_text(self, result: RunResult) -> RunResult:
         """Ensure RunResult.output_text is filled for downstream consumers."""

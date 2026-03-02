@@ -226,7 +226,10 @@ class ReactAgent(BaseAgent):
                     final_text = "模型未返回可显示的文本回复。请重试，或明确要求先调用 ask_user 再继续。"
                 assistant_message = Message(role="assistant", content=final_text)
                 self._context.stm_add(assistant_message)
-                await self._emit_terminal_transport_message(transport=transport, output=final_text)
+                await self._emit_terminal_transport_message(
+                    transport=transport,
+                    output=final_text,
+                )
                 output = build_output_envelope(
                     final_text,
                     usage=latest_usage,
