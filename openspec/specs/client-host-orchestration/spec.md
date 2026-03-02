@@ -11,12 +11,20 @@ The system SHALL distinguish between interactive CLI behavior, legacy automation
 - Interactive mode MAY use prompts and inline human approval UX.
 - Legacy automation JSON MAY keep the current `log/event/result` line schema for backward compatibility.
 - Headless host orchestration MUST be an explicit mode boundary and MUST NOT rely on prompt text or inline human approval interactions.
+- `chat` MUST remain interactive and MUST reject headless-only flags.
+- Incompatible headless/legacy flag combinations MUST fail with a deterministic parameter error instead of silently falling back.
 
 #### Scenario: Headless mode does not depend on prompt UX
 - **GIVEN** the client is started in host-orchestrated headless mode
 - **WHEN** a task execution requires runtime observation or control
 - **THEN** the client does not emit `dare>` style prompts
 - **AND** it does not require inline approval input from stdout/stdin prompt UX
+
+#### Scenario: Invalid flag combinations are rejected deterministically
+- **GIVEN** a caller combines headless-only execution with incompatible legacy output flags
+- **WHEN** argument parsing runs
+- **THEN** the client exits with a deterministic parameter error
+- **AND** it does not silently fall back to interactive or legacy automation output
 
 ### Requirement: Headless event envelope v1 is versioned and distinct from legacy automation JSON
 The system SHALL emit a versioned event envelope for headless mode that is distinct from the current legacy automation JSON schema.
