@@ -40,6 +40,7 @@ mode: openspec
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'bridges_additional_host_actions'`
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'script_headless_control_stdin_status_get_reports_active_task'`
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'surfaces_action_handler_failure or rejects_unsupported_action or bridges_approvals_list or control_stdin_status_get_emits_structured_result or script_headless_control_stdin_status_get_reports_active_task'`
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q -k 'cancellation_does_not_block_default_executor_shutdown'`
 - `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q`
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`
 - `openspec list`
@@ -56,6 +57,7 @@ mode: openspec
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'bridges_additional_host_actions'`: failed (`3` MCP cases red, `skills:list` already green) before `mcp:list/reload/show-tool` were admitted to the host bridge; passed (`4` tests) after extending the canonical action allow-list while keeping `mcp:unload` structurally rejected.
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'script_headless_control_stdin_status_get_reports_active_task'`: failed before script foreground execution tracked `active_task`; passed after aligning script/session state with run-mode snapshots.
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'surfaces_action_handler_failure or rejects_unsupported_action or bridges_approvals_list or control_stdin_status_get_emits_structured_result or script_headless_control_stdin_status_get_reports_active_task'`: passed (`5` tests), covering happy path plus unsupported-action and handler-failure branches.
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q -k 'cancellation_does_not_block_default_executor_shutdown'`: failed before the review fix because cancelling the control task still left a blocking `stdin.readline()` worker pinned in the default executor; passed after moving `control-stdin` reads onto a daemon thread + asyncio queue bridge.
 - `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q`: passed (`44` tests, `0` failures).
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`: passed (`20` tests, `0` failures).
 - `openspec list`: confirms Slice A / Slice B have been archived out of the active change list, and the active Slice C change now shows `✓ Complete`.
@@ -81,3 +83,4 @@ mode: openspec
 - Slice C docs-only intent PR (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148`
 - Slice C implementation PR (open): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/151`
 - Slice C spec-fold review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148#discussion_r2872038646`
+- Slice C implementation review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/151#discussion_r2872629793`

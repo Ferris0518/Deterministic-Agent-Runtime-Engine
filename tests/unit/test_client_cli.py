@@ -1511,6 +1511,42 @@ def test_chat_parser_rejects_control_stdin_flag() -> None:
     assert excinfo.value.code == 2
 
 
+def test_read_control_stdin_line_cancellation_does_not_block_default_executor_shutdown(
+    monkeypatch,
+) -> None:
+    client_main = importlib.import_module("client.main")
+    entered = threading.Event()
+    release = threading.Event()
+
+    class _BlockingStdin:
+        def readline(self) -> str:
+            entered.set()
+            release.wait(timeout=5.0)
+            return ""
+
+    async def _exercise() -> None:
+        task = asyncio.create_task(client_main._read_control_stdin_line())
+        deadline = time.time() + 1.0
+        while not entered.is_set():
+            assert time.time() < deadline
+            await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    monkeypatch.setattr(client_main.sys, "stdin", _BlockingStdin())
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(asyncio.wait_for(_exercise(), timeout=1.0))
+        loop.run_until_complete(asyncio.wait_for(loop.shutdown_default_executor(), timeout=0.2))
+    finally:
+        release.set()
+        with contextlib.suppress(Exception):
+            loop.run_until_complete(asyncio.wait_for(loop.shutdown_default_executor(), timeout=1.0))
+        loop.close()
+
+
 @pytest.mark.asyncio
 async def test_main_run_headless_rejects_legacy_output(monkeypatch, tmp_path, capsys) -> None:
     client_main = importlib.import_module("client.main")

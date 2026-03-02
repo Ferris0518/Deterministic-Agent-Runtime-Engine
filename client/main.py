@@ -9,6 +9,7 @@ import dataclasses
 import json
 import logging
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
@@ -205,12 +206,82 @@ def _is_execution_running(state: CLISessionState) -> bool:
     return task is not None and not task.done()
 
 
+class _ControlStdinReader:
+    """Read control frames without pinning the asyncio default executor.
+
+    A daemon thread is used here because cancellation cannot interrupt a
+    blocking `stdin.readline()` call. Leaving the read inside `to_thread()`
+    can keep the loop waiting on default-executor shutdown even after the
+    control task itself has been cancelled.
+    """
+
+    def __init__(self, *, stdin: Any | None = None) -> None:
+        self._stdin = sys.stdin if stdin is None else stdin
+        self._closed = False
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._queue: asyncio.Queue[str | None] | None = None
+        self._thread: threading.Thread | None = None
+
+    def _ensure_started(self) -> None:
+        if self._thread is not None:
+            return
+        self._loop = asyncio.get_running_loop()
+        self._queue = asyncio.Queue()
+        self._thread = threading.Thread(
+            target=self._pump_lines,
+            name="dare-control-stdin",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def _publish(self, line: str | None) -> None:
+        loop = self._loop
+        queue = self._queue
+        if loop is None or queue is None or loop.is_closed():
+            return
+        with contextlib.suppress(RuntimeError):
+            loop.call_soon_threadsafe(queue.put_nowait, line)
+
+    def _pump_lines(self) -> None:
+        while True:
+            raw = self._stdin.readline()
+            if self._closed:
+                return
+            if raw == "":
+                self._publish(None)
+                return
+            self._publish(raw.rstrip("\n"))
+
+    async def read_line(self) -> str | None:
+        self._ensure_started()
+        assert self._queue is not None
+        return await self._queue.get()
+
+    def close(self) -> None:
+        self._closed = True
+
+
+_control_stdin_reader: _ControlStdinReader | None = None
+
+
+def _get_control_stdin_reader() -> _ControlStdinReader:
+    global _control_stdin_reader
+    if _control_stdin_reader is None:
+        _control_stdin_reader = _ControlStdinReader()
+    return _control_stdin_reader
+
+
+def _close_control_stdin_reader() -> None:
+    global _control_stdin_reader
+    if _control_stdin_reader is None:
+        return
+    _control_stdin_reader.close()
+    _control_stdin_reader = None
+
+
 async def _read_control_stdin_line() -> str | None:
-    """Read one control frame line from stdin without blocking the event loop."""
-    raw = await asyncio.to_thread(sys.stdin.readline)
-    if raw == "":
-        return None
-    return raw.rstrip("\n")
+    """Read one control frame line from stdin without pinning loop shutdown."""
+    return await _get_control_stdin_reader().read_line()
 
 
 def _status_snapshot(state: CLISessionState) -> dict[str, Any]:
@@ -265,64 +336,67 @@ async def _run_control_stdin_loop(
 ) -> None:
     """Process structured host control commands from stdin."""
     renderer = ControlStdinRenderer()
-    while True:
-        line = await _read_control_stdin_line()
-        if line is None:
-            return
-        if not line.strip():
-            continue
+    try:
+        while True:
+            line = await _read_control_stdin_line()
+            if line is None:
+                return
+            if not line.strip():
+                continue
 
-        request_id = "?"
-        action_id = "?"
-        try:
-            payload = json.loads(line)
-            if not isinstance(payload, dict):
-                raise ValueError("control frame must be a JSON object")
-            request_id = str(payload.get("id", "?")).strip() or "?"
-            schema_version = str(payload.get("schema_version", "")).strip()
-            if schema_version != ControlStdinRenderer.schema_version:
-                raise ValueError(
-                    "unsupported control schema_version: "
-                    f"{schema_version or '<missing>'}"
+            request_id = "?"
+            action_id = "?"
+            try:
+                payload = json.loads(line)
+                if not isinstance(payload, dict):
+                    raise ValueError("control frame must be a JSON object")
+                request_id = str(payload.get("id", "?")).strip() or "?"
+                schema_version = str(payload.get("schema_version", "")).strip()
+                if schema_version != ControlStdinRenderer.schema_version:
+                    raise ValueError(
+                        "unsupported control schema_version: "
+                        f"{schema_version or '<missing>'}"
+                    )
+                action_id = str(payload.get("action", "")).strip()
+                if not action_id:
+                    raise ValueError("control action is required")
+                params = payload.get("params", {})
+                if params is None:
+                    params = {}
+                if not isinstance(params, dict):
+                    raise ValueError("control params must be a JSON object")
+                result = await _dispatch_control_action(
+                    action_id=action_id,
+                    params=params,
+                    state=state,
+                    runtime=runtime,
+                    action_client=action_client,
                 )
-            action_id = str(payload.get("action", "")).strip()
-            if not action_id:
-                raise ValueError("control action is required")
-            params = payload.get("params", {})
-            if params is None:
-                params = {}
-            if not isinstance(params, dict):
-                raise ValueError("control params must be a JSON object")
-            result = await _dispatch_control_action(
-                action_id=action_id,
-                params=params,
-                state=state,
-                runtime=runtime,
-                action_client=action_client,
-            )
-        except json.JSONDecodeError as exc:
-            renderer.emit(
-                request_id=request_id,
-                ok=False,
-                error={"code": "INVALID_JSON", "message": str(exc), "target": "control-stdin"},
-            )
-            continue
-        except ActionClientError as exc:
-            renderer.emit(
-                request_id=request_id,
-                ok=False,
-                error={"code": exc.code, "message": exc.reason, "target": exc.target},
-            )
-            continue
-        except Exception as exc:  # noqa: BLE001
-            renderer.emit(
-                request_id=request_id,
-                ok=False,
-                error={"code": "INVALID_CONTROL_FRAME", "message": str(exc), "target": action_id},
-            )
-            continue
+            except json.JSONDecodeError as exc:
+                renderer.emit(
+                    request_id=request_id,
+                    ok=False,
+                    error={"code": "INVALID_JSON", "message": str(exc), "target": "control-stdin"},
+                )
+                continue
+            except ActionClientError as exc:
+                renderer.emit(
+                    request_id=request_id,
+                    ok=False,
+                    error={"code": exc.code, "message": exc.reason, "target": exc.target},
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001
+                renderer.emit(
+                    request_id=request_id,
+                    ok=False,
+                    error={"code": "INVALID_CONTROL_FRAME", "message": str(exc), "target": action_id},
+                )
+                continue
 
-        renderer.emit(request_id=request_id, ok=True, result=_serialize(result), error=None)
+            renderer.emit(request_id=request_id, ok=True, result=_serialize(result), error=None)
+    finally:
+        _close_control_stdin_reader()
 
 
 async def _execute_task_and_report(
