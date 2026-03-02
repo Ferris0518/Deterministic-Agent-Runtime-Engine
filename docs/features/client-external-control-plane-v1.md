@@ -34,6 +34,13 @@ mode: openspec
 
 - `git fetch origin`
 - `git worktree add .worktrees/client-external-control-plane-v1 -b codex/client-external-control-plane-v1 origin/main`
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q -k 'control_stdin or control-stdin or chat_parser_rejects_control_stdin_flag or run_and_script_parser_accept_control_stdin_flag'`
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'control_stdin_status_get_emits_structured_result'`
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'bridges_approvals_list'`
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'script_headless_control_stdin_status_get_reports_active_task'`
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'surfaces_action_handler_failure or rejects_unsupported_action or bridges_approvals_list or control_stdin_status_get_emits_structured_result or script_headless_control_stdin_status_get_reports_active_task'`
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q`
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`
 - `openspec list`
 - `openspec validate client-external-control-plane-v1 --type change --strict --json --no-interactive`
 - `./scripts/ci/check_governance_evidence_truth.sh`
@@ -42,14 +49,22 @@ mode: openspec
 
 - `git fetch origin`: confirmed `origin/main` includes merged Slice B via PR `#145`.
 - `git worktree add .worktrees/client-external-control-plane-v1 -b codex/client-external-control-plane-v1 origin/main`: created an isolated Slice C workspace from `origin/main` commit `bc39bc0`.
-- `openspec list`: confirms Slice A / Slice B have been archived out of the active change list, and the new Slice C kickoff change is recognized as `0/7 tasks`.
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q -k 'control_stdin or control-stdin or chat_parser_rejects_control_stdin_flag or run_and_script_parser_accept_control_stdin_flag'`: passed (`4` tests) after adding `--control-stdin` parser support and rejecting non-headless usage.
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'control_stdin_status_get_emits_structured_result'`: failed before the first control-loop implementation because no `client-control-stdin.v1` response frame was emitted; passed after landing the control stdin loop and `status:get` snapshot.
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'bridges_approvals_list'`: failed before approvals were bridged through canonical action dispatch; passed after exposing `approvals:list` via the control plane.
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'script_headless_control_stdin_status_get_reports_active_task'`: failed before script foreground execution tracked `active_task`; passed after aligning script/session state with run-mode snapshots.
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'surfaces_action_handler_failure or rejects_unsupported_action or bridges_approvals_list or control_stdin_status_get_emits_structured_result or script_headless_control_stdin_status_get_reports_active_task'`: passed (`5` tests), covering happy path plus unsupported-action and handler-failure branches.
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q`: passed (`44` tests, `0` failures).
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`: passed (`16` tests, `0` failures).
+- `openspec list`: confirms Slice A / Slice B have been archived out of the active change list, and the active Slice C change now shows `5/7 tasks`.
 - `openspec validate client-external-control-plane-v1 --type change --strict --json --no-interactive`: passed (`1/1` change valid, `0` issues).
 - `./scripts/ci/check_governance_evidence_truth.sh`: passed after the Slice C feature evidence block and prior-slice archive moves were synchronized.
 
 ### Behavior Verification
 
-- Happy path: the planned Slice C contract narrows v1 external control to `--control-stdin`, preserving the landed headless event envelope from Slice B as the read-only observation channel.
-- Error branch: Slice C keeps unknown action ids and unsupported MCP operations on the structured error path; it does not permit fallback to prompt text or undocumented CLI-only verbs such as `mcp:unload`.
+- Happy path: `run/script --headless --control-stdin` now multiplexes `client-control-stdin.v1` responses on stdout alongside the existing headless event envelope, and `status:get` returns a structured session snapshot including the current active task.
+- Happy path: approvals are now reachable from the host control plane through the canonical `approvals:*` action ids, without falling back to slash-command parsing.
+- Error branch: unsupported actions such as `mcp:unload` return structured `UNSUPPORTED_ACTION` errors, and transport/action handler failures are surfaced as structured error responses instead of prompt text.
 
 ### Risks and Rollback
 
@@ -60,5 +75,5 @@ mode: openspec
 
 - Slice A intent gate (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/141`
 - Slice B implementation gate (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/145`
-- Slice C docs-only intent PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148`
+- Slice C docs-only intent PR (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148`
 - Slice C spec-fold review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148#discussion_r2872038646`

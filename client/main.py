@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import dataclasses
 import json
 import logging
+import sys
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
@@ -22,6 +24,7 @@ from client.commands.info import (
 )
 from client.commands.mcp import format_mcp_inspection, handle_mcp_tokens
 from client.parser.command import Command, CommandType, parse_command
+from client.render.control import ControlStdinRenderer
 from client.render.headless import HeadlessRenderer
 from client.render.human import HumanRenderer
 from client.render.json import JsonRenderer
@@ -200,6 +203,123 @@ def _load_script_lines_with_handling(path: Path, *, output: OutputFacade) -> lis
 def _is_execution_running(state: CLISessionState) -> bool:
     task = state.active_execution_task
     return task is not None and not task.done()
+
+
+async def _read_control_stdin_line() -> str | None:
+    """Read one control frame line from stdin without blocking the event loop."""
+    raw = await asyncio.to_thread(sys.stdin.readline)
+    if raw == "":
+        return None
+    return raw.rstrip("\n")
+
+
+def _status_snapshot(state: CLISessionState) -> dict[str, Any]:
+    """Project CLI session state into a stable host-control snapshot."""
+    running = state.status == SessionStatus.RUNNING or _is_execution_running(state)
+    return {
+        "mode": state.mode.value,
+        "status": state.status.value,
+        "running": running,
+        "active_task": state.active_execution_description,
+        "pending_approvals": sorted(state.pending_runtime_approvals),
+    }
+
+
+async def _dispatch_control_action(
+    *,
+    action_id: str,
+    params: dict[str, Any],
+    state: CLISessionState,
+    runtime: Any,
+    action_client: TransportActionClient,
+) -> Any:
+    """Bridge host control actions onto the current CLI/runtime surface."""
+    if action_id == "status:get":
+        return _status_snapshot(state)
+    resolved = ResourceAction.value_of(action_id)
+    if resolved in {
+        ResourceAction.APPROVALS_LIST,
+        ResourceAction.APPROVALS_POLL,
+        ResourceAction.APPROVALS_GRANT,
+        ResourceAction.APPROVALS_DENY,
+        ResourceAction.APPROVALS_REVOKE,
+        ResourceAction.SKILLS_LIST,
+    }:
+        return await action_client.invoke_action(resolved, **params)
+    _ = runtime
+    raise ActionClientError(
+        code="UNSUPPORTED_ACTION",
+        reason=f"unsupported control action: {action_id}",
+        target=action_id,
+    )
+
+
+async def _run_control_stdin_loop(
+    *,
+    state: CLISessionState,
+    runtime: Any,
+    action_client: TransportActionClient,
+) -> None:
+    """Process structured host control commands from stdin."""
+    renderer = ControlStdinRenderer()
+    while True:
+        line = await _read_control_stdin_line()
+        if line is None:
+            return
+        if not line.strip():
+            continue
+
+        request_id = "?"
+        action_id = "?"
+        try:
+            payload = json.loads(line)
+            if not isinstance(payload, dict):
+                raise ValueError("control frame must be a JSON object")
+            request_id = str(payload.get("id", "?")).strip() or "?"
+            schema_version = str(payload.get("schema_version", "")).strip()
+            if schema_version != ControlStdinRenderer.schema_version:
+                raise ValueError(
+                    "unsupported control schema_version: "
+                    f"{schema_version or '<missing>'}"
+                )
+            action_id = str(payload.get("action", "")).strip()
+            if not action_id:
+                raise ValueError("control action is required")
+            params = payload.get("params", {})
+            if params is None:
+                params = {}
+            if not isinstance(params, dict):
+                raise ValueError("control params must be a JSON object")
+            result = await _dispatch_control_action(
+                action_id=action_id,
+                params=params,
+                state=state,
+                runtime=runtime,
+                action_client=action_client,
+            )
+        except json.JSONDecodeError as exc:
+            renderer.emit(
+                request_id=request_id,
+                ok=False,
+                error={"code": "INVALID_JSON", "message": str(exc), "target": "control-stdin"},
+            )
+            continue
+        except ActionClientError as exc:
+            renderer.emit(
+                request_id=request_id,
+                ok=False,
+                error={"code": exc.code, "message": exc.reason, "target": exc.target},
+            )
+            continue
+        except Exception as exc:  # noqa: BLE001
+            renderer.emit(
+                request_id=request_id,
+                ok=False,
+                error={"code": "INVALID_CONTROL_FRAME", "message": str(exc), "target": action_id},
+            )
+            continue
+
+        renderer.emit(request_id=request_id, ok=True, result=_serialize(result), error=None)
 
 
 async def _execute_task_and_report(
@@ -679,22 +799,26 @@ async def _handle_shell_command(
             return False
 
         state.status = SessionStatus.RUNNING
-        if approval_watch is not None:
-            await _execute_task_with_approval_timeout(
-                runtime=runtime,
-                output=output,
-                state=state,
-                task_text=task_text,
-                approval_watch=approval_watch,
-                approval_timeout_seconds=approval_timeout_seconds,
-            )
-        else:
-            await _execute_task_and_report(
-                runtime=runtime,
-                output=output,
-                state=state,
-                task_text=task_text,
-            )
+        state.active_execution_description = task_text
+        try:
+            if approval_watch is not None:
+                await _execute_task_with_approval_timeout(
+                    runtime=runtime,
+                    output=output,
+                    state=state,
+                    task_text=task_text,
+                    approval_watch=approval_watch,
+                    approval_timeout_seconds=approval_timeout_seconds,
+                )
+            else:
+                await _execute_task_and_report(
+                    runtime=runtime,
+                    output=output,
+                    state=state,
+                    task_text=task_text,
+                )
+        finally:
+            state.active_execution_description = None
         state.status = SessionStatus.IDLE
         return False
 
@@ -849,22 +973,26 @@ async def _run_cli_loop(
             continue
 
         state.status = SessionStatus.RUNNING
-        if approval_watch is not None:
-            await _execute_task_with_approval_timeout(
-                runtime=runtime,
-                output=output,
-                state=state,
-                task_text=task_text,
-                approval_watch=approval_watch,
-                approval_timeout_seconds=approval_timeout_seconds,
-            )
-        else:
-            await _execute_task_and_report(
-                runtime=runtime,
-                output=output,
-                state=state,
-                task_text=task_text,
-            )
+        state.active_execution_description = task_text
+        try:
+            if approval_watch is not None:
+                await _execute_task_with_approval_timeout(
+                    runtime=runtime,
+                    output=output,
+                    state=state,
+                    task_text=task_text,
+                    approval_watch=approval_watch,
+                    approval_timeout_seconds=approval_timeout_seconds,
+                )
+            else:
+                await _execute_task_and_report(
+                    runtime=runtime,
+                    output=output,
+                    state=state,
+                    task_text=task_text,
+                )
+        finally:
+            state.active_execution_description = None
         state.status = SessionStatus.IDLE
 
     await _finalize_background_task_if_done(state, output=output)
@@ -972,6 +1100,7 @@ async def _run_chat(
     mode: str,
     script_lines: list[str] | None,
     approval_timeout_seconds: float | None = None,
+    control_stdin: bool = False,
 ) -> int:
     state = CLISessionState(mode=_normalize_mode(mode))
     if output.is_headless:
@@ -1012,6 +1141,15 @@ async def _run_chat(
         ),
     )
     pump.start()
+    control_task: asyncio.Task[None] | None = None
+    if output.is_headless and control_stdin:
+        control_task = asyncio.create_task(
+            _run_control_stdin_loop(
+                state=state,
+                runtime=runtime,
+                action_client=action_client,
+            )
+        )
     try:
         if script_lines is not None:
             await _run_cli_loop(
@@ -1062,6 +1200,10 @@ async def _run_chat(
             await _wait_for_background_task(state, output=output)
         return 0
     finally:
+        if control_task is not None:
+            control_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await control_task
         await pump.stop()
 
 
@@ -1110,6 +1252,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="planned host-orchestrated headless mode for non-interactive execution",
     )
+    run.add_argument(
+        "--control-stdin",
+        action="store_true",
+        help="enable structured control commands from stdin in headless mode",
+    )
 
     script = sub.add_parser("script", help="run script and exit")
     script.add_argument("--file", required=True)
@@ -1118,6 +1265,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--headless",
         action="store_true",
         help="planned host-orchestrated headless mode for non-interactive execution",
+    )
+    script.add_argument(
+        "--control-stdin",
+        action="store_true",
+        help="enable structured control commands from stdin in headless mode",
     )
     script.add_argument(
         "--approval-timeout-seconds",
@@ -1206,6 +1358,12 @@ def _validate_cli_args(args: argparse.Namespace, *, output: OutputFacade) -> int
             level="error",
         )
         return 2
+    if getattr(args, "control_stdin", False) and not getattr(args, "headless", False):
+        output.display(
+            "--control-stdin requires --headless; interactive and legacy modes do not expose the host control plane",
+            level="error",
+        )
+        return 2
 
     return None
 
@@ -1275,6 +1433,7 @@ async def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 script_lines=lines,
                 approval_timeout_seconds=None,
+                control_stdin=False,
             )
 
         if command == "run":
@@ -1339,7 +1498,17 @@ async def main(argv: list[str] | None = None) -> int:
                 ),
             )
             pump.start()
+            control_task: asyncio.Task[None] | None = None
+            if args.control_stdin:
+                control_task = asyncio.create_task(
+                    _run_control_stdin_loop(
+                        state=state,
+                        runtime=runtime,
+                        action_client=action_client,
+                    )
+                )
             state.status = SessionStatus.RUNNING
+            state.active_execution_description = args.task
             try:
                 success = await _execute_task_with_approval_timeout(
                     runtime=runtime,
@@ -1350,6 +1519,11 @@ async def main(argv: list[str] | None = None) -> int:
                     approval_timeout_seconds=args.approval_timeout_seconds,
                 )
             finally:
+                state.active_execution_description = None
+                if control_task is not None:
+                    control_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await control_task
                 await pump.stop()
             return 0 if success else 1
 
@@ -1367,6 +1541,7 @@ async def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 script_lines=lines,
                 approval_timeout_seconds=script_approval_timeout_seconds,
+                control_stdin=args.control_stdin,
             )
 
         if command == "approvals":
