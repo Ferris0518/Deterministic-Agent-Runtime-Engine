@@ -35,6 +35,7 @@
 | Gate-1 | `<schema/payload/enum>` | `<WP-A>` | `<WP-B/WP-C>` | `todo` | `<PR/doc/test>` |
 | Gate-2 | `<assemble/loop/policy>` | `<WP-B>` | `<WP-D>` | `todo` | `<PR/doc/test>` |
 | Gate-3 | `<audit/log/state>` | `<WP-C>` | `<WP-D>` | `todo` | `<PR/doc/test>` |
+| Gate-4 | `<end-to-end integration/signoff>` | `<WP-D>` | `<all>` | `todo` | `<PR/doc/test>` |
 
 ## 3. Work Package 协作板
 

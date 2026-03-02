@@ -12,8 +12,8 @@
 5. 任何 `skip/only/exclude` 必须说明理由并经 review。
 
 对应规则来源：
-- `/Users/lysander/projects/dare-framework/docs/agent_rules.md`
-- `/Users/lysander/projects/dare-framework/.github/pull_request_template.md`
+- `docs/agent_rules.md`
+- `.github/pull_request_template.md`
 
 ## 2. 日常工作流（每次都按这个走）
 
@@ -38,7 +38,7 @@ pytest -q tests/smoke -m smoke
 ## 3. 当前 CI 闸门说明（按阶段）
 
 工作流：
-- `/Users/lysander/projects/dare-framework/.github/workflows/ci-gate.yml`
+- `.github/workflows/ci-gate.yml`
 
 当前检查项：
 - `lint`
@@ -49,12 +49,12 @@ pytest -q tests/smoke -m smoke
 - `lockfile-policy`
 
 治理配置说明：
-- `/Users/lysander/projects/dare-framework/docs/governance/branch-protection.md`
+- `docs/governance/branch-protection.md`
 
 ## 4. 免费版主干护栏（main-guard）
 
 工作流：
-- `/Users/lysander/projects/dare-framework/.github/workflows/main-guard.yml`
+- `.github/workflows/main-guard.yml`
 
 触发：
 - 每次 `push` 到 `main`
@@ -73,7 +73,7 @@ pytest -q tests/smoke -m smoke
 ## 4.1 合并人工审批护栏（manual-merge-guard）
 
 工作流：
-- `/Users/lysander/projects/dare-framework/.github/workflows/manual-merge-guard.yml`
+- `.github/workflows/manual-merge-guard.yml`
 
 作用：
 1. PR 合入 `main` 后检查是否符合人工审批策略。
