@@ -144,6 +144,7 @@ def _enforce_tool_pair_safety(messages: List[Message]) -> Tuple[List[Message], i
 
     updated_messages: list[Message] = []
     retained_call_ids: set[str] = set()
+    has_idless_tool_calls = False
     changes = 0
     for message in messages:
         if message.role != "assistant":
@@ -162,6 +163,12 @@ def _enforce_tool_pair_safety(messages: List[Message]) -> Tuple[List[Message], i
             if isinstance(tool_id, str) and tool_id.strip() and tool_id.strip() in tool_result_ids:
                 filtered_calls.append(call)
                 retained_call_ids.add(tool_id.strip())
+                continue
+            if not isinstance(tool_id, str) or not tool_id.strip():
+                # Some providers emit tool calls without stable ids. Keep these calls and
+                # preserve tool messages instead of dropping context pairs heuristically.
+                filtered_calls.append(call)
+                has_idless_tool_calls = True
 
         if len(filtered_calls) != len(raw_calls):
             changes += len(raw_calls) - len(filtered_calls)
@@ -182,6 +189,9 @@ def _enforce_tool_pair_safety(messages: List[Message]) -> Tuple[List[Message], i
     final_messages: list[Message] = []
     for message in updated_messages:
         if message.role == "tool":
+            if has_idless_tool_calls:
+                final_messages.append(message)
+                continue
             tool_id = message.name.strip() if isinstance(message.name, str) else ""
             if tool_id and tool_id not in retained_call_ids:
                 changes += 1

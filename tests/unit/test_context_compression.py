@@ -61,6 +61,27 @@ def test_compress_context_tool_pair_safe_removes_unmatched_tool_call_ids() -> No
     assert _tool_ids(assistant_message) == ["tc_1"]
 
 
+def test_compress_context_tool_pair_safe_keeps_idless_tool_context() -> None:
+    ctx = Context(config=Config())
+    ctx.stm_add(
+        Message(
+            role="assistant",
+            content="tool call without id",
+            metadata={"tool_calls": [{"name": "demo_tool", "arguments": {"x": 1}}]},
+        )
+    )
+    ctx.stm_add(Message(role="tool", name="demo_tool", content='{"success": true}'))
+
+    compress_context(ctx, strategy="truncate", max_messages=10, tool_pair_safe=True)
+
+    messages = ctx.stm_get()
+    assistant_message = next(message for message in messages if message.role == "assistant")
+    raw_calls = assistant_message.metadata.get("tool_calls", [])
+    assert isinstance(raw_calls, list)
+    assert len(raw_calls) == 1
+    assert any(message.role == "tool" and message.name == "demo_tool" for message in messages)
+
+
 def test_compress_context_target_tokens_trims_long_history() -> None:
     ctx = Context(config=Config())
     for idx in range(8):
