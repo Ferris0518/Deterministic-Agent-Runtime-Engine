@@ -250,7 +250,10 @@ class ReactAgent(BaseAgent):
             if repeated_tool_rounds >= 3:
                 loop_guard = "模型连续重复调用相同工具，已停止自动循环。请换一种描述，或明确要求先调用 ask_user 再继续。"
                 self._context.stm_add(Message(role="assistant", content=loop_guard))
-                await self._emit_terminal_transport_message(transport=transport, output=loop_guard)
+                await self._emit_terminal_transport_message(
+                    transport=transport,
+                    output=loop_guard,
+                )
                 output = build_output_envelope(loop_guard, usage=latest_usage)
                 return RunResult(success=True, output=output, output_text=output["content"])
 
@@ -320,7 +323,10 @@ class ReactAgent(BaseAgent):
                 self._context.stm_add(tool_msg)
 
         final_message = "模型在工具循环中未收敛（达到最大轮次）。请缩小范围，或明确要求先调用 ask_user 再继续。"
-        await self._emit_terminal_transport_message(transport=transport, output=final_message)
+        await self._emit_terminal_transport_message(
+            transport=transport,
+            output=final_message,
+        )
         output = build_output_envelope(final_message, usage=latest_usage)
         return RunResult(
             success=True,

@@ -298,6 +298,8 @@ def _render_status_output(payload: dict[str, Any]) -> Any:
     """Render canonical status payload into a concise stdio output."""
     resp = payload.get("resp")
     if isinstance(resp, dict):
+        if "phase" in resp:
+            return resp.get("phase")
         request_id = resp.get("request_id")
         decision = resp.get("decision")
         if isinstance(resp.get("request"), dict):
@@ -307,9 +309,6 @@ def _render_status_output(payload: dict[str, Any]) -> Any:
         if request_id:
             return f"approval pending: request_id={request_id}"
         return "approval update"
-
-    if isinstance(resp, dict) and "phase" in resp:
-        return resp.get("phase")
     if "phase" in payload:
         return payload.get("phase")
     if "event" in payload:

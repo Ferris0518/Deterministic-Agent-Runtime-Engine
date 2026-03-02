@@ -75,6 +75,25 @@ class _RepeatingToolModel:
         )
 
 
+class _UniqueToolLoopModel:
+    def __init__(self) -> None:
+        self._idx = 0
+
+    async def generate(self, model_input: ModelInput, *, options: Any | None = None) -> ModelResponse:
+        _ = (model_input, options)
+        self._idx += 1
+        return ModelResponse(
+            content="still searching",
+            tool_calls=[
+                {
+                    "id": f"tc_{self._idx}",
+                    "name": "tool:echo",
+                    "arguments": {"value": "ping"},
+                }
+            ],
+        )
+
+
 class _RecordingGateway:
     def __init__(self, label: str) -> None:
         self.label = label
@@ -253,3 +272,48 @@ async def test_react_agent_transport_loop_emits_single_terminal_result_event() -
     terminal_payload = getattr(transport.sent[-1], "payload", {})
     assert terminal_payload.get("resp", {}).get("success") is True
     assert terminal_payload.get("resp", {}).get("output", {}).get("content") == "final answer"
+
+
+@pytest.mark.asyncio
+async def test_react_agent_emits_terminal_message_for_repeated_tool_guard() -> None:
+    context = Context(config=Config())
+    gateway = _RecordingGateway("injected")
+    transport = _RecordingTransport()
+
+    agent = ReactAgent(
+        name="react-test-loop-guard-terminal",
+        model=_RepeatingToolModel(),
+        context=context,
+        tool_gateway=gateway,
+    )
+
+    result = await agent.execute("test", transport=transport)
+
+    assert result.success is True
+    assert transport.sent
+    last_envelope = transport.sent[-1]
+    assert getattr(last_envelope, "event_type", None) == TransportEventType.MESSAGE.value
+    assert "连续重复调用相同工具" in str(getattr(last_envelope, "payload", {}).get("resp", {}).get("output", ""))
+
+
+@pytest.mark.asyncio
+async def test_react_agent_emits_terminal_message_for_max_round_exit() -> None:
+    context = Context(config=Config())
+    gateway = _RecordingGateway("injected")
+    transport = _RecordingTransport()
+
+    agent = ReactAgent(
+        name="react-test-max-round-terminal",
+        model=_UniqueToolLoopModel(),
+        context=context,
+        tool_gateway=gateway,
+        max_tool_rounds=2,
+    )
+
+    result = await agent.execute("test", transport=transport)
+
+    assert result.success is True
+    assert transport.sent
+    last_envelope = transport.sent[-1]
+    assert getattr(last_envelope, "event_type", None) == TransportEventType.MESSAGE.value
+    assert "达到最大轮次" in str(getattr(last_envelope, "payload", {}).get("resp", {}).get("output", ""))
