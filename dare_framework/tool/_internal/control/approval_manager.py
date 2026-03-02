@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from dare_framework.tool._internal.runtime_context_override import (
+    RUNTIME_CONTEXT_PARAM,
+    RuntimeContextOverride,
+)
+
 
 class ApprovalDecision(StrEnum):
     """Approval decisions returned by approval policies."""
@@ -147,6 +152,10 @@ class ApprovalEvaluation:
 class _PendingApproval:
     request: PendingApprovalRequest
     fingerprint: str
+    # Track all sessions that are currently blocked on this deduplicated request.
+    # The first requester is also recorded so session-filtered polling can match it
+    # even after subsequent evaluate() calls deduplicate to the same request id.
+    session_ids: set[str] = field(default_factory=set)
     event: asyncio.Event = field(default_factory=asyncio.Event)
     resolution: ApprovalDecision | None = None
 
@@ -217,8 +226,10 @@ class ToolApprovalManager:
         self._pending_by_id: dict[str, _PendingApproval] = {}
         self._pending_by_fingerprint: dict[str, _PendingApproval] = {}
         self._resolved_by_id: dict[str, ApprovalDecision] = {}
-        self._pending_available = asyncio.Event()
         self._lock = asyncio.Lock()
+        # Condition-based wakeups avoid tight loops when polling with a session filter
+        # while unrelated pending requests exist.
+        self._pending_state_changed = asyncio.Condition(self._lock)
 
     @classmethod
     def from_paths(cls, *, workspace_dir: str | Path, user_dir: str | Path) -> ToolApprovalManager:
@@ -231,31 +242,36 @@ class ToolApprovalManager:
         pending.sort(key=lambda item: (item.created_at, item.request_id))
         return pending
 
-    async def poll_pending(self, *, timeout_seconds: float | None = None) -> PendingApprovalRequest | None:
-        """Return the oldest pending approval request, optionally waiting for one."""
+    async def poll_pending(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+        session_id: str | None = None,
+    ) -> PendingApprovalRequest | None:
+        """Return the oldest pending approval request, optionally filtered by session."""
         if timeout_seconds is not None and timeout_seconds < 0:
             raise ValueError("timeout_seconds must be >= 0")
 
         loop = asyncio.get_running_loop()
         deadline = None if timeout_seconds is None else loop.time() + timeout_seconds
-        while True:
-            async with self._lock:
-                request = self._oldest_pending_locked()
+
+        async with self._pending_state_changed:
+            while True:
+                request = self._oldest_pending_locked(session_id=session_id)
                 if request is not None:
                     return request
-                wait_event = self._pending_available
 
-            if deadline is None:
-                await wait_event.wait()
-                continue
+                if deadline is None:
+                    await self._pending_state_changed.wait()
+                    continue
 
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                return None
-            try:
-                await asyncio.wait_for(wait_event.wait(), timeout=remaining)
-            except asyncio.TimeoutError:
-                return None
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    return None
+                try:
+                    await asyncio.wait_for(self._pending_state_changed.wait(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    return None
 
     def list_rules(self) -> list[ApprovalRule]:
         combined = [
@@ -274,11 +290,13 @@ class ToolApprovalManager:
         session_id: str | None,
         reason: str,
     ) -> ApprovalEvaluation:
-        params_hash = _params_hash(params)
-        command = _extract_command(params)
+        approval_params = _sanitize_approval_params(params)
+        params_hash = _params_hash(approval_params)
+        command = _extract_command(approval_params)
         fingerprint = _request_fingerprint(capability_id, params_hash)
 
-        async with self._lock:
+        # Use the condition lock consistently for pending-state mutations.
+        async with self._pending_state_changed:
             matched_rule = self._find_matching_rule(
                 capability_id=capability_id,
                 params_hash=params_hash,
@@ -305,7 +323,7 @@ class ToolApprovalManager:
                 request = PendingApprovalRequest(
                     request_id=uuid4().hex,
                     capability_id=capability_id,
-                    params=dict(params),
+                    params=dict(approval_params),
                     params_hash=params_hash,
                     command=command,
                     session_id=session_id,
@@ -313,9 +331,16 @@ class ToolApprovalManager:
                     created_at=self._time_fn(),
                 )
                 existing = _PendingApproval(request=request, fingerprint=fingerprint)
+                self._track_pending_session_locked(existing, session_id)
                 self._pending_by_fingerprint[fingerprint] = existing
                 self._pending_by_id[request.request_id] = existing
-                self._pending_available.set()
+                self._pending_state_changed.notify_all()
+            else:
+                # A deduplicated request can gain new interested sessions later.
+                # Wake session-filtered poll waiters when that subscriber set expands.
+                added_session = self._track_pending_session_locked(existing, session_id)
+                if added_session:
+                    self._pending_state_changed.notify_all()
 
             return ApprovalEvaluation(
                 status=ApprovalEvaluationStatus.PENDING,
@@ -329,7 +354,9 @@ class ToolApprovalManager:
         *,
         timeout_seconds: float | None = None,
     ) -> ApprovalDecision:
-        async with self._lock:
+        # Keep all pending/resolution map access on the same condition-backed lock
+        # so concurrency audits only need to reason about one synchronization surface.
+        async with self._pending_state_changed:
             resolved = self._resolved_by_id.pop(request_id, None)
             if resolved is not None:
                 return resolved
@@ -345,7 +372,7 @@ class ToolApprovalManager:
 
         if pending.resolution is None:
             raise RuntimeError(f"Approval request resolved without decision: {request_id}")
-        async with self._lock:
+        async with self._pending_state_changed:
             self._resolved_by_id.pop(request_id, None)
         return pending.resolution
 
@@ -356,6 +383,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None = None,
+        actor_session_id: str | None = None,
     ) -> ApprovalRule | None:
         return await self._resolve_request(
             request_id=request_id,
@@ -363,6 +391,7 @@ class ToolApprovalManager:
             scope=scope,
             matcher=matcher,
             matcher_value=matcher_value,
+            actor_session_id=actor_session_id,
         )
 
     async def deny(
@@ -372,6 +401,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None = None,
+        actor_session_id: str | None = None,
     ) -> ApprovalRule | None:
         return await self._resolve_request(
             request_id=request_id,
@@ -379,10 +409,11 @@ class ToolApprovalManager:
             scope=scope,
             matcher=matcher,
             matcher_value=matcher_value,
+            actor_session_id=actor_session_id,
         )
 
     async def revoke(self, rule_id: str) -> bool:
-        async with self._lock:
+        async with self._pending_state_changed:
             removed = self._remove_rule(rule_id)
             if removed:
                 self._persist_rules_for_scope(removed.scope)
@@ -396,8 +427,10 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None,
+        actor_session_id: str | None = None,
     ) -> ApprovalRule | None:
-        async with self._lock:
+        # Keep pending-state transitions on the condition lock to avoid mixed styles.
+        async with self._pending_state_changed:
             pending = self._pending_by_id.get(request_id)
             if pending is None:
                 raise KeyError(f"Unknown approval request: {request_id}")
@@ -409,6 +442,7 @@ class ToolApprovalManager:
                 scope=scope,
                 matcher=matcher,
                 matcher_value=matcher_value,
+                actor_session_id=actor_session_id,
             )
             if rule is not None:
                 self._append_rule(rule)
@@ -419,8 +453,7 @@ class ToolApprovalManager:
             self._resolved_by_id[request_id] = decision
             self._pending_by_id.pop(request_id, None)
             self._pending_by_fingerprint.pop(pending.fingerprint, None)
-            if not self._pending_by_id:
-                self._pending_available.clear()
+            self._pending_state_changed.notify_all()
             return rule
 
     def _append_rule(self, rule: ApprovalRule) -> None:
@@ -441,6 +474,7 @@ class ToolApprovalManager:
         scope: ApprovalScope,
         matcher: ApprovalMatcherKind,
         matcher_value: str | None,
+        actor_session_id: str | None,
     ) -> ApprovalRule | None:
         # ONCE only applies to the current pending request, no reusable rule needed.
         if scope == ApprovalScope.ONCE:
@@ -464,7 +498,7 @@ class ToolApprovalManager:
             matcher=matcher,
             matcher_value=normalized_value,
             created_at=self._time_fn(),
-            session_id=request.session_id if scope == ApprovalScope.SESSION else None,
+            session_id=(actor_session_id or request.session_id) if scope == ApprovalScope.SESSION else None,
         )
 
     def _persist_rules_for_scope(self, scope: ApprovalScope) -> None:
@@ -509,14 +543,32 @@ class ToolApprovalManager:
                 return rule
         return None
 
-    def _oldest_pending_locked(self) -> PendingApprovalRequest | None:
+    def _oldest_pending_locked(self, *, session_id: str | None = None) -> PendingApprovalRequest | None:
         if not self._pending_by_id:
             return None
+        candidates = list(self._pending_by_id.values())
+        if session_id is not None:
+            candidates = [
+                item
+                for item in candidates
+                if session_id in item.session_ids or item.request.session_id == session_id
+            ]
+            if not candidates:
+                return None
         oldest = min(
-            self._pending_by_id.values(),
+            candidates,
             key=lambda item: (item.request.created_at, item.request.request_id),
         )
         return oldest.request
+
+    @staticmethod
+    def _track_pending_session_locked(pending: _PendingApproval, session_id: str | None) -> bool:
+        if isinstance(session_id, str) and session_id:
+            if session_id in pending.session_ids:
+                return False
+            pending.session_ids.add(session_id)
+            return True
+        return False
 
 
 def _rule_matches(
@@ -566,6 +618,20 @@ def _extract_command(params: dict[str, Any]) -> str | None:
     if isinstance(command, str) and command.strip():
         return command.strip()
     return None
+
+
+def _sanitize_approval_params(params: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in params.items():
+        if key == RUNTIME_CONTEXT_PARAM:
+            # Internal override transport never participates in approval matching.
+            # It is internal runtime control data that should not affect dedupe.
+            continue
+        if isinstance(value, RuntimeContextOverride):
+            # Defensive: collapse internal marker to raw context when seen.
+            value = value.context
+        normalized[key] = value
+    return normalized
 
 
 def _request_fingerprint(capability_id: str, params_hash: str) -> str:

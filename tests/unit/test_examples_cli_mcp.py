@@ -4,15 +4,19 @@ import asyncio
 import importlib.util
 from pathlib import Path
 import sys
+from typing import Any
 
 import pytest
 
+from dare_framework.tool.action_handler import ApprovalsActionHandler
 from dare_framework.tool._internal.control.approval_manager import (
     ApprovalDecision,
     ApprovalEvaluationStatus,
     JsonApprovalRuleStore,
     ToolApprovalManager,
 )
+from dare_framework.transport import EnvelopeKind, TransportEnvelope
+from dare_framework.transport.interaction.resource_action import ResourceAction
 
 
 def _load_cli_module(module_name: str, relative_cli_path: str):
@@ -64,6 +68,79 @@ class _CaptureDisplay:
         return
 
 
+class _HandlerBackedApprovalClient:
+    """Minimal ask-capable client shim backed by the real approvals action handler."""
+
+    def __init__(self, manager: ToolApprovalManager) -> None:
+        self._handler = ApprovalsActionHandler(manager)
+
+    async def ask(self, req: TransportEnvelope, timeout: float = 30.0) -> TransportEnvelope:
+        _ = timeout
+        action = ResourceAction(str(req.payload))
+        result = await self._handler.invoke(action, **dict(req.meta))
+        return TransportEnvelope(
+            id=f"resp-{req.id}",
+            reply_to=req.id,
+            kind=EnvelopeKind.MESSAGE,
+            event_type="result",
+            payload={"resp": {"result": result}},
+        )
+
+
+class _CaptureApprovalClient:
+    def __init__(self) -> None:
+        self.last_meta: dict[str, Any] | None = None
+
+    async def ask(self, req: TransportEnvelope, timeout: float = 30.0) -> TransportEnvelope:
+        _ = timeout
+        self.last_meta = dict(req.meta)
+        return TransportEnvelope(
+            id=f"resp-{req.id}",
+            reply_to=req.id,
+            kind=EnvelopeKind.MESSAGE,
+            event_type="result",
+            payload={"resp": {"result": {"request": None}}},
+        )
+
+
+class _CaptureTimeoutApprovalClient:
+    def __init__(self) -> None:
+        self.last_timeout: float | None = None
+
+    async def ask(self, req: TransportEnvelope, timeout: float = 30.0) -> TransportEnvelope:
+        _ = req
+        self.last_timeout = timeout
+        return TransportEnvelope(
+            id="resp-timeout",
+            kind=EnvelopeKind.MESSAGE,
+            event_type="result",
+            payload={"resp": {"result": {"request": None}}},
+        )
+
+
+class _MissingEventTypeApprovalClient:
+    async def ask(self, req: TransportEnvelope, timeout: float = 30.0) -> TransportEnvelope:
+        _ = timeout
+        return TransportEnvelope(
+            id=f"resp-{req.id}",
+            reply_to=req.id,
+            kind=EnvelopeKind.MESSAGE,
+            payload={"resp": {"result": {"request": None}}},
+        )
+
+
+class _UnexpectedEventTypeApprovalClient:
+    async def ask(self, req: TransportEnvelope, timeout: float = 30.0) -> TransportEnvelope:
+        _ = timeout
+        return TransportEnvelope(
+            id=f"resp-{req.id}",
+            reply_to=req.id,
+            kind=EnvelopeKind.MESSAGE,
+            event_type="tool.result",
+            payload={"resp": {"result": {"request": None}}},
+        )
+
+
 @pytest.mark.asyncio
 async def test_handle_approvals_command_list_and_grant_mcp_cli(tmp_path: Path) -> None:
     cli_mcp = _load_cli_module(
@@ -84,20 +161,18 @@ async def test_handle_approvals_command_list_and_grant_mcp_cli(tmp_path: Path) -
     assert evaluation.request is not None
     request_id = evaluation.request.request_id
 
-    class _FakeAgent:
-        _approval_manager = manager
-
     display = _CaptureDisplay()
+    approval_client = _HandlerBackedApprovalClient(manager)
     await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
         ["list"],
-        agent=_FakeAgent(),
+        approval_client=approval_client,
         display=display,
     )
     assert any("pending" in msg for level, msg in display.messages if level == "info")
 
     await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
         ["poll", "timeout_ms=10"],
-        agent=_FakeAgent(),
+        approval_client=approval_client,
         display=display,
     )
     assert any("pending request:" in msg for level, msg in display.messages if level == "info")
@@ -105,10 +180,121 @@ async def test_handle_approvals_command_list_and_grant_mcp_cli(tmp_path: Path) -
     wait_task = asyncio.create_task(manager.wait_for_resolution(request_id))
     await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
         ["grant", request_id, "scope=workspace", "matcher=exact_params"],
-        agent=_FakeAgent(),
+        approval_client=approval_client,
         display=display,
     )
     assert await wait_task == ApprovalDecision.ALLOW
+
+
+@pytest.mark.asyncio
+async def test_handle_approvals_command_grant_forwards_session_id_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_grant_session_id",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    display = _CaptureDisplay()
+    approval_client = _CaptureApprovalClient()
+    await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
+        ["grant", "req-1", "scope=workspace", "matcher=exact_params", "session_id=session-42"],
+        approval_client=approval_client,
+        display=display,
+    )
+    assert approval_client.last_meta is not None
+    assert approval_client.last_meta["session_id"] == "session-42"
+
+
+@pytest.mark.asyncio
+async def test_invoke_approval_action_accepts_kwargs_params_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_invoke_kwargs",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    approval_client = _CaptureApprovalClient()
+    result = await cli_mcp._invoke_approval_action(  # type: ignore[attr-defined]
+        approval_client,
+        ResourceAction.APPROVALS_GRANT,
+        request_id="req-1",
+        scope="workspace",
+        matcher="exact_params",
+        session_id="session-42",
+    )
+    assert result == {"request": None}
+    assert approval_client.last_meta == {
+        "request_id": "req-1",
+        "scope": "workspace",
+        "matcher": "exact_params",
+        "session_id": "session-42",
+    }
+
+
+@pytest.mark.asyncio
+async def test_handle_approvals_poll_forwards_session_filter_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_poll_filter",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    display = _CaptureDisplay()
+    approval_client = _CaptureApprovalClient()
+    await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
+        ["poll", "timeout_ms=10", "session_id=session-42"],
+        approval_client=approval_client,
+        display=display,
+    )
+    assert approval_client.last_meta is not None
+    assert approval_client.last_meta.get("session_id") == "session-42"
+
+
+@pytest.mark.asyncio
+async def test_handle_approvals_poll_uses_user_timeout_for_transport_wait_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_poll_timeout",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    display = _CaptureDisplay()
+    approval_client = _CaptureTimeoutApprovalClient()
+    await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
+        ["poll", "timeout_seconds=60"],
+        approval_client=approval_client,
+        display=display,
+    )
+    assert approval_client.last_timeout is not None
+    assert approval_client.last_timeout >= 60.0
+
+
+@pytest.mark.asyncio
+async def test_handle_approvals_command_requires_event_type_in_response_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_missing_event_type",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    display = _CaptureDisplay()
+    approval_client = _MissingEventTypeApprovalClient()
+    await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
+        ["list"],
+        approval_client=approval_client,
+        display=display,
+    )
+    assert any("missing event_type" in msg for level, msg in display.messages if level == "error")
+
+
+@pytest.mark.asyncio
+async def test_handle_approvals_command_requires_result_event_type_mcp_cli() -> None:
+    cli_mcp = _load_cli_module(
+        "examples_06_cli_invalid_event_type",
+        "examples/06-dare-coding-agent-mcp/cli.py",
+    )
+    display = _CaptureDisplay()
+    approval_client = _UnexpectedEventTypeApprovalClient()
+    await cli_mcp._handle_approvals_command(  # type: ignore[attr-defined]
+        ["list"],
+        approval_client=approval_client,
+        display=display,
+    )
+    assert any(
+        "invalid action response event_type" in msg
+        for level, msg in display.messages
+        if level == "error"
+    )
 
 
 @pytest.mark.asyncio

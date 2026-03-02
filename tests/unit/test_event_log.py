@@ -1,20 +1,14 @@
-import pytest
+from __future__ import annotations
 
 import pytest
 
-pytest.skip(
-    "Legacy event log implementation is archived; port to canonical dare_framework once "
-    "EventLog implementations exist.",
-    allow_module_level=True,
-)
-
-from dare_framework.execution.impl.event.local_event_log import LocalEventLog
+from dare_framework.event import SQLiteEventLog
 
 
 @pytest.mark.asyncio
 async def test_event_log_hash_chain(tmp_path):
-    path = tmp_path / "events.jsonl"
-    event_log = LocalEventLog(path=str(path))
+    path = tmp_path / "events.db"
+    event_log = SQLiteEventLog(path)
 
     await event_log.append("test.start", {"value": 1})
     await event_log.append("test.finish", {"value": 2})

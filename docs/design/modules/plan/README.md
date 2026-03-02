@@ -1,63 +1,98 @@
 # Module: plan
 
-> Status: aligned to `dare_framework/plan` (2026-01-31). TODO indicates gaps vs desired architecture.
+> Status: full review aligned to `dare_framework/plan` + `dare_framework/agent` execution path (2026-02-27).
 
 ## 1. 定位与职责
 
-- 任务/计划/结果模型定义（Task / Milestone / Plan / RunResult）。
-- Planner 生成 `ProposedPlan`，Validator 生成 `ValidatedPlan`，Remediator 生成反思。
-- 定义 Tool Loop 的 `Envelope` 与 `DonePredicate`。
+- 定义任务分解、计划验证、里程碑验证与执行边界的数据契约。
+- 把 planner 输出与 trusted validated plan 分离，降低模型不可信输入风险。
 
-## 2. 关键概念与数据结构
+## 2. 依赖与边界
 
-- `Task`：用户任务输入，支持可选 milestones。
-- `Milestone`：最小验证单元。
-- `ProposedPlan` / `ValidatedPlan`：计划的非可信/可信两阶段表示。
-- `ProposedStep` / `ValidatedStep`：计划步骤结构。
-- `Envelope` / `DonePredicate`：工具调用边界与完成条件。
-- `VerifyResult`：里程碑验证结果。
+- 接口：`IPlanner`, `IValidator`, `IRemediator`, `IStepExecutor`, `IPlanAttemptSandbox`
+- 类型：`Task`, `Milestone`, `ProposedPlan`, `ValidatedPlan`, `RunResult`, `Envelope`, ...
+- 边界约束：
+  - plan domain 定义“计划/验证/补救”的协议，不直接执行工具副作用。
+  - 工具调用实际由 tool gateway 完成。
 
-## 3. 关键接口与实现
+## 3. 对外接口（Public Contract）
 
-- Planner：`IPlanner.plan(ctx) -> ProposedPlan`
-- Validator：`IValidator.validate_plan(...) -> ValidatedPlan` / `verify_milestone(...) -> VerifyResult`
-- Remediator：`IRemediator.remediate(...) -> str`
-- 管理器接口：`IPlannerManager`, `IValidatorManager`, `IRemediatorManager`
+- `IPlanner.plan(ctx) -> ProposedPlan`
+- `IPlanner.decompose(task, ctx) -> DecompositionResult`
+- `IValidator.validate_plan(plan, ctx) -> ValidatedPlan`
+- `IValidator.verify_milestone(result, ctx, plan=None) -> VerifyResult`
+- `IRemediator.remediate(verify_result, ctx) -> str`
+- `IStepExecutor.execute_step(step, ctx, previous_results) -> StepResult`
+- `IPlanAttemptSandbox.create_snapshot/rollback/commit`
 
-默认实现：
-- `DefaultPlanner`：基于 LLM 的 evidence-driven 计划（`dare_framework/plan/_internal/default_planner.py`）
-- `RegistryPlanValidator`：从 ToolRegistry 推导可信元数据（`dare_framework/plan/_internal/registry_validator.py`）
-- `DefaultRemediator`：基于 LLM 的反思文本（`dare_framework/plan/_internal/default_remediator.py`）
-- `CompositeValidator`：多 validator 组合（`dare_framework/plan/_internal/composite_validator.py`）
+## 4. 关键字段（Core Fields）
 
-## 4. 与 Agent 的交互（当前实现）
+- `Task`
+  - `description`, `task_id`, `milestones`, `metadata`, `previous_session_summary`
+- `Milestone`
+  - `milestone_id`, `description`, `user_input`, `success_criteria`
+- `ProposedPlan`
+  - `plan_description`, `steps`, `attempt`, `metadata`
+- `ValidatedPlan`
+  - `plan_description`, `steps`, `success`, `errors`, `metadata`
+- `Envelope`
+  - `allowed_capability_ids`, `budget`, `done_predicate`, `risk_level`
+- `RunResult`
+  - `success`, `output`, `output_text`, `errors`, `metadata`, `session_summary`
 
-- DareAgent 在 Milestone Loop 中调用 planner + validator。
-- 验证失败会记录 attempt；可选 remediator 输出反思。
-- 验证成功后进入 Execute Loop。
+## 5. 关键流程（Runtime Flow）
 
-> 现状差距：ValidatedPlan.steps 未驱动执行；Execute Loop 由模型自主决定工具调用（TODO）。
+```mermaid
+flowchart TD
+  A["Task input"] --> B["Planner.decompose (optional)"]
+  B --> C["Planner.plan -> ProposedPlan"]
+  C --> D["Validator.validate_plan -> ValidatedPlan"]
+  D --> E["Execute loop (model/tool)"]
+  E --> F["Validator.verify_milestone"]
+  F -->|pass| G["next milestone / finish"]
+  F -->|fail| H["Remediator.remediate"]
+  H --> C
+```
 
-## 5. 约束与限制（当前实现）
+## 6. 与其他模块的交互
 
-- **计划隔离不足**：失败计划不会回滚 STM 或上下文状态（TODO）。
-- **风险/审批未闭环**：Validator 可派生 `risk_level`，但未接入 policy gate（TODO）。
-- **证据闭环未统一**：Planner 侧 evidence 与 ToolResult evidence 体系尚未完全对齐（TODO）。
+- **Agent**：五层循环中的 plan / verify 阶段直接消费 plan domain。
+- **Tool**：`Envelope` 驱动 tool loop 边界。
+- **Security**：`risk_level` 与 policy gate 语义对齐。
 
-## 6. 扩展点
+## 7. 约束与限制
 
-- 自定义 Planner/Validator/Remediator。
-- 使用 `RegistryPlanValidator` 组合自定义 Validator，实现可信元数据派生。
-- 在 Execute Loop 中引入“计划驱动执行”策略（TODO）。
+- 当前运行时已支持 `execution_mode="step_driven"`：`ValidatedPlan.steps` 由 `IStepExecutor` 顺序执行；默认仍为 `model_driven`。
+- 当 `execution_mode="step_driven"` 且启用了 `planner` 时，MUST 同时配置 `validator`；运行时在构造阶段对该组合执行 fail-fast 校验。
+- `plan/kernel.py` 为空壳，稳定 surface 主要位于 interfaces/types。
+- 默认 `IPlanAttemptSandbox` 实现位于 `dare_framework/agent/_internal/sandbox.py`，尚未下沉为 plan domain 内建默认实现。
 
-## 7. TODO / 未决问题
+## 8. TODO / 未决问题
 
-- TODO: 将 ValidatedPlan.steps 绑定工具执行（计划驱动）。
-- TODO: 计划 attempt 隔离（Context snapshot / rollback）。
-- TODO: 统一证据模型（planner evidence ↔ tool evidence）。
-- TODO: 明确 plan tool 的元数据与 policy gate 语义。
+- TODO: 评估是否将 `DefaultPlanAttemptSandbox` 下沉到 `dare_framework/plan/_internal`，减少跨域默认实现分散。
+- TODO: 统一 evidence 模型（planner/tool/verify），收敛证据字段 taxonomy。
+- TODO: 为 step-driven 路径补齐更多端到端场景（多步依赖、回滚与补救组合）。
 
-## 8. Design Clarifications (2026-02-03)
+## 能力状态（landed / partial / planned）
 
-- Doc/Impl gap: `plan/kernel.py` is empty; decide kernel surface or document interfaces-only.
-- Type cleanup: internal validators/planners should avoid `Any` for core plan types.
+- `landed`: 见文档头部 Status 所述的当前已落地基线能力。
+- `partial`: 当前实现可用但仍有 TODO/限制（见“约束与限制”与“TODO / 未决问题”）。
+- `planned`: 当前文档中的未来增强项，以 TODO 条目为准，未纳入当前实现承诺。
+
+## 最小标准补充（2026-02-27）
+
+### 总体架构
+- 模块实现主路径：`dare_framework/plan/`。
+- 分层契约遵循 `types.py` / `kernel.py` / `interfaces.py` / `_internal/` 约定；对外语义以本 README 的“对外接口/关键字段/关键流程”章节为准。
+- 与全局架构关系：作为 `docs/design/Architecture.md` 中对应 domain 的实现落点，通过 builder 与运行时编排接入。
+
+### 异常与错误处理
+- 参数或配置非法时，MUST 显式返回错误（抛出异常或返回失败结果），禁止静默吞错。
+- 外部依赖失败（模型/存储/网络/工具）时，优先执行可观测降级策略：记录结构化错误上下文，并在调用边界返回可判定失败。
+- 涉及副作用或策略判定的失败路径，MUST 保留审计线索（事件日志或 Hook/Telemetry 记录），以支持回放和排障。
+
+### 测试锚点（Test Anchor）
+
+- `tests/unit/test_default_planner.py`（默认 planner 行为）
+- `tests/unit/test_registry_plan_validator.py`（plan validator 与 registry 校验）
+- `tests/unit/test_dare_agent_step_driven_mode.py`（step-driven 执行路径）

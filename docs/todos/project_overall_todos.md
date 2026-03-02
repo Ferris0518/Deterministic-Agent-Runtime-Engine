@@ -1,6 +1,6 @@
 # DARE Framework 项目总体 TODO
 
-> 更新时间：2026-02-24  
+> 更新时间：2026-03-02  
 > 范围：项目全局演进（非单个 feature 的实现方案）
 
 ## 1. 目标与边界
@@ -8,11 +8,23 @@
 - 目标：持续收敛 `docs/design` 目标架构与 `dare_framework/` 当前实现，优先保证可运行、可验证、可审计。
 - 边界：这里只记录跨模块、跨阶段事项；具体任务拆解进入 OpenSpec 与模块文档。
 
+## 1.1 认领声明（Claim Ledger）
+
+> 用途：在进入执行前先声明 TODO 负责人与范围，避免多人并行冲突。  
+> 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；过期需续期或释放。
+
+| Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Notes |
+|---|---|---|---|---|---|---|---|
+| CLM-20260302-AG1 | T5-2 | mindfn | planned | 2026-03-02 | 2026-03-09 | `agentscope-d2-d4-thinking-transport` | 对齐 D2/D4：thinking + transport 事件链路。 |
+| CLM-20260302-AG2 | T2-1 | mindfn | planned | 2026-03-02 | 2026-03-09 | `agentscope-d5-safe-compression` | 对齐 D5：安全压缩与预算收敛。 |
+| CLM-20260302-AG3 | D7-1~D7-4（关联 T5-5） | mindfn | planned | 2026-03-02 | 2026-03-09 | `agentscope-d7-plan-state-tools` | 先按 AgentScope gap 切片推进 plan 状态机能力。 |
+| CLM-20260302-AG4 | T5-3 | mindfn | planned | 2026-03-02 | 2026-03-09 | `agentscope-d1-d3-message-pipeline` | 对齐 D1/D3：多模态输入 schema + normalize。 |
+
 ## 2. 当前基线
 
-- 测试基线（审查时）：`.venv/bin/pytest -q` => `8 failed, 202 passed, 13 skipped`。
+- 测试基线（审查时）：`.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`。
 - 关键问题聚类：
-  - 交互动作枚举与 MCP action handler 契约不一致。
+  - 交互动作枚举与 transport slash-action 解析契约存在边界不一致（待持续回归监控）。
   - CLI 审批命令调用参数方式与 handler 签名不一致。
   - 内置 prompt 与测试约定不一致。
   - 若干 package `__init__.py` 不满足 facade 约束。
@@ -22,9 +34,19 @@
 
 ## P0 运行基线与契约一致性
 
-- [ ] T0-1 修复当前失败测试，恢复主干健康基线。
-- [ ] T0-2 统一 `ResourceAction` 与 action handler 动作契约。
-- [ ] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。
+- [x] T0-1 修复当前失败测试，恢复主干健康基线。  
+  Status: `done`  
+  Evidence: `.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`；`.venv/bin/pytest -q tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_evaluate_exception_returns_structured_failure tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_wait_exception_returns_structured_failure` => `2 passed`；`dare_framework/tool/_internal/governed_tool_gateway.py`（审批异常语义回归修复）  
+  Last Updated: `2026-03-01`
+- [x] T0-2 统一 `ResourceAction` 与 action handler 动作契约。  
+  Status: `done`  
+  Evidence: `dare_framework/transport/_internal/adapters.py`（`/approvals list` 规范化为 `approvals:list`，并提取审批 action 参数）；`tests/unit/test_transport_adapters.py`（新增契约回归）；`.venv/bin/pytest -q tests/unit/test_transport_adapters.py tests/unit/test_interaction_dispatcher.py tests/unit/test_transport_channel.py tests/integration/test_client_cli_flow.py` => `33 passed, 1 warning`  
+  Last Updated: `2026-03-01`
+- [x] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。  
+  Status: `done`  
+  Evidence: `examples/05-dare-coding-agent-enhanced/cli.py`、`examples/06-dare-coding-agent-mcp/cli.py`（`_invoke_approval_action` 统一为 `invoke(action, **params)` 形态，移除 `params={...}` 调用分叉）；`tests/unit/test_examples_cli.py`、`tests/unit/test_examples_cli_mcp.py`（新增 kwargs 调用契约回归）  
+  Commands: `.venv/bin/pytest -q tests/unit/test_examples_cli.py tests/unit/test_examples_cli_mcp.py` => `22 passed, 1 warning`  
+  Last Updated: `2026-03-01`
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
 
@@ -35,10 +57,16 @@
 
 ## P1 核心架构闭环（对齐权威设计）
 
-- [ ] T1-1 将 `ValidatedPlan.steps` 真正接入 Execute Loop。
+- [x] T1-1 将 `ValidatedPlan.steps` 真正接入 Execute Loop。  
+  Status: `done`  
+  Evidence: `openspec/changes/p0-step-driven-execution/tasks.md`；`dare_framework/agent/_internal/execute_engine.py`；`dare_framework/agent/dare_agent.py`；`.venv/bin/pytest -q tests/unit/test_dare_agent_step_driven_mode.py tests/unit/test_dare_agent_orchestration_split.py` => `27 passed`  
+  Last Updated: `2026-03-01`
 - [ ] T1-2 完成 plan attempt 隔离（snapshot/rollback）闭环。
 - [ ] T1-3 接入 `ISecurityBoundary`（trust derivation + policy gate）。
-- [ ] T1-4 提供 EventLog 默认实现并接入 builder 推荐路径。
+- [x] T1-4 提供 EventLog 默认实现并接入 builder 推荐路径。  
+  Status: `done`  
+  Evidence: `openspec/changes/p0-default-eventlog/tasks.md`；`dare_framework/event/_internal/sqlite_event_log.py`；`dare_framework/agent/builder.py`；`dare_framework/agent/dare_agent.py`；`dare_framework/observability/_internal/event_trace_bridge.py`；`.venv/bin/pytest -q tests/unit/test_event_sqlite_event_log.py tests/unit/test_builder_security_boundary.py tests/unit/test_five_layer_agent.py` => `43 passed`  
+  Last Updated: `2026-03-01`
 - [ ] T1-5 完成 HITL 语义闭环（pause -> wait -> resume）。
 
 验收：
@@ -122,3 +150,35 @@
   Status: `todo`  
   范围：补齐整体目标架构与 domain 设计文档，至少覆盖关键 API、数据模型、核心流程、异常处理、边界条件与可观测性策略。  
   交付：架构总览文档 + 分 domain 设计文档包 + 设计评审清单与验收标准。
+
+## 8. 文档先行治理专项（2026-02-27）
+
+- [x] T6-1 按基线 gap 分析推进修复与回写
+  Status: `done`
+  范围：基于 `docs/todos/archive/2026-02-27_design_code_gap_analysis.md` 与 `docs/todos/archive/2026-02-27_design_code_gap_todo.md`，逐项按 OpenSpec 执行。
+  交付：DG 系列 TODO 状态回写 + OpenSpec 任务证据 + 文档归档记录。  
+  Evidence：`openspec/changes/archive/2026-02-27-*`，`docs/todos/archive/2026-02-27_design_code_gap_todo.md`
+
+- [x] T6-2 执行一次完整设计文档 review（非最小补充）
+  Status: `done`
+  范围：覆盖 `docs/design/Architecture.md` 与 `docs/design/modules/*/README.md`，修正与实现冲突的状态断言，并收敛 security canonical 导入路径。
+  交付：full review gap 分析 + TODO 清单 + 对应实现/文档修复。  
+  Evidence：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/2026-02-27_full_design_review_gap_todo.md`，`dare_framework/security/__init__.py`
+
+- [x] T6-3 推进“按文档可重建”治理闭环（P0/P1）
+  Status: `done`
+  范围：基于可重建性 gap 分析，优先补齐追踪矩阵、审批语义决策表、重建 SOP 三项 P0。
+  交付：`docs/todos/2026-02-27_design_reconstructability_gap_analysis.md` + `docs/todos/2026-02-27_design_reconstructability_gap_todo.md` 对应事项回写完成。  
+  Evidence：`openspec/changes/archive/2026-02-27-close-design-reconstructability-gaps/`，`docs/design/Design_Reconstructability_Traceability_Matrix.md`，`docs/guides/Design_Reconstruction_SOP.md`
+
+- [x] T6-4 补齐模块级测试锚点与 embedding 最小测试基线
+  Status: `done`
+  范围：基于 full review 第二轮结论，为 `docs/design/modules/*/README.md` 补齐测试锚点；为 embedding 域补最小单测并回写文档证据。
+  交付：`docs/todos/2026-02-27_full_design_review_gap_todo.md` 中 FR-009/FR-011 状态闭环。
+  Evidence：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/2026-02-27_full_design_review_gap_todo.md`，`tests/unit/test_embedding_openai_adapter.py`
+
+- [x] T6-5 补 memory/knowledge 域直连单测并替换过渡声明
+  Status: `done`
+  范围：关闭 FR-GAP-011，对 `memory/knowledge` 域补齐直连单测，移除当前“组合验证锚点 + 缺失声明”的过渡状态。
+  交付：`docs/todos/2026-02-27_full_design_review_gap_todo.md` 中 FR-012 状态闭环。
+  Evidence：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/2026-02-27_full_design_review_gap_todo.md`，`tests/unit/test_memory_knowledge_direct.py`

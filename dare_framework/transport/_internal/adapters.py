@@ -7,8 +7,17 @@ import json
 from typing import Any, Callable
 
 from dare_framework.transport.interaction.controls import AgentControl
-from dare_framework.transport.kernel import ClientChannel
-from dare_framework.transport.types import EnvelopeKind, Receiver, Sender, TransportEnvelope, new_envelope_id
+from dare_framework.transport.interaction.resource_action import ResourceAction
+from dare_framework.transport.kernel import ClientChannel, PollableClientChannel
+from dare_framework.transport.types import (
+    EnvelopeKind,
+    normalize_transport_event_type,
+    Receiver,
+    Sender,
+    TransportEnvelope,
+    TransportEventType,
+    new_envelope_id,
+)
 
 
 class StdioClientChannel(ClientChannel):
@@ -30,10 +39,10 @@ class StdioClientChannel(ClientChannel):
 
     def agent_envelope_receiver(self) -> Receiver:
         async def recv(msg: TransportEnvelope) -> None:
+            event_type = _resolve_transport_event_type(msg)
             payload = msg.payload
             if isinstance(payload, dict):
-                payload_type = payload.get("type")
-                if payload_type == "result":
+                if event_type == TransportEventType.RESULT.value:
                     kind = payload.get("kind")
                     resp = payload.get("resp")
                     if kind == "message":
@@ -43,9 +52,9 @@ class StdioClientChannel(ClientChannel):
                             output = payload.get("output")
                     else:
                         output = resp if resp is not None else payload
-                elif payload_type == "error":
+                elif event_type == TransportEventType.ERROR.value:
                     output = payload.get("reason") or payload.get("error")
-                elif payload_type == "approval_pending":
+                elif event_type == TransportEventType.APPROVAL_PENDING.value:
                     resp = payload.get("resp")
                     request_id = None
                     if isinstance(resp, dict):
@@ -53,7 +62,7 @@ class StdioClientChannel(ClientChannel):
                         if isinstance(request, dict):
                             request_id = request.get("request_id")
                     output = f"approval pending: request_id={request_id or '?'}"
-                elif payload_type == "approval_resolved":
+                elif event_type == TransportEventType.APPROVAL_RESOLVED.value:
                     resp = payload.get("resp")
                     request_id = None
                     decision = None
@@ -61,7 +70,7 @@ class StdioClientChannel(ClientChannel):
                         request_id = resp.get("request_id")
                         decision = resp.get("decision")
                     output = f"approval resolved: request_id={request_id or '?'} decision={decision or '?'}"
-                elif payload_type == "hook":
+                elif event_type == TransportEventType.HOOK.value:
                     output = payload.get("event")
                 else:
                     output = payload
@@ -87,23 +96,26 @@ class StdioClientChannel(ClientChannel):
                 return
             kind = EnvelopeKind.MESSAGE
             payload: Any = line
+            meta: dict[str, Any] = {}
             if line.startswith("/"):
                 token = line.lstrip("/").strip()
                 if not token:
-                    payload = "actions:list"
+                    payload = ResourceAction.ACTIONS_LIST.value
                     kind = EnvelopeKind.ACTION
                 else:
-                    payload = token
-                control = AgentControl.value_of(str(payload))
-                if control is not None:
-                    kind = EnvelopeKind.CONTROL
-                elif payload != "actions:list":
-                    kind = EnvelopeKind.ACTION
+                    control = AgentControl.value_of(token)
+                    if control is not None:
+                        kind = EnvelopeKind.CONTROL
+                        payload = control.value
+                    else:
+                        payload, meta = _normalize_slash_action(token)
+                        kind = EnvelopeKind.ACTION
             await self._sender(
                 TransportEnvelope(
                     id=new_envelope_id(),
                     kind=kind,
                     payload=payload,
+                    meta=meta,
                 )
             )
 
@@ -142,7 +154,7 @@ class WebSocketClientChannel(ClientChannel):
         await self._sender(envelope)
 
 
-class DirectClientChannel(ClientChannel):
+class DirectClientChannel(PollableClientChannel):
     """Direct in-process adapter for request/response patterns."""
 
     def __init__(self) -> None:
@@ -172,6 +184,7 @@ class DirectClientChannel(ClientChannel):
                 id=new_envelope_id(),
                 reply_to=req.reply_to,
                 kind=req.kind,
+                event_type=req.event_type,
                 payload=req.payload,
                 meta=req.meta,
                 stream_id=req.stream_id,
@@ -198,11 +211,61 @@ class DirectClientChannel(ClientChannel):
             return None
 
 
+def _normalize_slash_action(token: str) -> tuple[str, dict[str, Any]]:
+    # Canonical `resource:action` string is accepted as-is.
+    direct = ResourceAction.value_of(token)
+    if direct is not None:
+        return direct.value, {}
+
+    # Support CLI-style `/resource action ...` and map it to canonical action id.
+    parts = token.split()
+    if len(parts) >= 2:
+        candidate = f"{parts[0]}:{parts[1]}"
+        action = ResourceAction.value_of(candidate)
+        if action is not None:
+            return action.value, _extract_action_params(action, parts[2:])
+
+    # Unknown slash command: preserve previous behavior for compatibility.
+    return token, {}
+
+
+def _extract_action_params(action: ResourceAction, tokens: list[str]) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    positional: list[str] = []
+    for token in tokens:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if key:
+                params[key] = value
+            continue
+        positional.append(token)
+
+    if action in {ResourceAction.APPROVALS_GRANT, ResourceAction.APPROVALS_DENY}:
+        if positional:
+            params.setdefault("request_id", positional[0])
+    elif action == ResourceAction.APPROVALS_REVOKE:
+        if positional:
+            params.setdefault("rule_id", positional[0])
+    elif action in {ResourceAction.MCP_LIST, ResourceAction.MCP_RELOAD}:
+        if positional:
+            params.setdefault("mcp_name", positional[0])
+    elif action == ResourceAction.MCP_SHOW_TOOL:
+        if positional:
+            params.setdefault("mcp_name", positional[0])
+        if len(positional) > 1:
+            params.setdefault("tool_name", positional[1])
+
+    return params
+
+
 def _default_serialize(msg: TransportEnvelope) -> str:
     data = {
         "id": msg.id,
         "reply_to": msg.reply_to,
         "kind": msg.kind,
+        "event_type": msg.event_type,
         "payload": msg.payload,
         "meta": msg.meta,
         "stream_id": msg.stream_id,
@@ -226,11 +289,19 @@ def _default_deserialize(raw: Any) -> TransportEnvelope:
         id=str(data.get("id") or new_envelope_id()),
         reply_to=data.get("reply_to"),
         kind=data.get("kind"),
+        event_type=data.get("event_type"),
         payload=data.get("payload"),
         meta=data.get("meta") or {},
         stream_id=data.get("stream_id"),
         seq=data.get("seq"),
     )
+
+
+def _resolve_transport_event_type(msg: TransportEnvelope) -> str | None:
+    """Resolve event_type for receiver routing."""
+    if isinstance(msg.event_type, str):
+        return normalize_transport_event_type(msg.event_type)
+    return None
 
 
 __all__ = ["StdioClientChannel", "WebSocketClientChannel", "DirectClientChannel"]

@@ -6,8 +6,10 @@ from dare_framework.config.kernel import IConfigProvider
 from dare_framework.config.factory import build_config_provider
 from dare_framework.config.file_config_provider import FileConfigProvider
 from dare_framework.config.types import (
+    CLIConfig,
     ComponentConfig,
     Config,
+    EventLogConfig,
     LLMConfig,
     ObservabilityConfig,
     ProxyConfig,
@@ -15,8 +17,10 @@ from dare_framework.config.types import (
 )
 
 __all__ = [
+    "CLIConfig",
     "ComponentConfig",
     "Config",
+    "EventLogConfig",
     "IConfigProvider",
     "LLMConfig",
     "ObservabilityConfig",

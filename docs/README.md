@@ -22,8 +22,8 @@
    ├── design/DARE_alignment.md
    └── design/DARE_evidence.yaml
 
-5. 代码实现（以代码为准）
-   └── dare_framework/（当前实现；可能与权威设计存在差异）
+5. 代码实现（以权威设计文档为准）
+   └── dare_framework/（当前实现；若与权威设计不一致，需先修订设计并执行 gap 分析）
 
 6. 示例实现
    ├── /examples/04-dare-coding-agent/ (五层循环示例 Agent)
@@ -31,9 +31,20 @@
    ├── /examples/07-tool-approval-memory/ (工具审批记忆与自动放行示例)
    └── /examples/08-hook-governance/ (Hook 治理：patch + block 示例)
 
-7. 开发规范
+7. CLI 使用与配置
+   ├── /client/README.md (命令入口、`.dare/config.json`、LLM 配置说明)
+   ├── /.dare/config.json.example (OpenAI 最小配置)
+   ├── /.dare/config.openrouter.example.json (OpenRouter 最小配置)
+   └── /.dare/config.advanced.example.json (进阶配置示例)
+
+8. 开发规范
    ├── /CONTRIBUTING_AI.md (AI Agent 协作规范)
-   └── guides/Development_Constraints.md (开发约束清单)
+   ├── guides/Development_Constraints.md (开发约束清单)
+   ├── guides/Documentation_First_Development_SOP.md (文档先行 SOP，Bug/Feature/Refactor 必走)
+   ├── guides/Evidence_Truth_Implementation_Strategy.md (Evidence Truth 固化策略与 CI 落地计划)
+   ├── governance/Documentation_Management_Model.md (文档目录分层、生命周期、OpenSpec/TODO 双模式协作)
+   ├── features/README.md (特性聚合文档规范与归档规则)
+   └── design/Design_Doc_Minimum_Standard.md (设计文档最小完备标准)
 ```
 
 ### 历史参考（v1.3）
@@ -58,17 +69,24 @@
 | `design/Interfaces.md` | **接口设计**<br/>按 domain 的接口位与数据结构（权威签名/类型） | ⭐ 权威接口 |
 | `design/DARE_Formal_Design.md` | **正式设计文档**<br/>面向整体架构与核心流程的最终设计 | ⭐ 最终设计 |
 | `design/modules/README.md` | **模块级设计索引**<br/>按 Agent/模块分区的详细设计入口（含 Agent 示例） | ✅ 详细设计 |
+| `design/Design_Doc_Minimum_Standard.md` | **设计文档最小完备标准**<br/>约束每份设计文档必须覆盖架构/流程/结构/接口/异常 | ✅ 治理标准 |
 | `design/DARE_alignment.md` | **对齐清单**<br/>当前架构/接口的 claim → 证据/实现映射 | ✅ 对齐与追溯 |
 | `design/DARE_evidence.yaml` | **证据索引**<br/>claims + sources + anchors（用于文档一致性与回归） | ✅ 对齐与追溯 |
 
-### 2️⃣ 代码与工程入口（实现以代码为准）
+### 2️⃣ 代码与工程入口（实现必须对齐设计）
 
 | 文档/目录 | 作用 | 状态 |
 |---|---|---|
 | `dare_framework/` | 框架实现主目录（目标收敛到单一架构；详见权威设计） | ✅ 实现入口 |
+| `client/README.md` | DARE Client CLI 用法与配置入口，含 `.dare/config.json` 和 LLM 配置说明 | ✅ CLI 入口 |
+| `.dare/config.json.example` | OpenAI 最小配置示例，可作为 workspace `.dare/config.json` 起点 | ✅ 配置示例 |
+| `.dare/config.openrouter.example.json` | OpenRouter 最小配置示例 | ✅ 配置示例 |
+| `.dare/config.advanced.example.json` | 含 `endpoint/proxy/max_tokens` 的进阶配置示例 | ✅ 配置示例 |
 | `Project_Architecture_and_Priorities.md` | 以“实现视角”梳理现状与优先级（阅读入口指向权威设计） | ✅ 实现视角 |
 | `todos/README.md` | TODO 目录维护规则与生命周期说明 | ✅ 全局规划 |
 | `todos/project_overall_todos.md` | 项目总体 TODO 清单（跨模块路线图） | ✅ 全局规划 |
+| `todos/templates/change_execution_todo_template.md` | 活跃 change 的 execution board 模板（大包认领，小 task 验收） | ✅ 协作模板 |
+| `plans/2026-02-28-spec-driven-collaboration-granularity-design.md` | spec-driven 协作粒度设计说明 | ✅ 协作设计 |
 
 ### 3️⃣ 附录与工程实践
 
@@ -77,6 +95,11 @@
 | `appendix/Appendix_Industrial_Security_and_Auditing.md` | 工业级安全与审计附录：WORM、Merkle 批次密封、审计复验 |
 | `guides/Engineering_Practice_Guide_Sandbox_and_WORM.md` | 工程实践指南：沙箱执行隔离（seccomp/网络/镜像）、WORM 落地与核查 |
 | `guides/Development_Constraints.md` | 开发约束：架构不破坏、测试必备、日志/命名/复用/信任边界等硬性要求 |
+| `guides/Documentation_First_Development_SOP.md` | 文档先行 SOP：先设计文档、再 gap 分析、再 TODO、再 OpenSpec 修复、再归档 |
+| `guides/Evidence_Truth_Implementation_Strategy.md` | Evidence Truth 固化策略：证据结构、审计要求、CI 分阶段落地 |
+| `governance/Documentation_Management_Model.md` | 文档管理模型：目录分层、文档类型规则、生命周期依赖、OpenSpec/无 OpenSpec 协作 |
+| `features/README.md` | 特性聚合文档规范：单一状态源、证据回写与归档迁移 |
+| `guides/Team_Agent_Collab_Playbook.md` | 团队并行开发协作手册，含 spec-driven 认领粒度与 execution board 规则 |
 | `guides/Tool_Approval_Memory.md` | 工具审批记忆使用指南：pending/grant/deny/revoke、scope/matcher、持久化与接线方式 |
 
 ---
@@ -244,7 +267,7 @@ Phase 6: 架构设计（当前权威）
 - **接口**：`design/Interfaces.md`
 - **对齐/证据**：`design/DARE_alignment.md` + `design/DARE_evidence.yaml`
 
-> 说明：实现侧仍以代码为准；若发现实现与权威设计不一致，请优先在对齐清单中记录差异并补齐证据/迁移计划。
+> 说明：实现必须对齐权威设计；若发现差异，请先更新设计文档并执行 gap 分析，再推进代码修复与迁移计划。
 
 ### Q: 为什么会看到两个 “v2.0”？
 
@@ -276,14 +299,26 @@ docs/
 │       ├── Interface_Layer_Design_v1.1_MCP_and_Builtin.md
 │       ├── ARCHITECTURE_COMPARISON.md
 │       └── ...（更多历史文档）
+├── features/
+│   ├── README.md
+│   ├── <change-id>.md（每个 change 一个聚合文档）
+│   └── archive/
+├── governance/
+│   ├── Documentation_Management_Model.md
+│   └── branch-protection.md
 ├── guides/
 │   ├── Development_Constraints.md
+│   ├── Documentation_First_Development_SOP.md
 │   └── Engineering_Practice_Guide_Sandbox_and_WORM.md
+├── todos/
+│   ├── YYYY-MM-DD_<topic>_design_code_gap_analysis.md
+│   ├── YYYY-MM-DD_<topic>_design_code_gap_todo.md
+│   └── archive/
 └── appendix/
     └── Appendix_Industrial_Security_and_Auditing.md
 ```
 
 ---
 
-*最后更新：2026-01-22*  
+*最后更新：2026-02-28*
 *维护者：DARE Framework Team*

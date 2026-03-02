@@ -29,10 +29,12 @@ from dare_framework.config.action_handler import ConfigActionHandler
 from dare_framework.config.kernel import IConfigProvider
 from dare_framework.config.types import Config
 from dare_framework.context import Budget, Context, IAssembleContext, SmartContext
+from dare_framework.event import DefaultEventLog
 from dare_framework.event.kernel import IEventLog
 from dare_framework.hook.interfaces import IHookManager
 from dare_framework.hook.kernel import IHook
 from dare_framework.hook._internal.agent_event_transport_hook import AgentEventTransportHook
+from dare_framework.infra.component import ComponentType
 from dare_framework.knowledge import IKnowledge, create_knowledge
 from dare_framework.knowledge._internal.knowledge_tools import (
     KnowledgeAddTool,
@@ -60,9 +62,11 @@ from dare_framework.plan.interfaces import (
     IPlannerManager,
     IRemediator,
     IRemediatorManager,
+    IStepExecutor,
     IValidator,
     IValidatorManager,
 )
+from dare_framework.security import ISecurityBoundary, NoOpSecurityBoundary, PolicySecurityBoundary
 from dare_framework.skill import Skill, ISkillLoader, ISkillStore, SkillStoreBuilder
 from dare_framework.skill._internal.action_handler import SkillsActionHandler
 from dare_framework.skill._internal.filesystem_skill_loader import FileSystemSkillLoader
@@ -477,6 +481,19 @@ class _BaseAgentBuilder(Generic[TAgent]):
             tool_manager.register_provider(provider)
         for tool in tools:
             tool_manager.register_tool(tool)
+
+        # Apply config-level component disables to all registered tools except the ones
+        # explicitly injected via the builder (those must remain available).
+        disabled = set(config.component_settings(ComponentType.TOOL).disabled)
+        explicit_names = {tool.name for tool in tools}
+        for tool_name in disabled:
+            if tool_name in explicit_names:
+                continue
+            try:
+                tool_manager.change_capability_status(tool_name, enabled=False)
+            except KeyError:
+                # Config may reference tools that are not registered in this build.
+                continue
         return ToolGateway(tool_manager), tool_manager
 
     def _resolve_approval_manager(self, config: Config) -> ToolApprovalManager:
@@ -647,6 +664,9 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
 
         self._event_log: IEventLog | None = None
         self._execution_control: IExecutionControl | None = None
+        self._execution_mode: str = "model_driven"
+        self._step_executor: IStepExecutor | None = None
+        self._security_boundary: ISecurityBoundary | None = None
         self._hooks: list[IHook] = []
         self._telemetry: ITelemetryProvider | None = None
         self._verbose: bool = False
@@ -671,12 +691,28 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
         self._execution_control = execution_control
         return self
 
+    def with_execution_mode(self, execution_mode: str) -> DareAgentBuilder:
+        normalized = execution_mode.strip().lower()
+        if normalized not in {"model_driven", "step_driven"}:
+            raise ValueError("execution_mode must be 'model_driven' or 'step_driven'")
+        self._execution_mode = normalized
+        return self
+
+    def with_step_executor(self, step_executor: IStepExecutor) -> DareAgentBuilder:
+        self._step_executor = step_executor
+        return self
+
     def add_hooks(self, *hooks: IHook) -> DareAgentBuilder:
         self._hooks.extend(hooks)
         return self
 
     def with_telemetry(self, telemetry: ITelemetryProvider) -> DareAgentBuilder:
         self._telemetry = telemetry
+        return self
+
+    def with_security_boundary(self, security_boundary: ISecurityBoundary) -> DareAgentBuilder:
+        """Inject an explicit security boundary for tool preflight."""
+        self._security_boundary = security_boundary
         return self
 
     def with_verbose(self, verbose: bool = True) -> DareAgentBuilder:
@@ -767,6 +803,8 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
             hooks = None
 
         telemetry = self._telemetry
+        security_boundary = self._resolve_security_boundary(config)
+        event_log = self._resolve_event_log(config)
         return DareAgent(
             name=self._name,
             model=model,
@@ -777,13 +815,47 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
             planner=planner,
             validator=validator,
             remediator=remediator,
-            event_log=self._event_log,
+            event_log=event_log,
             hooks=hooks,
             telemetry=telemetry,
+            security_boundary=security_boundary,
+            step_executor=self._step_executor,
+            execution_mode=self._execution_mode,
             agent_channel=agent_channel,
             verbose=self._verbose,
             approval_manager=approval_manager,
         )
+
+    def _resolve_event_log(self, config: Config) -> IEventLog | None:
+        if self._event_log is not None:
+            return self._event_log
+        if not config.event_log.enabled:
+            return None
+
+        # Normalize blank templated values (e.g. empty env var expansion) to
+        # "unset" so event log keeps the documented default db location.
+        db_path = config.event_log.path
+        if db_path is None or not str(db_path).strip():
+            db_path = str(Path(config.workspace_dir) / ".dare" / "events.db")
+        return DefaultEventLog(db_path)
+
+    def _resolve_security_boundary(self, config: Config) -> ISecurityBoundary:
+        if self._security_boundary is not None:
+            return self._security_boundary
+        # Treat null/empty config as "unset" so templated values do not
+        # silently disable security by coercing None -> "none".
+        raw_mode = config.security.get("boundary")
+        if raw_mode is None:
+            raw_mode = config.security.get("mode")
+        if raw_mode is None:
+            raw_mode = "policy"
+        mode = str(raw_mode).strip().lower() or "policy"
+        if mode in {"off", "none", "noop", "disabled"}:
+            boundary: ISecurityBoundary = NoOpSecurityBoundary()
+        else:
+            boundary = PolicySecurityBoundary.from_config(config.security)
+        self._security_boundary = boundary
+        return boundary
 
 
 __all__ = ["DareAgentBuilder", "ReactAgentBuilder", "SimpleChatAgentBuilder"]

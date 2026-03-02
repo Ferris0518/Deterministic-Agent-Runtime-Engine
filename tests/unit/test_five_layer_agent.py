@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from dare_framework.agent import DareAgent
+from dare_framework.agent._internal.session_orchestrator import _to_json_safe
+from dare_framework.agent.dare_agent import EventLogWriteError
 from dare_framework.config import Config
 from dare_framework.context import Budget, Context, Message
 from dare_framework.model.types import ModelInput, ModelResponse
@@ -21,6 +25,7 @@ from dare_framework.tool._internal.control.approval_manager import (
     ToolApprovalManager,
 )
 from dare_framework.tool.types import CapabilityDescriptor, CapabilityKind, CapabilityType
+from dare_framework.transport.types import EnvelopeKind
 
 
 # =============================================================================
@@ -287,7 +292,7 @@ class TestDareAgentExecution:
         result = await agent("Generate python file")
 
         assert isinstance(result.output, dict)
-        assert result.output.get("content") == serialized
+        assert result.output.get("content") == result.output_text
         assert result.output_text is not None
         assert "任务标题" in result.output_text
         assert 'print("ok")' in result.output_text
@@ -305,6 +310,120 @@ class TestDareAgentExecution:
         event_types = [e[0] for e in event_log.events]
         assert "session.start" in event_types
         assert "session.complete" in event_types
+
+    @pytest.mark.asyncio
+    async def test_event_log_write_failure_is_not_silent(self) -> None:
+        """Event write errors surface with event context for debugging."""
+
+        class FailingEventLog:
+            async def append(self, event_type: str, payload: dict[str, Any]) -> str:
+                _ = payload
+                raise RuntimeError(f"disk full while writing {event_type}")
+
+        model = MockModelAdapter()
+        agent = _make_agent(name="test-agent", model=model, event_log=FailingEventLog())
+
+        with pytest.raises(EventLogWriteError, match="session.start"):
+            await agent("Test task")
+
+    @pytest.mark.asyncio
+    async def test_session_summary_event_serializes_non_json_outputs(self) -> None:
+        """session.summary payload converts non-JSON outputs to strings."""
+        class PathOutputToolGateway(MockToolGateway):
+            async def invoke(self, capability_id: str, *, envelope: Any, **params: Any) -> Any:
+                self.invoke_calls.append((capability_id, params, envelope))
+                return MagicMock(success=True, output={"artifact": Path("artifact.txt")}, evidence=[])
+
+        model = MockModelAdapter([
+            ModelResponse(
+                content="call tool",
+                tool_calls=[{"name": "read_file", "arguments": {"path": "artifact.txt"}}],
+            ),
+            ModelResponse(content="done", tool_calls=[]),
+        ])
+        tool_gateway = PathOutputToolGateway(
+            [
+                CapabilityDescriptor(
+                    id="read_file",
+                    type=CapabilityType.TOOL,
+                    name="read_file",
+                    description="Read file content.",
+                    input_schema={"type": "object"},
+                )
+            ]
+        )
+        event_log = MockEventLog()
+        agent = _make_agent(
+            name="test-agent",
+            model=model,
+            event_log=event_log,
+            tool_gateway=tool_gateway,
+        )
+
+        result = await agent("Emit non-serializable output")
+
+        session_summary_events = [event for event in event_log.events if event[0] == "session.summary"]
+        assert session_summary_events
+        summary_payload = session_summary_events[-1][1]["summary"]
+        assert summary_payload["final_output"] == {"content": "done"}
+        milestone_outputs = summary_payload["milestones"][0]["outputs"]
+        assert milestone_outputs[0]["output"] == {"artifact": "artifact.txt"}
+        # RunResult keeps the raw value for in-process consumers.
+        assert isinstance(result.output, dict)
+        assert result.output["content"] == "done"
+
+    @pytest.mark.asyncio
+    async def test_session_summary_event_serializes_sets_deterministically(self) -> None:
+        """session.summary payload sorts set values to keep deterministic event hashes."""
+
+        class SetOutputToolGateway(MockToolGateway):
+            async def invoke(self, capability_id: str, *, envelope: Any, **params: Any) -> Any:
+                self.invoke_calls.append((capability_id, params, envelope))
+                return MagicMock(success=True, output={"values": {"z", "a", "m", "k", "b"}}, evidence=[])
+
+        model = MockModelAdapter([
+            ModelResponse(
+                content="call tool",
+                tool_calls=[{"name": "read_file", "arguments": {"path": "artifact.txt"}}],
+            ),
+            ModelResponse(content="done", tool_calls=[]),
+        ])
+        tool_gateway = SetOutputToolGateway(
+            [
+                CapabilityDescriptor(
+                    id="read_file",
+                    type=CapabilityType.TOOL,
+                    name="read_file",
+                    description="Read file content.",
+                    input_schema={"type": "object"},
+                )
+            ]
+        )
+        event_log = MockEventLog()
+        agent = _make_agent(
+            name="test-agent",
+            model=model,
+            event_log=event_log,
+            tool_gateway=tool_gateway,
+        )
+
+        await agent("Emit set output")
+
+        session_summary_events = [event for event in event_log.events if event[0] == "session.summary"]
+        assert session_summary_events
+        summary_payload = session_summary_events[-1][1]["summary"]
+        milestone_outputs = summary_payload["milestones"][0]["outputs"]
+        assert milestone_outputs[0]["output"]["values"] == ["a", "b", "k", "m", "z"]
+
+    @pytest.mark.asyncio
+    async def test_to_json_safe_handles_cyclic_containers(self) -> None:
+        """_to_json_safe should mark cyclic references instead of recursing forever."""
+        payload: dict[str, Any] = {}
+        payload["self"] = payload
+
+        normalized = _to_json_safe(payload)
+
+        assert normalized == {"self": "<circular>"}
 
     @pytest.mark.asyncio
     async def test_budget_check_called(self) -> None:
@@ -517,10 +636,10 @@ class TestNoPlannerToolExecution:
         request_id: str | None = None
         for _ in range(100):
             for envelope in transport.sent:
+                if getattr(envelope, "event_type", None) != "approval.pending":
+                    continue
                 payload = getattr(envelope, "payload", None)
                 if not isinstance(payload, dict):
-                    continue
-                if payload.get("type") != "approval_pending":
                     continue
                 resp = payload.get("resp")
                 if not isinstance(resp, dict):
@@ -533,6 +652,11 @@ class TestNoPlannerToolExecution:
                 break
             await asyncio.sleep(0.01)
         assert request_id is not None
+        assert any(
+            getattr(envelope, "event_type", None) == "approval.pending"
+            and getattr(envelope, "kind", None) == EnvelopeKind.SELECT
+            for envelope in transport.sent
+        )
 
         await approval_manager.grant(
             request_id,
@@ -542,6 +666,290 @@ class TestNoPlannerToolExecution:
 
         result = await run_task
         assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_no_planner_denied_approval_reports_not_allow_without_resolved_event(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run a shell command.",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Running command...",
+                    tool_calls=[{"name": "run_command", "arguments": {"command": "git status --short"}}],
+                ),
+                ModelResponse(content="Denied.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-approval-denied",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+        )
+        transport = RecordingTransportChannel()
+
+        run_task = asyncio.create_task(agent("Run git status", transport=transport))
+        request_id: str | None = None
+        for _ in range(100):
+            pending = approval_manager.list_pending()
+            if pending:
+                request_id = pending[0].request_id
+                break
+            await asyncio.sleep(0.01)
+        assert request_id is not None
+
+        await approval_manager.deny(
+            request_id,
+            scope=ApprovalScope.ONCE,
+            matcher=ApprovalMatcherKind.EXACT_PARAMS,
+        )
+
+        await run_task
+
+        tool_messages = [msg for msg in agent._context.stm_get() if msg.role == "tool"]
+        assert tool_messages
+        tool_payload = json.loads(tool_messages[-1].content)
+        assert tool_payload.get("status") == "not_allow"
+        assert tool_payload.get("success") is False
+
+        event_types = [getattr(envelope, "event_type", None) for envelope in transport.sent]
+        assert "approval.pending" in event_types
+        assert "approval.resolved" not in event_types
+
+    @pytest.mark.asyncio
+    async def test_no_planner_emits_approval_lifecycle_events_for_event_log_auto_resolution(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+
+        class AutoApproveEventLog(MockEventLog):
+            async def append(self, event_type: str, payload: dict[str, Any]) -> None:
+                await super().append(event_type, payload)
+                if event_type != "exec.waiting_human":
+                    return
+                checkpoint_id = payload.get("checkpoint_id")
+                if isinstance(checkpoint_id, str) and checkpoint_id:
+                    await approval_manager.grant(
+                        checkpoint_id,
+                        scope=ApprovalScope.ONCE,
+                        matcher=ApprovalMatcherKind.EXACT_PARAMS,
+                    )
+
+        event_log = AutoApproveEventLog()
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Running command...",
+                    tool_calls=[{"name": "run_command", "arguments": {"command": "git status --short"}}],
+                ),
+                ModelResponse(content="Approved and finished.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-approval-lifecycle-events",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+            event_log=event_log,
+        )
+
+        result = await asyncio.wait_for(agent("Run git status"), timeout=1.0)
+        assert result.success is True
+
+        event_types = [event_type for event_type, _ in event_log.events]
+        assert "exec.waiting_human" in event_types
+        assert "exec.resume" in event_types
+        assert "tool.approval" in event_types
+
+    @pytest.mark.asyncio
+    async def test_no_planner_tool_params_session_id_does_not_collide_with_governance(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "session_id": {"type": "string"},
+                },
+            },
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Run command with tool-level session_id argument.",
+                    tool_calls=[
+                        {
+                            "name": "run_command",
+                            "arguments": {
+                                "command": "git status --short",
+                                "session_id": "tool-arg-session",
+                            },
+                        }
+                    ],
+                ),
+                ModelResponse(content="Done.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-tool-param-session-id",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+        )
+
+        run_task = asyncio.create_task(agent("Run command with tool arg session_id"))
+        request_id: str | None = None
+        for _ in range(100):
+            pending = approval_manager.list_pending()
+            if pending:
+                request_id = pending[0].request_id
+                break
+            await asyncio.sleep(0.01)
+        assert request_id is not None
+
+        await approval_manager.grant(
+            request_id,
+            scope=ApprovalScope.ONCE,
+            matcher=ApprovalMatcherKind.EXACT_PARAMS,
+        )
+        result = await run_task
+        assert result.success is True
+
+        assert tool_gateway.invoke_calls
+        _capability_id, params, _envelope = tool_gateway.invoke_calls[-1]
+        assert params.get("session_id") == "tool-arg-session"
+
+    @pytest.mark.asyncio
+    async def test_no_planner_tool_params_context_does_not_collide_with_runtime_context(self, tmp_path) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "context": {"type": "string"},
+                },
+            },
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        approval_manager = ToolApprovalManager(
+            workspace_store=JsonApprovalRuleStore(tmp_path / "workspace" / "approvals.json"),
+            user_store=JsonApprovalRuleStore(tmp_path / "user" / "approvals.json"),
+        )
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Run command with tool-level context argument.",
+                    tool_calls=[
+                        {
+                            "name": "run_command",
+                            "arguments": {
+                                "command": "git status --short",
+                                "context": "tool-arg-context",
+                            },
+                        }
+                    ],
+                ),
+                ModelResponse(content="Done.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-tool-param-context",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=approval_manager,
+        )
+
+        run_task = asyncio.create_task(agent("Run command with tool arg context"))
+        request_id: str | None = None
+        for _ in range(100):
+            pending = approval_manager.list_pending()
+            if pending:
+                request_id = pending[0].request_id
+                break
+            await asyncio.sleep(0.01)
+        assert request_id is not None
+
+        await approval_manager.grant(
+            request_id,
+            scope=ApprovalScope.ONCE,
+            matcher=ApprovalMatcherKind.EXACT_PARAMS,
+        )
+        result = await run_task
+        assert result.success is True
+
+        assert tool_gateway.invoke_calls
+        _capability_id, params, _envelope = tool_gateway.invoke_calls[-1]
+        assert params.get("context") == "tool-arg-context"
+
+    @pytest.mark.asyncio
+    async def test_no_planner_missing_approval_manager_reports_fail_status(self) -> None:
+        capability = CapabilityDescriptor(
+            id="run_command",
+            type=CapabilityType.TOOL,
+            name="run_command",
+            description="Run shell command",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            metadata={"requires_approval": True},
+        )
+        tool_gateway = MockToolGateway([capability])
+        model = MockModelAdapter(
+            [
+                ModelResponse(
+                    content="Try running command without approval manager.",
+                    tool_calls=[{"name": "run_command", "arguments": {"command": "git status --short"}}],
+                ),
+                ModelResponse(content="Done.", tool_calls=[]),
+            ]
+        )
+        agent = _make_agent(
+            name="react-agent-missing-approval-manager",
+            model=model,
+            tool_gateway=tool_gateway,
+            approval_manager=None,
+        )
+
+        await agent("Run command")
+        tool_messages = [msg for msg in agent._context.stm_get() if msg.role == "tool"]
+        assert tool_messages
+        tool_payload = json.loads(tool_messages[-1].content)
+        assert tool_payload.get("success") is False
+        assert tool_payload.get("status") == "fail"
+        assert "no approval manager" in str(tool_payload.get("error", ""))
 
 
 # =============================================================================
@@ -702,6 +1110,7 @@ class TestFiveLayerMode:
         assert session_start
         assert session_start[0][1].get("task_id")
         assert session_start[0][1].get("run_id")
+        assert session_start[0][1].get("session_id") == session_start[0][1].get("run_id")
 
     @pytest.mark.asyncio
     async def test_milestone_attempt_count_is_persisted_on_state(self) -> None:

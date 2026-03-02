@@ -10,7 +10,7 @@ from dare_framework.config import Config
 from dare_framework.context import Context
 from dare_framework.model.types import ModelInput, ModelResponse
 from dare_framework.tool.types import ToolResult
-from dare_framework.transport import AgentChannel, TransportEnvelope
+from dare_framework.transport import AgentChannel, TransportEnvelope, TransportEventType
 
 
 class _Model:
@@ -86,9 +86,22 @@ async def test_dare_agent_does_not_emit_hook_messages_without_transport_hook() -
     hook_payloads = [
         envelope.payload
         for envelope in transport.sent
-        if isinstance(envelope.payload, dict) and envelope.payload.get("type") == "hook"
+        if getattr(envelope, "event_type", None) == TransportEventType.HOOK.value
     ]
     assert hook_payloads == []
+
+
+def test_dare_agent_does_not_expose_transport_payload_helper() -> None:
+    agent = DareAgent(
+        name="transport-explicitness",
+        model=_Model(),
+        context=Context(config=Config()),
+        tool_gateway=_ToolGateway(),
+    )
+
+    # Transport payload emission for approval flow now lives at tool-gateway
+    # boundary; agent should not expose the legacy helper.
+    assert not hasattr(agent, "_send_transport_payload")
 
 
 @pytest.mark.asyncio
