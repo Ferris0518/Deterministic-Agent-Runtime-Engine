@@ -29,6 +29,14 @@ from dare_framework.tool.types import (
 )
 
 
+# 错误返回时附带，供 LLM 重试
+_WRITE_FILE_FORMAT_HINT = (
+    " 正确格式：仅两个必填参数 path（string）、content（string）。"
+    "示例：{\"path\": \"recon_report.md\", \"content\": \"# 报告\\n\\n正文内容\"}。"
+    "勿使用 raw、文件名等其它键。"
+)
+
+
 class WriteFileTool(ITool):
     """Write text content to a file within the workspace roots."""
 
@@ -38,11 +46,32 @@ class WriteFileTool(ITool):
 
     @property
     def description(self) -> str:
-        return "Write text content to a file within the workspace roots."
+        return (
+            "将文本写入工作区内的文件。"
+            "仅接受两个必填参数：path（string，文件路径）、content（string，UTF-8 正文）。"
+            "可选 create_dirs（boolean，是否自动创建父目录，默认 true）。"
+            "正确示例：{\"path\": \"recon_report.md\", \"content\": \"# 报告\\n\\n正文内容\"}。"
+        )
 
     @property
     def input_schema(self) -> dict[str, Any]:
-        return infer_input_schema_from_execute(type(self).execute)
+        schema = infer_input_schema_from_execute(type(self).execute)
+        if "properties" in schema:
+            if "path" in schema["properties"]:
+                p = dict(schema["properties"]["path"])
+                p["description"] = "文件路径（string），绝对路径"
+                schema["properties"]["path"] = p
+            if "content" in schema["properties"]:
+                p = dict(schema["properties"]["content"])
+                p["description"] = "要写入的完整文本内容（string），UTF-8。不要用其他键（如 raw）。整份报告/正文都放在此字段。"
+                p["examples"] = ["# 报告标题\n\n第一段内容..."]
+                schema["properties"]["content"] = p
+            if "create_dirs" in schema["properties"]:
+                p = dict(schema["properties"]["create_dirs"])
+                p["description"] = "是否自动创建父目录（boolean），默认 true"
+                schema["properties"]["create_dirs"] = p
+        schema.setdefault("required", ["path", "content"])
+        return schema
 
     @property
     def output_schema(self) -> dict[str, Any]:
@@ -83,6 +112,7 @@ class WriteFileTool(ITool):
         path: str | RunContext[Any],
         content: str | None = None,
         create_dirs: bool = True,
+        **kwargs: Any,
     ) -> ToolResult[WriteFileOutput]:
         """Write text content into a workspace file.
 
@@ -91,6 +121,7 @@ class WriteFileTool(ITool):
             path: File path relative to workspace root.
             content: UTF-8 text content to write.
             create_dirs: Whether to create missing parent directories.
+            **kwargs: 忽略 LLM 多传的键（如 raw、markdown 片段等），仅使用 path、content、create_dirs。
 
         Returns:
             Write result metadata including bytes written and creation state.
@@ -198,10 +229,11 @@ def _execute_write(input: dict[str, Any], context: RunContext[Any]) -> ToolResul
 
 
 def _error_result(error: ToolError) -> ToolResult:
+    message = error.message + _WRITE_FILE_FORMAT_HINT
     return ToolResult(
         success=False,
-        output={"code": error.code},
-        error=error.message,
+        output={"code": error.code, "format_hint": _WRITE_FILE_FORMAT_HINT.strip()},
+        error=message,
         evidence=[],
     )
 

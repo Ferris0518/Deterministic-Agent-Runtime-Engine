@@ -8,12 +8,21 @@ Alignment note:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from dare_framework.tool.types import CapabilityDescriptor
 
 if TYPE_CHECKING:
     from dare_framework.model.types import Prompt
+
+
+class MessageMark(str, Enum):
+    """消息标记：IMMUTABLE 不可改，PERSISTENT 持久化（跨轮次保留），TEMPORARY 默认可清理。"""
+
+    IMMUTABLE = "immutable"
+    PERSISTENT = "persistent"
+    TEMPORARY = "temporary"
 
 
 @dataclass
@@ -24,6 +33,8 @@ class Message:
     content: str
     name: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    mark: MessageMark = MessageMark.TEMPORARY
+    id: str | None = None
 
 
 @dataclass
@@ -53,4 +64,4 @@ class AssembledContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["AssembledContext", "Budget", "Message"]
+__all__ = ["AssembledContext", "Budget", "Message", "MessageMark"]
