@@ -82,6 +82,32 @@ def test_compress_context_tool_pair_safe_keeps_idless_tool_context() -> None:
     assert any(message.role == "tool" and message.name == "demo_tool" for message in messages)
 
 
+def test_compress_context_tool_pair_safe_drops_orphan_tool_results_with_mixed_id_modes() -> None:
+    ctx = Context(config=Config())
+    ctx.stm_add(
+        Message(
+            role="assistant",
+            content="mixed tool calls",
+            metadata={
+                "tool_calls": [
+                    {"id": "tc_1", "name": "demo_tool", "arguments": {"x": 1}},
+                    {"name": "demo_tool", "arguments": {"x": 2}},
+                ]
+            },
+        )
+    )
+    ctx.stm_add(Message(role="tool", name="tc_1", content='{"success": true}'))
+    ctx.stm_add(Message(role="tool", name="demo_tool", content='{"success": true}'))
+    ctx.stm_add(Message(role="tool", name="tc_orphan", content='{"success": true}'))
+
+    compress_context(ctx, strategy="truncate", max_messages=10, tool_pair_safe=True)
+
+    tool_names = [message.name for message in ctx.stm_get() if message.role == "tool"]
+    assert "tc_1" in tool_names
+    assert "demo_tool" in tool_names
+    assert "tc_orphan" not in tool_names
+
+
 def test_compress_context_target_tokens_trims_long_history() -> None:
     ctx = Context(config=Config())
     for idx in range(8):
