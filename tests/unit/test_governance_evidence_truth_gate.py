@@ -288,6 +288,16 @@ mode: openspec
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Golden Cases must list file names", result.stdout)
 
+    def test_in_review_golden_requires_file_like_token(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- `golden_case`",
+            "- `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Golden Cases must list file names", result.stdout)
+
     def test_in_review_regression_placeholder_token_rejected(self) -> None:
         doc = _base_doc(status="in_review").replace(
             "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
@@ -308,6 +318,16 @@ mode: openspec
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing 'fail' summary token", result.stdout)
         self.assertIn("missing 'skip' summary token", result.stdout)
+
+    def test_in_review_regression_requires_command_shaped_runner(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+            "- Runner: `artifact`",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Regression Summary missing runner commands", result.stdout)
 
     def test_evidence_section_stops_at_top_level_heading_boundary(self) -> None:
         doc = _base_doc(status="in_review")

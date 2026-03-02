@@ -178,6 +178,69 @@ count_non_placeholder_backticked_tokens() {
   echo "$count"
 }
 
+is_file_like_token() {
+  local token="$1"
+  [[ "$token" =~ ^[A-Za-z0-9._/-]+$ ]] && [[ "$token" != */ ]] && [[ "$token" != -* ]]
+}
+
+count_file_like_backticked_tokens() {
+  local section="$1"
+  local count=0
+  local token
+  while IFS= read -r token; do
+    if [[ -z "$token" ]]; then
+      continue
+    fi
+    if is_placeholder_token "$token"; then
+      continue
+    fi
+    if is_file_like_token "$token"; then
+      count=$((count + 1))
+    fi
+  done < <(grep -Eo '`[^`]+`' <<<"$section" | sed -E 's/^`(.*)`$/\1/' || true)
+  echo "$count"
+}
+
+is_command_like_token() {
+  local token="$1"
+  local normalized
+  normalized="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$token")"
+  if [[ -z "$normalized" ]]; then
+    return 1
+  fi
+  if is_placeholder_token "$normalized"; then
+    return 1
+  fi
+
+  # Require shell-like shape (command + args/path/operator) to reject arbitrary placeholders.
+  if grep -Eq '[[:space:]/|&;=]' <<<"$normalized" || [[ "$normalized" == ./* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+count_command_like_backticked_tokens() {
+  local section="$1"
+  local count=0
+  local line token
+
+  while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    while IFS= read -r token; do
+      if [[ -z "$token" ]]; then
+        continue
+      fi
+      if is_command_like_token "$token"; then
+        count=$((count + 1))
+      fi
+    done < <(grep -Eo '`[^`]+`' <<<"$line" | sed -E 's/^`(.*)`$/\1/' || true)
+  done < <(grep -Ei '(runner|command)' <<<"$section" || true)
+
+  echo "$count"
+}
+
 dimension_none_without_reason() {
   local section="$1"
   local dimension_pattern="$2"
@@ -315,7 +378,11 @@ check_feature_doc() {
   if [[ -n "$golden_heading" ]]; then
     golden_section="$(extract_subsection_from_section "$evidence_section" "$golden_heading")"
     local golden_tokens
-    golden_tokens="$(count_non_placeholder_backticked_tokens "$golden_section")"
+    if [[ "$strict_acceptance_pack" == "true" ]]; then
+      golden_tokens="$(count_file_like_backticked_tokens "$golden_section")"
+    else
+      golden_tokens="$(count_non_placeholder_backticked_tokens "$golden_section")"
+    fi
     if [[ "$golden_tokens" -lt 1 ]] && ! grep -Eiq '(none|n/a).*(reason|because|rationale)' <<<"$golden_section"; then
       log "Golden Cases must list file names (extension optional) or explicit none-with-reason in $file"
       failures=$((failures + 1))
@@ -325,7 +392,11 @@ check_feature_doc() {
   if [[ -n "$regression_heading" ]]; then
     regression_section="$(extract_subsection_from_section "$evidence_section" "$regression_heading")"
     local regression_tokens
-    regression_tokens="$(count_non_placeholder_backticked_tokens "$regression_section")"
+    if [[ "$strict_acceptance_pack" == "true" ]]; then
+      regression_tokens="$(count_command_like_backticked_tokens "$regression_section")"
+    else
+      regression_tokens="$(count_non_placeholder_backticked_tokens "$regression_section")"
+    fi
     if [[ "$regression_tokens" -lt 1 ]]; then
       log "Regression Summary missing runner commands in $file"
       failures=$((failures + 1))
