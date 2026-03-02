@@ -5,7 +5,7 @@ topics: ["client-cli", "host-orchestration", "control-plane", "issue-135"]
 todo_ids: ["CCLI-005", "CCLI-006"]
 created: 2026-03-02
 updated: 2026-03-02
-status: active
+status: archived
 mode: openspec
 ---
 
@@ -46,6 +46,7 @@ mode: openspec
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`
 - `openspec list`
 - `openspec validate client-external-control-plane-v1 --type change --strict --json --no-interactive`
+- `openspec archive client-external-control-plane-v1 -y`
 - `./scripts/ci/check_governance_evidence_truth.sh`
 
 ### Results
@@ -60,10 +61,11 @@ mode: openspec
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'status_get_reports_pending_approvals'`: failed before the review fix because `run --headless --control-stdin` only updated the approval timeout watch, leaving `status:get` snapshots blind to pending runtime approvals; passed after wiring run-mode approval pending/resolved events into `CLISessionState.pending_runtime_approvals`.
 - `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q -k 'surfaces_action_handler_failure or rejects_unsupported_action or bridges_approvals_list or control_stdin_status_get_emits_structured_result or script_headless_control_stdin_status_get_reports_active_task'`: passed (`5` tests), covering happy path plus unsupported-action and handler-failure branches.
 - `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q -k 'cancellation_does_not_block_default_executor_shutdown'`: failed before the review fix because cancelling the control task still left a blocking `stdin.readline()` worker pinned in the default executor; passed after moving `control-stdin` reads onto a daemon thread + asyncio queue bridge.
-- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q`: passed (`44` tests, `0` failures).
-- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`: passed (`20` tests, `0` failures).
+- `../../.venv/bin/python -m pytest tests/unit/test_client_cli.py -q`: passed (`45` tests, `0` failures) after the final `pending_approvals` status snapshot regression fix.
+- `../../.venv/bin/python -m pytest tests/integration/test_client_cli_flow.py -q`: passed (`21` tests, `0` failures) after the final `status:get` pending-approval coverage landed.
 - `openspec list`: confirms Slice A / Slice B have been archived out of the active change list, and the active Slice C change now shows `✓ Complete`.
 - `openspec validate client-external-control-plane-v1 --type change --strict --json --no-interactive`: passed (`1/1` change valid, `0` issues).
+- `openspec archive client-external-control-plane-v1 -y`: archived the completed change to `openspec/changes/archive/2026-03-02-client-external-control-plane-v1/` and synced the landed control-plane deltas back into `openspec/specs/client-host-orchestration/spec.md`.
 - `./scripts/ci/check_governance_evidence_truth.sh`: passed after the Slice C feature evidence block and prior-slice archive moves were synchronized.
 
 ### Behavior Verification
@@ -83,7 +85,8 @@ mode: openspec
 - Slice A intent gate (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/141`
 - Slice B implementation gate (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/145`
 - Slice C docs-only intent PR (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148`
-- Slice C implementation PR (open): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/151`
+- Slice C implementation PR (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/151`
 - Slice C spec-fold review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/148#discussion_r2872038646`
 - Slice C implementation review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/151#discussion_r2872629793`
 - Slice C implementation review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/151#discussion_r2872876273`
+- Archive target: `openspec/changes/archive/2026-03-02-client-external-control-plane-v1/`
