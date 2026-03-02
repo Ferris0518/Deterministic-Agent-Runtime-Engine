@@ -91,6 +91,7 @@ extract_section() {
   local start_heading="$2"
   awk -v start="$start_heading" '
     $0 == start {in_section=1; next}
+    in_section && $0 ~ /^#[[:space:]]+/ {in_section=0}
     in_section && $0 ~ /^##[[:space:]]+/ {in_section=0}
     in_section {print}
   ' "$file"
@@ -329,6 +330,12 @@ check_feature_doc() {
       log "Regression Summary missing runner commands in $file"
       failures=$((failures + 1))
     fi
+    for summary_token in pass fail skip; do
+      if ! grep -Eiq "\\b${summary_token}\\b" <<<"$regression_section"; then
+        log "Regression Summary missing '${summary_token}' summary token in $file"
+        failures=$((failures + 1))
+      fi
+    done
     if ! grep -Eiq '(pass|fail|skip)' <<<"$regression_section"; then
       log "Regression Summary missing pass/fail/skip summary in $file"
       failures=$((failures + 1))

@@ -298,6 +298,35 @@ mode: openspec
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Regression Summary missing runner commands", result.stdout)
 
+    def test_in_review_regression_summary_requires_pass_fail_skip_tokens(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Summary: pass 1, fail 0, skip 0.",
+            "- Summary: pass 1.",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing 'fail' summary token", result.stdout)
+        self.assertIn("missing 'skip' summary token", result.stdout)
+
+    def test_evidence_section_stops_at_top_level_heading_boundary(self) -> None:
+        doc = _base_doc(status="in_review")
+        doc = doc.replace(
+            "### Contract Delta\n- schema: none, reason: docs-only governance check.\n- error semantics: error_type (framework-native marker).\n- retry semantics: none, reason: deterministic docs gate.\n\n",
+            "",
+        )
+        doc += """
+# Appendix
+### Contract Delta
+- schema: changed in appendix.
+- error semantics: error_type in appendix.
+- retry semantics: changed in appendix.
+"""
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing Contract Delta subsection in Evidence section", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
