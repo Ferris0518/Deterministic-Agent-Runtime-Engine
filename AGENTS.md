@@ -1,9 +1,3 @@
-## Superpowers System
-
-<EXTREMELY_IMPORTANT>
-You have superpowers. Superpowers teach you new skills and capabilities. RIGHT NOW use the `using-superpowers` skill and follow the instructions it returns.
-</EXTREMELY_IMPORTANT>
-
 # Additional Constraints
 
 - When writing code, add necessary comments to clarify non-obvious logic or intent.
