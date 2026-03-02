@@ -54,6 +54,13 @@ def _step_state(step: Any) -> PlanStateName:
     return _normalize_state(raw, default="todo")
 
 
+def _step_has_explicit_status(step: Any) -> bool:
+    """Return True when the step persists status explicitly (object or dict)."""
+    if isinstance(step, dict):
+        return "status" in step
+    return hasattr(step, "status")
+
+
 # -----------------------------------------------------------------------------
 # Input / Output for collaboration
 # -----------------------------------------------------------------------------
@@ -143,12 +150,18 @@ class PlannerState:
 
     def sync_completed_step_ids(self) -> None:
         """Rebuild compatibility completed-step set from step statuses."""
+        legacy_completed = set(self.completed_step_ids)
         completed: set[str] = set()
         for step in self.steps:
-            if _step_state(step) != "done":
-                continue
             step_id = _step_id(step)
-            if step_id is not None:
+            if step_id is None:
+                continue
+            if _step_state(step) == "done":
+                completed.add(step_id)
+                continue
+            # Preserve legacy completion markers for restored sessions where step status
+            # was not persisted per-step and only completed_step_ids tracked progress.
+            if not _step_has_explicit_status(step) and step_id in legacy_completed:
                 completed.add(step_id)
         self.completed_step_ids = completed
 
@@ -184,10 +197,25 @@ class PlannerState:
 
     def copy_for_execution(self) -> PlannerState:
         """Produce clean state for Execution Agent. Strips plan runtime state."""
-        steps = [
-            Step(step_id=s.step_id, description=s.description, params=dict(s.params))
-            for s in self.steps
-        ]
+        steps: list[Step] = []
+        for step in self.steps:
+            step_id = _step_id(step)
+            if not step_id:
+                continue
+            raw_params = getattr(step, "params", None)
+            if raw_params is None and isinstance(step, dict):
+                raw_params = step.get("params")
+            params = raw_params if isinstance(raw_params, dict) else {}
+            raw_description = getattr(step, "description", None)
+            if isinstance(step, dict):
+                raw_description = step.get("description")
+            steps.append(
+                Step(
+                    step_id=step_id,
+                    description=str(raw_description or ""),
+                    params=dict(params),
+                )
+            )
         return PlannerState(
             task_id=self.task_id,
             session_id=self.session_id,

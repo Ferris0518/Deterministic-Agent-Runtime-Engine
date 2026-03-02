@@ -34,15 +34,35 @@ _TERMINAL_STATES: set[str] = {"done", "abandoned"}
 _PENDING_STATES: set[str] = {"todo", "in_progress"}
 
 
-def _step_state(step: Step) -> PlanStateName:
+def _step_id(step: Any) -> str | None:
+    """Read step_id from Step-like objects with legacy dict fallback."""
+    raw = getattr(step, "step_id", None)
+    if raw is None and isinstance(step, dict):
+        raw = step.get("step_id")
+    if isinstance(raw, str) and raw.strip():
+        return raw
+    return None
+
+
+def _step_description(step: Any) -> str:
+    """Read step description from Step-like objects with legacy dict fallback."""
+    raw = getattr(step, "description", None)
+    if raw is None and isinstance(step, dict):
+        raw = step.get("description")
+    return str(raw or "")
+
+
+def _step_state(step: Any) -> PlanStateName:
     """Read a step lifecycle state with fallback for legacy objects."""
-    raw = getattr(step, "status", "todo")
+    raw = getattr(step, "status", None)
+    if raw is None and isinstance(step, dict):
+        raw = step.get("status")
     if isinstance(raw, str) and raw in STEP_STATES:
         return raw
     return "todo"
 
 
-def _pending_steps(state: PlannerState) -> list[Step]:
+def _pending_steps(state: PlannerState) -> list[Any]:
     """Return non-terminal steps."""
     return [step for step in state.steps if _step_state(step) in _PENDING_STATES]
 
@@ -56,9 +76,9 @@ def _format_critical_block(state: PlannerState) -> str:
             "- **NEXT**: Call create_plan with plan_description and steps."
         )
     state.sync_completed_step_ids()
-    completed = [step.step_id for step in state.steps if _step_state(step) == "done"]
-    pending = [step.step_id for step in state.steps if _step_state(step) in _PENDING_STATES]
-    abandoned = [step.step_id for step in state.steps if _step_state(step) == "abandoned"]
+    completed = [step_id for step in state.steps if _step_state(step) == "done" if (step_id := _step_id(step))]
+    pending = [step_id for step in state.steps if _step_state(step) in _PENDING_STATES if (step_id := _step_id(step))]
+    abandoned = [step_id for step in state.steps if _step_state(step) == "abandoned" if (step_id := _step_id(step))]
     lines = [
         "## [Plan State] (check before every action)",
         "",
@@ -67,9 +87,10 @@ def _format_critical_block(state: PlannerState) -> str:
         "- Steps:",
     ]
     for i, st in enumerate(state.steps, 1):
-        lines.append(f"  [{i}] {st.step_id} [{_step_state(st)}]: {st.description}")
-        if st.params.get("deliverable"):
-            lines.append(f"      交付件: {st.params['deliverable']}")
+        lines.append(f"  [{i}] {_step_id(st) or '<unknown>'} [{_step_state(st)}]: {_step_description(st)}")
+        params = st.params if isinstance(st, Step) else st.get("params", {}) if isinstance(st, dict) else {}
+        if isinstance(params, dict) and params.get("deliverable"):
+            lines.append(f"      交付件: {params['deliverable']}")
     lines.extend(["", f"- Completed: {completed}", f"- Pending: {pending}", f"- Abandoned: {abandoned}"])
 
     if state.plan_status in _TERMINAL_STATES:
@@ -80,11 +101,12 @@ def _format_critical_block(state: PlannerState) -> str:
     elif pending and not completed:
         lines.append("- **NEXT**: Call ask_user to show the plan and ask for approval (执行/修改计划/取消). Only proceed to delegate when user chooses 执行.")
     elif pending:
-        next_step = next(s for s in state.steps if s.step_id == pending[0])
-        deliverable = next_step.params.get("deliverable", "")
+        next_step = next(step for step in state.steps if _step_id(step) == pending[0])
+        params = next_step.params if isinstance(next_step, Step) else next_step.get("params", {}) if isinstance(next_step, dict) else {}
+        deliverable = params.get("deliverable", "") if isinstance(params, dict) else ""
         dl_hint = f" 交付件: {deliverable}" if deliverable else ""
         lines.append(
-            f"- **NEXT**: Call sub-agent with task=<任务目标 + 交付件 + 目标路径> and step_id={next_step.step_id}.{dl_hint} "
+            f"- **NEXT**: Call sub-agent with task=<任务目标 + 交付件 + 目标路径> and step_id={pending[0]}.{dl_hint} "
             f"Do NOT add execution steps to task. Do NOT fabricate file paths. Do NOT repeat completed steps."
         )
     else:
@@ -192,9 +214,10 @@ class CreatePlanTool(ITool):
         print(f"  plan_description: {plan_description}")
         print(f"  steps ({len(self._state.steps)}):")
         for i, st in enumerate(self._state.steps, 1):
-            dl = st.params.get("deliverable", "")
+            params = st.params if isinstance(st, Step) else st.get("params", {}) if isinstance(st, dict) else {}
+            dl = params.get("deliverable", "") if isinstance(params, dict) else ""
             dl_str = f" 交付件: {dl}" if dl else ""
-            print(f"    [{i}] {st.step_id}: {st.description}{dl_str}")
+            print(f"    [{i}] {_step_id(st) or '<unknown>'}: {_step_description(st)}{dl_str}")
         print("---\n", flush=True)
         return ToolResult(
             success=True,
@@ -354,7 +377,11 @@ class ReviseCurrentPlanTool(ITool):
             self._state.plan_description = str(plan_description)
 
         if steps is not None:
-            old_by_id = {step.step_id: _step_state(step) for step in self._state.steps}
+            old_by_id = {
+                step_id: _step_state(step)
+                for step in self._state.steps
+                if (step_id := _step_id(step)) is not None
+            }
             revised_steps: list[Step] = []
             for raw in steps:
                 step_id = str(raw.get("step_id", "")).strip()
@@ -451,7 +478,7 @@ class FinishPlanTool(ITool):
         if not self._state.steps:
             return ToolResult(success=False, output=None, error="no active plan to finish")
 
-        pending = [step.step_id for step in _pending_steps(self._state)]
+        pending = [step_id for step in _pending_steps(self._state) if (step_id := _step_id(step))]
         if target_state == "done" and pending:
             return ToolResult(
                 success=False,
@@ -462,7 +489,9 @@ class FinishPlanTool(ITool):
         if target_state == "abandoned":
             for step in self._state.steps:
                 if _step_state(step) in _PENDING_STATES:
-                    self._state.transition_step(step.step_id, "abandoned")
+                    step_id = _step_id(step)
+                    if step_id:
+                        self._state.transition_step(step_id, "abandoned")
 
         try:
             self._state.transition_plan(target_state)
@@ -476,7 +505,7 @@ class FinishPlanTool(ITool):
             success=True,
             output={
                 "plan_status": self._state.plan_status,
-                "pending": [step.step_id for step in _pending_steps(self._state)],
+                "pending": [step_id for step in _pending_steps(self._state) if (step_id := _step_id(step))],
                 "completed": sorted(self._state.completed_step_ids),
             },
         )
@@ -826,9 +855,10 @@ class SubAgentTool(ITool):
                 self._state.sync_completed_step_ids()
                 completed = sorted(self._state.completed_step_ids)
                 pending = [
-                    s.step_id
+                    step_id
                     for s in self._state.steps
                     if _step_state(s) in _PENDING_STATES
+                    if (step_id := _step_id(s)) is not None
                 ]
                 progress = f"Completed: {completed}. Pending: {pending}."
                 if isinstance(result, dict):

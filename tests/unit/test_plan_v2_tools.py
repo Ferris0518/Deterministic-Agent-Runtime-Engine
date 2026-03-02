@@ -50,6 +50,19 @@ def test_sync_completed_step_ids_tolerates_legacy_steps_without_status() -> None
     assert state.completed_step_ids == {"s1", "s_dict"}
 
 
+def test_sync_completed_step_ids_preserves_legacy_completed_markers_without_status() -> None:
+    class _LegacyStep:
+        def __init__(self, step_id: str) -> None:
+            self.step_id = step_id
+
+    state = PlannerState(steps=[_LegacyStep(step_id="legacy_done")])
+    state.completed_step_ids = {"legacy_done"}
+
+    state.sync_completed_step_ids()
+
+    assert state.completed_step_ids == {"legacy_done"}
+
+
 def test_transition_step_tolerates_legacy_step_without_status() -> None:
     class _LegacyStep:
         def __init__(self, step_id: str, description: str) -> None:
@@ -122,6 +135,57 @@ async def test_revise_current_plan_preserves_done_steps_by_step_id() -> None:
     assert [step.step_id for step in state.steps] == ["s1", "s3"]
     assert state.steps[0].status == "done"
     assert state.steps[1].status == "todo"
+
+
+@pytest.mark.asyncio
+async def test_revise_current_plan_handles_dict_backed_steps() -> None:
+    state = PlannerState(
+        plan_description="initial",
+        steps=[
+            {"step_id": "s1", "description": "first", "status": "done"},
+            {"step_id": "s2", "description": "second", "status": "todo"},
+        ],
+        plan_status="in_progress",
+    )
+    state.completed_step_ids = {"s1"}
+    revise_tool = ReviseCurrentPlanTool(state)
+
+    result = await revise_tool.execute(
+        run_context=_run_context(),
+        steps=[
+            {"step_id": "s1", "description": "first revised"},
+            {"step_id": "s3", "description": "third"},
+        ],
+    )
+
+    assert result.success is True
+    assert [step.step_id for step in state.steps] == ["s1", "s3"]
+    assert state.steps[0].status == "done"
+    assert state.steps[1].status == "todo"
+
+
+@pytest.mark.asyncio
+async def test_finish_plan_handles_dict_backed_steps() -> None:
+    state = PlannerState(
+        plan_description="dict-backed",
+        steps=[
+            {"step_id": "s1", "description": "first", "status": "done"},
+            {"step_id": "s2", "description": "second", "status": "todo"},
+        ],
+        plan_status="in_progress",
+        plan_validated=True,
+    )
+    finish_tool = FinishPlanTool(state)
+
+    result = await finish_tool.execute(
+        run_context=_run_context(),
+        target_state="abandoned",
+    )
+
+    assert result.success is True
+    assert state.plan_status == "abandoned"
+    assert result.output is not None
+    assert result.output.get("pending") == []
 
 
 @pytest.mark.asyncio
