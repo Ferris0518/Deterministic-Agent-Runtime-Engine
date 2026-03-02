@@ -2,9 +2,7 @@
 
 ## Purpose
 Define the stable host-orchestration contract for `client/`, including explicit mode separation, headless event semantics, the planned structured local control plane, and capability discovery boundaries.
-
 ## Requirements
-
 ### Requirement: Client host orchestration modes are explicitly separated
 The system SHALL distinguish between interactive CLI behavior, legacy automation JSON output, and host-orchestrated headless execution.
 
@@ -55,8 +53,9 @@ The system SHALL emit a versioned event envelope for headless mode that is disti
 ### Requirement: Host control is provided through a structured local control plane
 The system SHALL provide a structured local control plane for host-orchestrated sessions.
 
+- v1 MUST support a local `--control-stdin` entry for headless `run/script`.
 - The control plane MUST accept deterministic actions for approvals, MCP management, skills discovery, and session status.
-- Control responses MUST use structured success/error payloads.
+- Control responses MUST use structured success/error payloads with request correlation.
 - The control plane MUST preserve existing approval and action semantics rather than bypassing them.
 
 #### Scenario: Host grants approval through structured control
@@ -64,6 +63,12 @@ The system SHALL provide a structured local control plane for host-orchestrated 
 - **WHEN** the host submits a structured approval grant command
 - **THEN** the client resolves the approval through the deterministic approval action path
 - **AND** the result is returned as a structured control response
+
+#### Scenario: Unknown control action fails structurally
+- **GIVEN** a host sends a control command with an unsupported action id
+- **WHEN** the client validates the command frame
+- **THEN** the client returns a structured error response
+- **AND** it does not fall back to prompt-oriented or natural-language command parsing
 
 ### Requirement: Host capabilities are discoverable without hardcoded matrices
 The system SHALL provide a deterministic capability discovery surface for host orchestration.
@@ -76,3 +81,23 @@ The system SHALL provide a deterministic capability discovery surface for host o
 - **WHEN** it requests capability discovery
 - **THEN** the client returns a structured list of supported actions
 - **AND** the host does not need to infer support by parsing help text or natural-language output
+
+### Requirement: Control plane v1 reuses canonical action identifiers
+The system SHALL expose control-plane actions using canonical stable identifiers.
+
+- MCP control in v1 MUST be limited to `mcp:list`, `mcp:reload`, and `mcp:show-tool`.
+- CLI-only verbs without canonical actions, including `mcp:unload`, MUST NOT be advertised as v1 host protocol actions.
+- Approvals and skills actions MUST reuse their existing `resource:action` identifiers.
+
+#### Scenario: Host reloads MCP providers through canonical action id
+- **GIVEN** the host needs to refresh MCP provider paths for a running headless session
+- **WHEN** it sends action `mcp:reload` through the control plane
+- **THEN** the client reuses the current MCP reload runtime path
+- **AND** the response is returned as a structured control result
+
+#### Scenario: Host requests CLI session status
+- **GIVEN** a headless session is running under the CLI host protocol
+- **WHEN** the host sends action `status:get`
+- **THEN** the client returns a structured snapshot of current session state
+- **AND** the response is correlated to the request id
+

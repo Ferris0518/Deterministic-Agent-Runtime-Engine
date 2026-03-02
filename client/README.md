@@ -347,19 +347,20 @@ Issue #135 对应的宿主编排能力目前分成“已落地”和“未落地
 
 仍未落地：
 
-- `actions:list` / 启动握手式能力发现
+- `actions:list` 显式能力发现
 
 当前推荐边界是：
 
 1. 自动化脚本仍使用 `run/script --output json`。
 2. 宿主事件流接入使用 `run/script --headless`。
-3. 运行中控制当前优先使用 `--control-stdin` 做 `status:get`、approvals、MCP 与 `skills:list`；`actions:list` / 启动握手仍在后续 Slice 中。
+3. 运行中控制当前优先使用 `--control-stdin` 做 `status:get`、approvals、MCP 与 `skills:list`；`actions:list` 作为下一 Slice 的显式能力发现入口继续推进。
 4. 不要把当前 `log/event/result` 三类 JSON 行当作长期稳定的宿主协议。
 
 补充说明：
 
 - `script --headless` 与 `run --headless` 一样支持审批超时控制。
 - `script` 可显式传入 `--approval-timeout-seconds <seconds>`；未显式传入时，headless 脚本默认使用 `120s` 超时，避免无头会话无限等待审批。
+- 启动即发送的 capability handshake 当前不属于 v1 计划；宿主应通过显式 discovery action 获取支持矩阵。
 
 退出码约定：
 
