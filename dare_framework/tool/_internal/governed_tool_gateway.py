@@ -172,12 +172,40 @@ class GovernedToolGateway(IToolGateway):
                 error="tool requires approval but no approval manager is configured",
             )
 
-        evaluation = await self._approval_manager.evaluate(
-            capability_id=capability_id,
-            params=params,
-            session_id=session_id,
-            reason=approval_reason or f"Tool {capability_id} requires approval",
-        )
+        try:
+            # Keep a stable error prefix so agent-level callers can reason about
+            # approval failures deterministically.
+            evaluation = await self._approval_manager.evaluate(
+                capability_id=capability_id,
+                params=params,
+                session_id=session_id,
+                reason=approval_reason or f"Tool {capability_id} requires approval",
+            )
+        except Exception as exc:
+            await self._emit_approval_event(
+                event_logger,
+                "tool.approval",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": capability_id,
+                    "status": "error",
+                    "source": "evaluate",
+                    "error": str(exc),
+                },
+            )
+            await self._notify_approval_observer(
+                approval_observer,
+                {
+                    "status": "error",
+                    "source": "evaluate",
+                    "error": str(exc),
+                },
+            )
+            return ApprovalResolution(
+                verdict="error",
+                error=f"tool approval evaluation failed: {exc}",
+            )
         if evaluation.status == ApprovalEvaluationStatus.ALLOW:
             await self._emit_approval_event(
                 event_logger,
@@ -256,7 +284,35 @@ class GovernedToolGateway(IToolGateway):
                 "mode": "approval_memory_wait",
             },
         )
-        decision = await self._approval_manager.wait_for_resolution(request_id)
+        try:
+            decision = await self._approval_manager.wait_for_resolution(request_id)
+        except Exception as exc:
+            await self._emit_approval_event(
+                event_logger,
+                "tool.approval",
+                {
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "capability_id": capability_id,
+                    "status": "error",
+                    "source": "pending_request",
+                    "request_id": request_id,
+                    "error": str(exc),
+                },
+            )
+            await self._notify_approval_observer(
+                approval_observer,
+                {
+                    "status": "error",
+                    "source": "pending_request",
+                    "request_id": request_id,
+                    "error": str(exc),
+                },
+            )
+            return ApprovalResolution(
+                verdict="error",
+                error=f"tool approval resolution failed: {exc}",
+            )
         await self._emit_approval_event(
             event_logger,
             "exec.resume",

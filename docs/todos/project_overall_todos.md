@@ -1,6 +1,6 @@
 # DARE Framework 项目总体 TODO
 
-> 更新时间：2026-02-27  
+> 更新时间：2026-03-01  
 > 范围：项目全局演进（非单个 feature 的实现方案）
 
 ## 1. 目标与边界
@@ -10,9 +10,9 @@
 
 ## 2. 当前基线
 
-- 测试基线（审查时）：`.venv/bin/pytest -q` => `8 failed, 202 passed, 13 skipped`。
+- 测试基线（审查时）：`.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`。
 - 关键问题聚类：
-  - 交互动作枚举与 MCP action handler 契约不一致。
+  - 交互动作枚举与 transport slash-action 解析契约存在边界不一致（待持续回归监控）。
   - CLI 审批命令调用参数方式与 handler 签名不一致。
   - 内置 prompt 与测试约定不一致。
   - 若干 package `__init__.py` 不满足 facade 约束。
@@ -22,9 +22,19 @@
 
 ## P0 运行基线与契约一致性
 
-- [ ] T0-1 修复当前失败测试，恢复主干健康基线。
-- [ ] T0-2 统一 `ResourceAction` 与 action handler 动作契约。
-- [ ] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。
+- [x] T0-1 修复当前失败测试，恢复主干健康基线。  
+  Status: `done`  
+  Evidence: `.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`；`.venv/bin/pytest -q tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_evaluate_exception_returns_structured_failure tests/unit/test_dare_agent_security_boundary.py::test_tool_loop_approval_wait_exception_returns_structured_failure` => `2 passed`；`dare_framework/tool/_internal/governed_tool_gateway.py`（审批异常语义回归修复）  
+  Last Updated: `2026-03-01`
+- [x] T0-2 统一 `ResourceAction` 与 action handler 动作契约。  
+  Status: `done`  
+  Evidence: `dare_framework/transport/_internal/adapters.py`（`/approvals list` 规范化为 `approvals:list`，并提取审批 action 参数）；`tests/unit/test_transport_adapters.py`（新增契约回归）；`.venv/bin/pytest -q tests/unit/test_transport_adapters.py tests/unit/test_interaction_dispatcher.py tests/unit/test_transport_channel.py tests/integration/test_client_cli_flow.py` => `33 passed, 1 warning`  
+  Last Updated: `2026-03-01`
+- [x] T0-3 统一 CLI 对 `invoke(action, **params)` 的调用方式。  
+  Status: `done`  
+  Evidence: `examples/05-dare-coding-agent-enhanced/cli.py`、`examples/06-dare-coding-agent-mcp/cli.py`（`_invoke_approval_action` 统一为 `invoke(action, **params)` 形态，移除 `params={...}` 调用分叉）；`tests/unit/test_examples_cli.py`、`tests/unit/test_examples_cli_mcp.py`（新增 kwargs 调用契约回归）  
+  Commands: `.venv/bin/pytest -q tests/unit/test_examples_cli.py tests/unit/test_examples_cli_mcp.py` => `22 passed, 1 warning`  
+  Last Updated: `2026-03-01`
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
 
@@ -35,10 +45,16 @@
 
 ## P1 核心架构闭环（对齐权威设计）
 
-- [ ] T1-1 将 `ValidatedPlan.steps` 真正接入 Execute Loop。
+- [x] T1-1 将 `ValidatedPlan.steps` 真正接入 Execute Loop。  
+  Status: `done`  
+  Evidence: `openspec/changes/p0-step-driven-execution/tasks.md`；`dare_framework/agent/_internal/execute_engine.py`；`dare_framework/agent/dare_agent.py`；`.venv/bin/pytest -q tests/unit/test_dare_agent_step_driven_mode.py tests/unit/test_dare_agent_orchestration_split.py` => `27 passed`  
+  Last Updated: `2026-03-01`
 - [ ] T1-2 完成 plan attempt 隔离（snapshot/rollback）闭环。
 - [ ] T1-3 接入 `ISecurityBoundary`（trust derivation + policy gate）。
-- [ ] T1-4 提供 EventLog 默认实现并接入 builder 推荐路径。
+- [x] T1-4 提供 EventLog 默认实现并接入 builder 推荐路径。  
+  Status: `done`  
+  Evidence: `openspec/changes/p0-default-eventlog/tasks.md`；`dare_framework/event/_internal/sqlite_event_log.py`；`dare_framework/agent/builder.py`；`dare_framework/agent/dare_agent.py`；`dare_framework/observability/_internal/event_trace_bridge.py`；`.venv/bin/pytest -q tests/unit/test_event_sqlite_event_log.py tests/unit/test_builder_security_boundary.py tests/unit/test_five_layer_agent.py` => `43 passed`  
+  Last Updated: `2026-03-01`
 - [ ] T1-5 完成 HITL 语义闭环（pause -> wait -> resume）。
 
 验收：

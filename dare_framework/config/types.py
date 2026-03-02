@@ -333,6 +333,27 @@ class HooksConfig:
             return default
 
 
+@dataclass(frozen=True)
+class EventLogConfig:
+    """Default event-log wiring policy for runtime builders."""
+
+    enabled: bool = False
+    path: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EventLogConfig:
+        enabled = bool(data.get("enabled", False))
+        raw_path = data.get("path")
+        path = str(raw_path) if raw_path is not None else None
+        return cls(enabled=enabled, path=path)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"enabled": self.enabled}
+        if self.path is not None:
+            payload["path"] = self.path
+        return payload
+
+
 def _component_key(component_type: ComponentType | str) -> str:
     """Normalize component type values for lookup."""
     if isinstance(component_type, ComponentType):
@@ -356,6 +377,7 @@ class Config:
     allow_mcps: list[str] = field(default_factory=list)
     components: dict[str, ComponentConfig] = field(default_factory=dict)
     hooks: HooksConfig = field(default_factory=HooksConfig)
+    event_log: EventLogConfig = field(default_factory=EventLogConfig)
     security: dict[str, Any] = field(default_factory=dict)
     knowledge: dict[str, Any] = field(default_factory=dict)
     """Knowledge backend config: type (vector|rawdata), storage (in_memory|sqlite|chromadb), options."""
@@ -398,6 +420,12 @@ class Config:
         }
         hooks_raw = data.get("hooks")
         hooks = HooksConfig.from_dict(hooks_raw) if isinstance(hooks_raw, dict) else HooksConfig()
+        event_log_raw = data.get("event_log")
+        event_log = (
+            EventLogConfig.from_dict(event_log_raw)
+            if isinstance(event_log_raw, dict)
+            else EventLogConfig()
+        )
         security = data.get("security") if isinstance(data.get("security"), dict) else {}
         knowledge = data.get("knowledge") if isinstance(data.get("knowledge"), dict) else {}
         long_term_memory = data.get("long_term_memory") if isinstance(data.get("long_term_memory"), dict) else {}
@@ -435,6 +463,7 @@ class Config:
             allow_mcps=allow_mcps,
             components=components,
             hooks=hooks,
+            event_log=event_log,
             security=security,
             knowledge=knowledge,
             long_term_memory=long_term_memory,
@@ -487,6 +516,7 @@ class Config:
             "allow_mcps": list(self.allow_mcps),
             "components": {key: value.to_dict() for key, value in self.components.items()},
             "hooks": self.hooks.to_dict(),
+            "event_log": self.event_log.to_dict(),
             "security": dict(self.security),
             "knowledge": dict(self.knowledge),
             "long_term_memory": dict(self.long_term_memory),
@@ -502,6 +532,7 @@ __all__ = [
     "LLMConfig",
     "ComponentConfig",
     "HooksConfig",
+    "EventLogConfig",
     "RedactionConfig",
     "ObservabilityConfig",
     "Config",

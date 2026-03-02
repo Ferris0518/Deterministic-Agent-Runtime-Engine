@@ -1,12 +1,30 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from datetime import datetime, timezone
 
 import pytest
 
 from dare_framework.event import DefaultEventLog, Event, RuntimeSnapshot, SQLiteEventLog
-from dare_framework.observability._internal.event_trace_bridge import TraceAwareEventLog, make_trace_aware
+from dare_framework.observability._internal.event_trace_bridge import (
+    TraceAwareEventLog,
+    TraceContext,
+    make_trace_aware,
+)
+
+
+def _hash_v1(
+    *,
+    event_id: str,
+    event_type: str,
+    timestamp_iso: str,
+    payload_json: str,
+    prev_hash: str | None,
+) -> str:
+    prev_segment = prev_hash or ""
+    raw = "\n".join([event_id, event_type, timestamp_iso, payload_json, prev_segment])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -71,6 +89,89 @@ async def test_verify_chain_detects_tampered_row(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_append_persists_hash_version_column(tmp_path) -> None:
+    db_path = tmp_path / "events.db"
+    event_log = SQLiteEventLog(db_path)
+
+    event_id = await event_log.append("hash.version", {"ok": True})
+    assert event_id
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute("SELECT hash_version FROM events WHERE event_id = ?", (event_id,)).fetchone()
+    assert row is not None
+    assert int(row[0]) == 1
+
+
+@pytest.mark.asyncio
+async def test_verify_chain_returns_false_for_unsupported_hash_version(tmp_path) -> None:
+    db_path = tmp_path / "events.db"
+    event_log = SQLiteEventLog(db_path)
+
+    await event_log.append("security.check", {"ok": True})
+    await event_log.append("security.done", {"ok": True})
+    assert await event_log.verify_chain() is True
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE events SET hash_version = ? WHERE seq = 2", (999,))
+        conn.commit()
+
+    assert await event_log.verify_chain() is False
+
+
+@pytest.mark.asyncio
+async def test_schema_migrates_legacy_events_table_with_hash_version(tmp_path) -> None:
+    db_path = tmp_path / "legacy-events.db"
+    event_id = "legacy-e1"
+    event_type = "legacy.start"
+    payload_json = '{"n":1}'
+    timestamp_iso = "2026-03-01T00:00:00+00:00"
+    event_hash = _hash_v1(
+        event_id=event_id,
+        event_type=event_type,
+        timestamp_iso=timestamp_iso,
+        payload_json=payload_json,
+        prev_hash=None,
+    )
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE events (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                event_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                timestamp_iso TEXT NOT NULL,
+                prev_hash TEXT,
+                event_hash TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            (
+                "INSERT INTO events (event_id, event_type, payload_json, timestamp_iso, prev_hash, event_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?)"
+            ),
+            (event_id, event_type, payload_json, timestamp_iso, None, event_hash),
+        )
+        conn.commit()
+
+    event_log = SQLiteEventLog(db_path)
+    assert await event_log.verify_chain() is True
+
+    with sqlite3.connect(db_path) as conn:
+        columns = conn.execute("PRAGMA table_info(events)").fetchall()
+        names = {str(row[1]) for row in columns}
+        migrated = conn.execute(
+            "SELECT hash_version FROM events WHERE event_id = ?",
+            (event_id,),
+        ).fetchone()
+    assert "hash_version" in names
+    assert migrated is not None
+    assert int(migrated[0]) == 1
+
+
+@pytest.mark.asyncio
 async def test_default_event_log_alias_is_usable(tmp_path) -> None:
     db_path = tmp_path / "events.db"
     event_log = DefaultEventLog(db_path)
@@ -124,3 +225,39 @@ async def test_trace_aware_bridge_delegates_for_event_log_contract() -> None:
     assert queried[0].event_id == event_id
     assert replayed.from_event_id == event_id
     assert await wrapped.verify_chain() is True
+
+
+@pytest.mark.asyncio
+async def test_trace_aware_bridge_persists_trace_context_to_sqlite_payload(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "events.db"
+    base_log = SQLiteEventLog(db_path)
+
+    monkeypatch.setattr(
+        "dare_framework.observability._internal.event_trace_bridge.extract_trace_context",
+        lambda: TraceContext(
+            trace_id="trace-123",
+            span_id="span-456",
+            trace_flags=1,
+        ),
+    )
+
+    wrapped = make_trace_aware(base_log)
+    event_id = await wrapped.append("trace.bridge", {"ok": True})
+
+    queried = await base_log.query(filter={"event_id": event_id}, limit=1)
+    assert len(queried) == 1
+    trace_payload = queried[0].payload.get("_trace")
+    assert trace_payload == {
+        "trace_id": "trace-123",
+        "span_id": "span-456",
+        "trace_flags": 1,
+    }
+    assert queried[0].payload.get("trace_id") == "trace-123"
+    assert queried[0].payload.get("span_id") == "span-456"
+    assert queried[0].payload.get("trace_flags") == 1
+
+    snapshot = await base_log.replay(from_event_id=event_id)
+    assert snapshot.events[0].payload.get("_trace") == trace_payload

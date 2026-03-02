@@ -232,6 +232,26 @@ async def test_handle_approvals_command_grant_forwards_session_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_invoke_approval_action_accepts_kwargs_params() -> None:
+    approval_client = _CaptureApprovalClient()
+    result = await cli._invoke_approval_action(  # type: ignore[attr-defined]
+        approval_client,
+        ResourceAction.APPROVALS_GRANT,
+        request_id="req-1",
+        scope="workspace",
+        matcher="exact_params",
+        session_id="session-42",
+    )
+    assert result == {"request": None}
+    assert approval_client.last_meta == {
+        "request_id": "req-1",
+        "scope": "workspace",
+        "matcher": "exact_params",
+        "session_id": "session-42",
+    }
+
+
+@pytest.mark.asyncio
 async def test_handle_approvals_poll_forwards_session_filter() -> None:
     display = _CaptureDisplay()
     approval_client = _CaptureApprovalClient()

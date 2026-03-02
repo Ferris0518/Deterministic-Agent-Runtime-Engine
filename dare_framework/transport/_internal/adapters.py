@@ -7,6 +7,7 @@ import json
 from typing import Any, Callable
 
 from dare_framework.transport.interaction.controls import AgentControl
+from dare_framework.transport.interaction.resource_action import ResourceAction
 from dare_framework.transport.kernel import ClientChannel, PollableClientChannel
 from dare_framework.transport.types import (
     EnvelopeKind,
@@ -95,23 +96,26 @@ class StdioClientChannel(ClientChannel):
                 return
             kind = EnvelopeKind.MESSAGE
             payload: Any = line
+            meta: dict[str, Any] = {}
             if line.startswith("/"):
                 token = line.lstrip("/").strip()
                 if not token:
-                    payload = "actions:list"
+                    payload = ResourceAction.ACTIONS_LIST.value
                     kind = EnvelopeKind.ACTION
                 else:
-                    payload = token
-                control = AgentControl.value_of(str(payload))
-                if control is not None:
-                    kind = EnvelopeKind.CONTROL
-                elif payload != "actions:list":
-                    kind = EnvelopeKind.ACTION
+                    control = AgentControl.value_of(token)
+                    if control is not None:
+                        kind = EnvelopeKind.CONTROL
+                        payload = control.value
+                    else:
+                        payload, meta = _normalize_slash_action(token)
+                        kind = EnvelopeKind.ACTION
             await self._sender(
                 TransportEnvelope(
                     id=new_envelope_id(),
                     kind=kind,
                     payload=payload,
+                    meta=meta,
                 )
             )
 
@@ -205,6 +209,55 @@ class DirectClientChannel(PollableClientChannel):
             return await asyncio.wait_for(self._events.get(), timeout)
         except asyncio.TimeoutError:
             return None
+
+
+def _normalize_slash_action(token: str) -> tuple[str, dict[str, Any]]:
+    # Canonical `resource:action` string is accepted as-is.
+    direct = ResourceAction.value_of(token)
+    if direct is not None:
+        return direct.value, {}
+
+    # Support CLI-style `/resource action ...` and map it to canonical action id.
+    parts = token.split()
+    if len(parts) >= 2:
+        candidate = f"{parts[0]}:{parts[1]}"
+        action = ResourceAction.value_of(candidate)
+        if action is not None:
+            return action.value, _extract_action_params(action, parts[2:])
+
+    # Unknown slash command: preserve previous behavior for compatibility.
+    return token, {}
+
+
+def _extract_action_params(action: ResourceAction, tokens: list[str]) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    positional: list[str] = []
+    for token in tokens:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if key:
+                params[key] = value
+            continue
+        positional.append(token)
+
+    if action in {ResourceAction.APPROVALS_GRANT, ResourceAction.APPROVALS_DENY}:
+        if positional:
+            params.setdefault("request_id", positional[0])
+    elif action == ResourceAction.APPROVALS_REVOKE:
+        if positional:
+            params.setdefault("rule_id", positional[0])
+    elif action in {ResourceAction.MCP_LIST, ResourceAction.MCP_RELOAD}:
+        if positional:
+            params.setdefault("mcp_name", positional[0])
+    elif action == ResourceAction.MCP_SHOW_TOOL:
+        if positional:
+            params.setdefault("mcp_name", positional[0])
+        if len(positional) > 1:
+            params.setdefault("tool_name", positional[1])
+
+    return params
 
 
 def _default_serialize(msg: TransportEnvelope) -> str:

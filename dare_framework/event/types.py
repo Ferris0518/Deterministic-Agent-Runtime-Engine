@@ -16,6 +16,7 @@ class Event:
     payload: dict[str, Any]
     event_id: str = field(default_factory=lambda: uuid4().hex)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    hash_version: int = 1
     prev_hash: str | None = None
     event_hash: str | None = None
 

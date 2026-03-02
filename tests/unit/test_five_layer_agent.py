@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from dare_framework.agent import DareAgent
+from dare_framework.agent._internal.session_orchestrator import _to_json_safe
+from dare_framework.agent.dare_agent import EventLogWriteError
 from dare_framework.config import Config
 from dare_framework.context import Budget, Context, Message
 from dare_framework.model.types import ModelInput, ModelResponse
@@ -307,6 +310,120 @@ class TestDareAgentExecution:
         event_types = [e[0] for e in event_log.events]
         assert "session.start" in event_types
         assert "session.complete" in event_types
+
+    @pytest.mark.asyncio
+    async def test_event_log_write_failure_is_not_silent(self) -> None:
+        """Event write errors surface with event context for debugging."""
+
+        class FailingEventLog:
+            async def append(self, event_type: str, payload: dict[str, Any]) -> str:
+                _ = payload
+                raise RuntimeError(f"disk full while writing {event_type}")
+
+        model = MockModelAdapter()
+        agent = _make_agent(name="test-agent", model=model, event_log=FailingEventLog())
+
+        with pytest.raises(EventLogWriteError, match="session.start"):
+            await agent("Test task")
+
+    @pytest.mark.asyncio
+    async def test_session_summary_event_serializes_non_json_outputs(self) -> None:
+        """session.summary payload converts non-JSON outputs to strings."""
+        class PathOutputToolGateway(MockToolGateway):
+            async def invoke(self, capability_id: str, *, envelope: Any, **params: Any) -> Any:
+                self.invoke_calls.append((capability_id, params, envelope))
+                return MagicMock(success=True, output={"artifact": Path("artifact.txt")}, evidence=[])
+
+        model = MockModelAdapter([
+            ModelResponse(
+                content="call tool",
+                tool_calls=[{"name": "read_file", "arguments": {"path": "artifact.txt"}}],
+            ),
+            ModelResponse(content="done", tool_calls=[]),
+        ])
+        tool_gateway = PathOutputToolGateway(
+            [
+                CapabilityDescriptor(
+                    id="read_file",
+                    type=CapabilityType.TOOL,
+                    name="read_file",
+                    description="Read file content.",
+                    input_schema={"type": "object"},
+                )
+            ]
+        )
+        event_log = MockEventLog()
+        agent = _make_agent(
+            name="test-agent",
+            model=model,
+            event_log=event_log,
+            tool_gateway=tool_gateway,
+        )
+
+        result = await agent("Emit non-serializable output")
+
+        session_summary_events = [event for event in event_log.events if event[0] == "session.summary"]
+        assert session_summary_events
+        summary_payload = session_summary_events[-1][1]["summary"]
+        assert summary_payload["final_output"] == {"content": "done"}
+        milestone_outputs = summary_payload["milestones"][0]["outputs"]
+        assert milestone_outputs[0]["output"] == {"artifact": "artifact.txt"}
+        # RunResult keeps the raw value for in-process consumers.
+        assert isinstance(result.output, dict)
+        assert result.output["content"] == "done"
+
+    @pytest.mark.asyncio
+    async def test_session_summary_event_serializes_sets_deterministically(self) -> None:
+        """session.summary payload sorts set values to keep deterministic event hashes."""
+
+        class SetOutputToolGateway(MockToolGateway):
+            async def invoke(self, capability_id: str, *, envelope: Any, **params: Any) -> Any:
+                self.invoke_calls.append((capability_id, params, envelope))
+                return MagicMock(success=True, output={"values": {"z", "a", "m", "k", "b"}}, evidence=[])
+
+        model = MockModelAdapter([
+            ModelResponse(
+                content="call tool",
+                tool_calls=[{"name": "read_file", "arguments": {"path": "artifact.txt"}}],
+            ),
+            ModelResponse(content="done", tool_calls=[]),
+        ])
+        tool_gateway = SetOutputToolGateway(
+            [
+                CapabilityDescriptor(
+                    id="read_file",
+                    type=CapabilityType.TOOL,
+                    name="read_file",
+                    description="Read file content.",
+                    input_schema={"type": "object"},
+                )
+            ]
+        )
+        event_log = MockEventLog()
+        agent = _make_agent(
+            name="test-agent",
+            model=model,
+            event_log=event_log,
+            tool_gateway=tool_gateway,
+        )
+
+        await agent("Emit set output")
+
+        session_summary_events = [event for event in event_log.events if event[0] == "session.summary"]
+        assert session_summary_events
+        summary_payload = session_summary_events[-1][1]["summary"]
+        milestone_outputs = summary_payload["milestones"][0]["outputs"]
+        assert milestone_outputs[0]["output"]["values"] == ["a", "b", "k", "m", "z"]
+
+    @pytest.mark.asyncio
+    async def test_to_json_safe_handles_cyclic_containers(self) -> None:
+        """_to_json_safe should mark cyclic references instead of recursing forever."""
+        payload: dict[str, Any] = {}
+        payload["self"] = payload
+
+        normalized = _to_json_safe(payload)
+
+        assert normalized == {"self": "<circular>"}
 
     @pytest.mark.asyncio
     async def test_budget_check_called(self) -> None:
@@ -993,6 +1110,7 @@ class TestFiveLayerMode:
         assert session_start
         assert session_start[0][1].get("task_id")
         assert session_start[0][1].get("run_id")
+        assert session_start[0][1].get("session_id") == session_start[0][1].get("run_id")
 
     @pytest.mark.asyncio
     async def test_milestone_attempt_count_is_persisted_on_state(self) -> None:

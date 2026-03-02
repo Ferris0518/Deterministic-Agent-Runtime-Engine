@@ -6,13 +6,48 @@ facade.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Protocol
 from uuid import uuid4
 
 from dare_framework.agent._internal.orchestration import MilestoneState, SessionState
 from dare_framework.context import Message
-from dare_framework.plan.types import RunResult, Task
+from dare_framework.plan.types import MilestoneSummary, RunResult, SessionSummary, Task
+
+
+def _to_json_safe(value: Any, *, _seen: set[int] | None = None) -> Any:
+    """Best-effort conversion for values that must survive JSON event persistence."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if _seen is None:
+        _seen = set()
+    if isinstance(value, (dict, list, tuple, set)):
+        marker = id(value)
+        if marker in _seen:
+            return "<circular>"
+        _seen.add(marker)
+    if isinstance(value, dict):
+        try:
+            return {str(key): _to_json_safe(item, _seen=_seen) for key, item in value.items()}
+        finally:
+            _seen.remove(marker)
+    if isinstance(value, set):
+        try:
+            normalized = [_to_json_safe(item, _seen=_seen) for item in value]
+            # Sort by canonical JSON representation so mixed nested values remain deterministic.
+            return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+        finally:
+            _seen.remove(marker)
+    if isinstance(value, (list, tuple)):
+        try:
+            return [_to_json_safe(item, _seen=_seen) for item in value]
+        finally:
+            _seen.remove(marker)
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    # Fall back to stable string form for custom objects (Path/datetime/etc.).
+    return str(value)
 
 
 class SessionOrchestratorAgent(Protocol):
@@ -47,7 +82,8 @@ async def run_session_loop(
         agent._session_state = SessionState(
             task_id=task.task_id or uuid4().hex[:8],
         )
-    session_start = time.perf_counter()
+    session_start_monotonic = time.perf_counter()
+    session_started_at = time.time()
     from dare_framework.hook.types import HookPhase
 
     await agent._emit_hook(HookPhase.BEFORE_SESSION, {
@@ -115,7 +151,7 @@ async def run_session_loop(
     })
     await agent._emit_hook(HookPhase.AFTER_SESSION, {
         "success": success,
-        "duration_ms": (time.perf_counter() - session_start) * 1000.0,
+        "duration_ms": (time.perf_counter() - session_start_monotonic) * 1000.0,
         "budget_stats": agent._budget_stats(),
     })
 
@@ -124,11 +160,45 @@ async def run_session_loop(
         last_result = milestone_results[-1]
         if last_result.outputs:
             output = last_result.outputs[-1]
+    summary_output = _to_json_safe(output)
+
+    milestone_summaries: list[MilestoneSummary] = []
+    for idx, result in enumerate(milestone_results):
+        state = agent._session_state.milestone_states[idx]
+        milestone_summaries.append(
+            MilestoneSummary(
+                milestone_id=state.milestone.milestone_id,
+                description=state.milestone.description,
+                attempts=state.attempts,
+                success=result.success,
+                outputs=[_to_json_safe(item) for item in result.outputs],
+                errors=list(result.errors),
+                evidence_count=len(state.evidence_collected),
+                reflections_count=len(state.reflections),
+            )
+        )
+
+    session_ended_at = time.time()
+    session_summary = SessionSummary(
+        session_id=agent._session_state.run_id,
+        task_id=agent._session_state.task_id,
+        success=success,
+        started_at=session_started_at,
+        ended_at=session_ended_at,
+        duration_ms=(time.perf_counter() - session_start_monotonic) * 1000.0,
+        milestones=milestone_summaries,
+        final_output=summary_output,
+        errors=list(errors),
+        metadata={"milestone_count": len(milestones)},
+    )
+    await agent._log_event("session.summary", {"summary": session_summary.to_dict()})
 
     return RunResult(
         success=success,
         output=output,
         errors=errors,
+        session_id=agent._session_state.run_id,
+        session_summary=session_summary,
     )
 
 

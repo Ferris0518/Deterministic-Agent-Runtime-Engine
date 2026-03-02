@@ -29,6 +29,7 @@ from dare_framework.config.action_handler import ConfigActionHandler
 from dare_framework.config.kernel import IConfigProvider
 from dare_framework.config.types import Config
 from dare_framework.context import Budget, Context, IAssembleContext
+from dare_framework.event import DefaultEventLog
 from dare_framework.event.kernel import IEventLog
 from dare_framework.hook.interfaces import IHookManager
 from dare_framework.hook.kernel import IHook
@@ -756,6 +757,7 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
 
         telemetry = self._telemetry
         security_boundary = self._resolve_security_boundary(config)
+        event_log = self._resolve_event_log(config)
         return DareAgent(
             name=self._name,
             model=model,
@@ -766,7 +768,7 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
             planner=planner,
             validator=validator,
             remediator=remediator,
-            event_log=self._event_log,
+            event_log=event_log,
             hooks=hooks,
             telemetry=telemetry,
             security_boundary=security_boundary,
@@ -776,6 +778,19 @@ class DareAgentBuilder(_BaseAgentBuilder[DareAgent]):
             verbose=self._verbose,
             approval_manager=approval_manager,
         )
+
+    def _resolve_event_log(self, config: Config) -> IEventLog | None:
+        if self._event_log is not None:
+            return self._event_log
+        if not config.event_log.enabled:
+            return None
+
+        # Normalize blank templated values (e.g. empty env var expansion) to
+        # "unset" so event log keeps the documented default db location.
+        db_path = config.event_log.path
+        if db_path is None or not str(db_path).strip():
+            db_path = str(Path(config.workspace_dir) / ".dare" / "events.db")
+        return DefaultEventLog(db_path)
 
     def _resolve_security_boundary(self, config: Config) -> ISecurityBoundary:
         if self._security_boundary is not None:
