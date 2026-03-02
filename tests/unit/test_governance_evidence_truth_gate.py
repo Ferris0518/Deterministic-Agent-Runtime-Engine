@@ -200,7 +200,22 @@ mode: openspec
         result = self._run_gate_with_doc(doc)
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Contract Delta missing schema semantics", result.stdout)
+        self.assertIn("missing Contract Delta subsection in Evidence section", result.stdout)
+
+    def test_in_review_contract_heading_outside_evidence_does_not_count(self) -> None:
+        doc = _base_doc(status="in_review")
+        doc = doc.replace("### Contract Delta", "### Contract Notes")
+        doc += """
+## Appendix
+### Contract Delta
+- schema: appendix-only and should not satisfy Evidence contract.
+- error semantics: error_type
+- retry semantics: none
+"""
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing Contract Delta subsection in Evidence section", result.stdout)
 
     def test_intent_marker_without_pr_url_fails_even_with_other_links(self) -> None:
         doc = _base_doc(status="in_review").replace(
@@ -224,6 +239,19 @@ mode: openspec
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing error locator semantics", result.stdout)
+
+    def test_observability_fallback_requires_explicit_na_token(self) -> None:
+        observability_body = (
+            "- Nonetheless this section includes reason and fallback evidence wording.\n"
+            "- Reason: docs-only wording appears, but explicit token is absent.\n"
+            "- Fallback evidence: commands/results references are present."
+        )
+        result = self._run_gate_with_doc(
+            _base_doc(status="in_review", observability_body=observability_body)
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Observability section missing 'start' marker", result.stdout)
 
 
 if __name__ == "__main__":

@@ -115,19 +115,32 @@ normalize_status() {
 resolve_heading_line() {
   local file="$1"
   local pattern="$2"
-  local label="$3"
   local heading
   heading="$(grep -Ei -- "$pattern" "$file" | head -n 1 || true)"
+  echo "$heading"
+}
+
+resolve_heading_in_section() {
+  local section="$1"
+  local pattern="$2"
+  local heading
+  heading="$(grep -Ei -- "$pattern" <<<"$section" | head -n 1 || true)"
+  echo "$heading"
+}
+
+require_heading_found() {
+  local heading="$1"
+  local label="$2"
+  local context="$3"
   if [[ -z "$heading" ]]; then
-    log "missing $label in $file"
+    log "missing $label in $context"
     failures=$((failures + 1))
   fi
-  echo "$heading"
 }
 
 has_observability_na_fallback() {
   local section="$1"
-  grep -Eiq '(none|n/a|n\.a)' <<<"$section" &&
+  grep -Eiq '(^|[[:space:][:punct:]])(none|n/a|n\.a)([[:space:][:punct:]]|$)' <<<"$section" &&
     grep -Eiq '(reason|because|rationale)' <<<"$section" &&
     grep -Eiq '(fallback|evidence|commands|regression|verification)' <<<"$section"
 }
@@ -149,6 +162,7 @@ check_feature_doc() {
   local file="$1"
   local frontmatter status mode topic_slug
   local strict_acceptance_pack
+  local evidence_section
   local contract_section golden_section regression_section observability_section structured_review_section review_section
   local evidence_heading commands_heading results_heading contract_heading golden_heading regression_heading
   local observability_heading structured_review_heading behavior_heading risks_heading review_heading
@@ -184,25 +198,41 @@ check_feature_doc() {
   governed_docs_count=$((governed_docs_count + 1))
   log "checking $file (strict_acceptance_pack=$strict_acceptance_pack)"
 
-  evidence_heading="$(resolve_heading_line "$file" '^##[[:space:]]+Evidence([[:space:]]+Truth)?[[:space:]]*$' "Evidence section")"
-  commands_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Commands|Command Log)[[:space:]]*$' "Commands subsection")"
-  results_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Results|Result Summary)[[:space:]]*$' "Results subsection")"
-  behavior_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Behavior Verification|Behavior Checks?)[[:space:]]*$' "Behavior Verification subsection")"
-  risks_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Risks? and Rollback|Risk and Rollback)[[:space:]]*$' "Risks and Rollback subsection")"
-  review_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Review and Merge Gate Links?|Review[[:space:]]*/[[:space:]]*Merge Gate Links?)[[:space:]]*$' "Review and Merge Gate Links subsection")"
+  evidence_heading="$(resolve_heading_line "$file" '^##[[:space:]]+Evidence([[:space:]]+Truth)?[[:space:]]*$')"
+  require_heading_found "$evidence_heading" "Evidence section" "$file"
+  if [[ -n "$evidence_heading" ]]; then
+    evidence_section="$(extract_section "$file" "$evidence_heading")"
+  else
+    evidence_section=""
+  fi
+  commands_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Commands|Command Log)[[:space:]]*$')"
+  require_heading_found "$commands_heading" "Commands subsection" "Evidence section"
+  results_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Results|Result Summary)[[:space:]]*$')"
+  require_heading_found "$results_heading" "Results subsection" "Evidence section"
+  behavior_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Behavior Verification|Behavior Checks?)[[:space:]]*$')"
+  require_heading_found "$behavior_heading" "Behavior Verification subsection" "Evidence section"
+  risks_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Risks? and Rollback|Risk and Rollback)[[:space:]]*$')"
+  require_heading_found "$risks_heading" "Risks and Rollback subsection" "Evidence section"
+  review_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Review and Merge Gate Links?|Review[[:space:]]*/[[:space:]]*Merge Gate Links?)[[:space:]]*$')"
+  require_heading_found "$review_heading" "Review and Merge Gate Links subsection" "Evidence section"
 
   if [[ "$strict_acceptance_pack" == "true" ]]; then
-    contract_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Contract Delta|Contract Changes?)[[:space:]]*$' "Contract Delta subsection")"
-    golden_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Golden Cases?|Golden Files?)[[:space:]]*$' "Golden Cases subsection")"
-    regression_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Regression Summary|Regression Results?)[[:space:]]*$' "Regression Summary subsection")"
-    observability_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Observability( and Failure Localization)?|Failure Localization)[[:space:]]*$' "Observability and Failure Localization subsection")"
-    structured_review_heading="$(resolve_heading_line "$file" '^###[[:space:]]+(Structured Review Report|Structured Review)[[:space:]]*$' "Structured Review Report subsection")"
+    contract_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Contract Delta|Contract Changes?)[[:space:]]*$')"
+    require_heading_found "$contract_heading" "Contract Delta subsection" "Evidence section"
+    golden_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Golden Cases?|Golden Files?)[[:space:]]*$')"
+    require_heading_found "$golden_heading" "Golden Cases subsection" "Evidence section"
+    regression_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Regression Summary|Regression Results?)[[:space:]]*$')"
+    require_heading_found "$regression_heading" "Regression Summary subsection" "Evidence section"
+    observability_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Observability( and Failure Localization)?|Failure Localization)[[:space:]]*$')"
+    require_heading_found "$observability_heading" "Observability and Failure Localization subsection" "Evidence section"
+    structured_review_heading="$(resolve_heading_in_section "$evidence_section" '^###[[:space:]]+(Structured Review Report|Structured Review)[[:space:]]*$')"
+    require_heading_found "$structured_review_heading" "Structured Review Report subsection" "Evidence section"
   else
-    contract_heading="$(grep -Ei '^###[[:space:]]+(Contract Delta|Contract Changes?)[[:space:]]*$' "$file" | head -n 1 || true)"
-    golden_heading="$(grep -Ei '^###[[:space:]]+(Golden Cases?|Golden Files?)[[:space:]]*$' "$file" | head -n 1 || true)"
-    regression_heading="$(grep -Ei '^###[[:space:]]+(Regression Summary|Regression Results?)[[:space:]]*$' "$file" | head -n 1 || true)"
-    observability_heading="$(grep -Ei '^###[[:space:]]+(Observability( and Failure Localization)?|Failure Localization)[[:space:]]*$' "$file" | head -n 1 || true)"
-    structured_review_heading="$(grep -Ei '^###[[:space:]]+(Structured Review Report|Structured Review)[[:space:]]*$' "$file" | head -n 1 || true)"
+    contract_heading="$(grep -Ei '^###[[:space:]]+(Contract Delta|Contract Changes?)[[:space:]]*$' <<<"$evidence_section" | head -n 1 || true)"
+    golden_heading="$(grep -Ei '^###[[:space:]]+(Golden Cases?|Golden Files?)[[:space:]]*$' <<<"$evidence_section" | head -n 1 || true)"
+    regression_heading="$(grep -Ei '^###[[:space:]]+(Regression Summary|Regression Results?)[[:space:]]*$' <<<"$evidence_section" | head -n 1 || true)"
+    observability_heading="$(grep -Ei '^###[[:space:]]+(Observability( and Failure Localization)?|Failure Localization)[[:space:]]*$' <<<"$evidence_section" | head -n 1 || true)"
+    structured_review_heading="$(grep -Ei '^###[[:space:]]+(Structured Review Report|Structured Review)[[:space:]]*$' <<<"$evidence_section" | head -n 1 || true)"
   fi
 
   if [[ -n "$contract_heading" ]]; then
