@@ -38,20 +38,21 @@
   - 不负责：认领、依赖编排、PR 跟踪
 
 - `docs/todos/project_overall_todos.md`
-  - 角色：项目路线图
-  - 作用：回答“当前项目级优先级是什么”
-  - 不负责：单个 change 的细节认领
+  - 角色：项目路线图 + 外层 `Claim Ledger`
+  - 作用：回答“当前项目级优先级是什么”以及“哪一段 TODO scope 当前由谁推进”
+  - 不负责：单个 change 内部的 work package 施工细节
 
 - `docs/todos/YYYY-MM-DD_<change-id>_execution_todos.md`
-  - 角色：active change 执行认领板
-  - 作用：回答“谁在做什么、依赖谁、冻结到哪一层、证据在哪里”
-  - 这是多人并行协作的唯一认领板
+  - 角色：active change 内层执行协作板
+  - 作用：回答“这一 change 内部谁在做什么、依赖谁、冻结到哪一层、证据在哪里”
+  - 它承载 work package 协调，但不替代外层 `Claim Ledger`
 
 ### 3.2 认领粒度
 
-默认原则：`大包认领，小 task 验收`。
+默认原则：`外层认领 scope，内层拆 work package，小 task 验收`。
 
-- 认领单位是 `work package`
+- 外层认领单位是 `TODO scope` 或 `change scope`
+- 内层协作单位是 `work package`
 - 验收单位是 task / OpenSpec checkbox / gap 映射项
 
 `work package` 的定义：
@@ -81,10 +82,11 @@
 
 因此，一个 active change 的流程应为：
 
-1. 先提交 spec-sync PR
+1. 先写外层 `Claim Ledger`
+2. 再提交 docs-only `spec-sync / intent PR`
    内容包含：设计文档、gap analysis、execution board、OpenSpec artifacts
-2. spec-sync 合入后，work package 才允许进入 `claimed/doing`
-3. Gate 冻结完成后，下游包再并行实现
+3. `intent PR` 合入后，work package 才允许进入 `claimed/doing`
+4. Gate 冻结完成后，下游包再并行实现
 
 ## 4. 数据结构
 

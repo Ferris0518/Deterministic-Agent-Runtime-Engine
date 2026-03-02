@@ -1,6 +1,6 @@
 # AgentScope Execution Board Migration Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> 执行说明：按本计划逐项推进；不要假设本地 `superpowers` 技能已安装。若仓库内可用，优先使用 `.codex/skills/development-workflow/` 与 `.codex/skills/spec-driven-collab-board/` 的现有流程约束。
 
 **Goal:** Migrate `docs/todos/agentscope_domain_execution_todos.md` into the standardized execution board format without changing its technical scope.
 
