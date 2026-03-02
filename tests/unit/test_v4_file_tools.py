@@ -298,7 +298,7 @@ async def test_search_file_finds_matching_paths(tmp_path):
     ctx = RunContext(deps=None, run_id="run", config={"workspace_roots": [str(root)]})
 
     tool = SearchFileTool()
-    result = await tool.execute({"path": ".", "pattern": "*.py"}, ctx)
+    result = await tool.execute(run_context=ctx, pattern="*.py", path=".")
 
     assert result.success is True
     assert result.output["paths"] == ["a.py", "pkg/c.py"]

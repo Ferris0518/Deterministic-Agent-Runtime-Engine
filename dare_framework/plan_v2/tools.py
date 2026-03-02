@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+# sub-agent 相关日志用绿字
+_ANSI_GREEN = "\033[32m"
+_ANSI_RESET = "\033[0m"
+
 from dare_framework.tool.kernel import ITool
 from dare_framework.tool.types import (
     CapabilityKind,
@@ -39,14 +43,20 @@ def _format_critical_block(state: PlannerState) -> str:
     ]
     for i, st in enumerate(state.steps, 1):
         lines.append(f"  [{i}] {st.step_id}: {st.description}")
+        if st.params.get("deliverable"):
+            lines.append(f"      交付件: {st.params['deliverable']}")
     lines.extend(["", f"- Completed: {completed}", f"- Pending: {pending}"])
     if not state.plan_validated:
         lines.append("- **NEXT**: Call validate_plan(success=True) to confirm the plan.")
+    elif pending and not completed:
+        lines.append("- **NEXT**: Call ask_user to show the plan and ask for approval (执行/修改计划/取消). Only proceed to delegate when user chooses 执行.")
     elif pending:
         next_step = next(s for s in state.steps if s.step_id == pending[0])
+        deliverable = next_step.params.get("deliverable", "")
+        dl_hint = f" 交付件: {deliverable}" if deliverable else ""
         lines.append(
-            f"- **NEXT**: Call sub-agent (e.g. sub_agent_general) with task=<{next_step.step_id} description> "
-            f"and step_id={next_step.step_id}. Do NOT repeat completed steps."
+            f"- **NEXT**: Call sub-agent with task=<任务目标 + 交付件 + 目标路径> and step_id={next_step.step_id}.{dl_hint} "
+            f"Do NOT add execution steps to task. Do NOT fabricate file paths. Do NOT repeat completed steps."
         )
     else:
         lines.append("- **NEXT**: All steps completed. Summarize results and report to user.")
@@ -67,7 +77,8 @@ class CreatePlanTool(ITool):
     def description(self) -> str:
         return (
             "Create the plan once. Call only when no plan exists yet. Provide plan_description and a list of steps. "
-            "Each step has step_id, description, and optional params. After success, proceed to validate_plan."
+            "Each step: step_id, description (任务目标，不写具体执行步骤), params.deliverable (绝对路径或自然语言). "
+            "禁止在 step 中写「如何做」（如先读 A 再读 B、调用某工具等）。执行方式由 sub-agent 自主决定。After success, proceed to validate_plan."
         )
 
     @property
@@ -128,7 +139,7 @@ class CreatePlanTool(ITool):
                 output={
                     "skipped": True,
                     "reason": "Plan already exists.",
-                    "next_action": "Do NOT call create_plan again. Call validate_plan(success=True), then delegate each step exactly once to the matching sub-agent (e.g. sub_agent_general) with task=<step description>.",
+                    "next_action": "Do NOT call create_plan again. Call validate_plan(success=True), then delegate each step exactly once with task=<任务目标 + 交付件 + 目标路径> (no execution steps).",
                 },
             )
         self._state.plan_description = plan_description
@@ -146,14 +157,16 @@ class CreatePlanTool(ITool):
         print(f"  plan_description: {plan_description}")
         print(f"  steps ({len(self._state.steps)}):")
         for i, st in enumerate(self._state.steps, 1):
-            print(f"    [{i}] {st.step_id}: {st.description}")
+            dl = st.params.get("deliverable", "")
+            dl_str = f" 交付件: {dl}" if dl else ""
+            print(f"    [{i}] {st.step_id}: {st.description}{dl_str}")
         print("---\n", flush=True)
         return ToolResult(
             success=True,
             output={
                 "plan_description": plan_description,
                 "steps_count": len(self._state.steps),
-                "next_action": "Now call validate_plan(success=True) to confirm, then delegate each step exactly once to sub-agents.",
+                "next_action": "Now call validate_plan(success=True) to confirm, then delegate each step with task=<任务目标 + 交付件 + 目标路径> (no execution steps).",
             },
         )
 
@@ -537,14 +550,14 @@ class SubAgentTool(ITool):
     ) -> ToolResult[Any]:
         """Run the sub-agent with the given task (e.g. step description). Returns the sub-agent result.
         When step_id is provided and call succeeds, marks that step as completed and adds progress to output."""
-        task_preview = (task[:120] + "...") if len(task) > 120 else task
-        print(f"\n>>> 委托 {self._sub_agent_id}: {task_preview}\n", flush=True)
+        task_preview = (task[:600] + "...") if len(task) > 600 else task
+        print(f"{_ANSI_GREEN}\n>>> 委托 {self._sub_agent_id}: {task_preview}\n{_ANSI_RESET}", flush=True)
         try:
             result = await self._registry.run(self._sub_agent_id, task, **kwargs)
             if step_id and self._state:
                 self._state.completed_step_ids.add(step_id)
                 self._state.critical_block = _format_critical_block(self._state)
-            print(f"<<< {self._sub_agent_id} 返回 (success=True)\n", flush=True)
+            print(f"{_ANSI_GREEN}<<< {self._sub_agent_id} 返回 (success=True)\n{_ANSI_RESET}", flush=True)
             output = result
             if self._state and self._state.steps:
                 completed = sorted(self._state.completed_step_ids)
@@ -560,7 +573,7 @@ class SubAgentTool(ITool):
                     output = {"result": result, "progress": progress}
             return ToolResult(success=True, output=output)
         except Exception as exc:
-            print(f"<<< {self._sub_agent_id} 返回 (error: {exc})\n", flush=True)
+            print(f"{_ANSI_GREEN}<<< {self._sub_agent_id} 返回 (error: {exc})\n{_ANSI_RESET}", flush=True)
             return ToolResult(success=False, output=None, error=str(exc))
 
 

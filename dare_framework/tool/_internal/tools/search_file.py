@@ -38,7 +38,7 @@ class SearchFileTool(ITool):
 
     @property
     def description(self) -> str:
-        return "Search file paths by glob pattern (e.g. *.py, src/**/*.ts)."
+        return "Search file paths by glob pattern (e.g. *.py, src/**/*.ts). Returns paths as absolute paths. Use paths directly for read_file."
 
     @property
     def input_schema(self) -> dict[str, Any]:
@@ -57,7 +57,7 @@ class SearchFileTool(ITool):
         return {
             "type": "object",
             "properties": {
-                "paths": {"type": "array", "items": {"type": "string"}},
+                "paths": {"type": "array", "items": {"type": "string"}, "description": "Absolute paths; use directly for read_file"},
                 "total_matches": {"type": "integer"},
                 "truncated": {"type": "boolean"},
             },
@@ -91,9 +91,28 @@ class SearchFileTool(ITool):
     def capability_kind(self) -> CapabilityKind:
         return CapabilityKind.TOOL
 
-    async def execute(self, input: dict[str, Any], context: RunContext[Any]) -> ToolResult:
+    # noinspection PyMethodOverriding
+    async def execute(
+        self,
+        *,
+        run_context: RunContext[Any],
+        pattern: str,
+        path: str = ".",
+        max_results: int | None = None,
+    ) -> ToolResult:
+        """Search file paths by glob pattern.
+
+        Args:
+            run_context: Runtime invocation context.
+            pattern: Glob pattern to match file paths (e.g. *.py).
+            path: Directory or file path to search under.
+            max_results: Optional maximum number of matches to return.
+        """
         try:
-            return _execute_search_file(input, context)
+            input_payload: dict[str, Any] = {"pattern": pattern, "path": path}
+            if max_results is not None:
+                input_payload["max_results"] = max_results
+            return _execute_search_file(input_payload, run_context)
         except ToolError as exc:
             return _error_result(exc)
 
@@ -123,9 +142,10 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
     truncated = False
 
     if search_path.is_file():
-        rel_path = _normalized_relative_path(search_path.resolve(), root)
+        abs_path = search_path.resolve()
+        rel_path = _normalized_relative_path(abs_path, root)
         if _match_pattern(pattern, rel_path):
-            matches.append(rel_path)
+            matches.append(str(abs_path).replace("\\", "/"))
     else:
         for dirpath, dirs, files in os.walk(search_path, topdown=True, followlinks=False):
             dirs[:] = [d for d in sorted(dirs) if d not in ignore_dirs]
@@ -134,7 +154,7 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
                 rel_path = _normalized_relative_path(abs_path, root)
                 if not _match_pattern(pattern, rel_path):
                     continue
-                matches.append(rel_path)
+                matches.append(str(abs_path).replace("\\", "/"))
                 if len(matches) >= max_results:
                     truncated = True
                     break
@@ -164,7 +184,13 @@ def _normalized_relative_path(path: Path, root: Path) -> str:
 
 def _match_pattern(pattern: str, relative_path: str) -> bool:
     file_name = Path(relative_path).name
-    return fnmatch.fnmatch(relative_path, pattern) or fnmatch.fnmatch(file_name, pattern)
+    if fnmatch.fnmatch(relative_path, pattern) or fnmatch.fnmatch(file_name, pattern):
+        return True
+    # pattern "**/*" 或 "**/*.py" 等不匹配根目录文件（rel_path 无 /），此处补上
+    if "/" not in relative_path and ("**/" in pattern or pattern in ("**/*", "**")):
+        suffix = pattern.split("/")[-1] if "/" in pattern else "*"
+        return fnmatch.fnmatch(file_name, suffix)
+    return False
 
 
 def _error_result(error: ToolError) -> ToolResult:

@@ -23,17 +23,22 @@ class Planner(IToolProvider):
         self,
         state: PlannerState | None = None,
         sub_agent_registry: SubAgentRegistry | None = None,
+        *,
+        plan_tools: bool = True,
     ) -> None:
+        """plan_tools=False: 仅提供 sub_agent 工具，不提供 create_plan/validate_plan 等（意图驱动模式）。"""
         self._state = state if state is not None else PlannerState()
         self._registry = sub_agent_registry
 
-        self._tools: list[ITool] = [
-            CreatePlanTool(self._state),
-            ValidatePlanTool(self._state),
-            VerifyMilestoneTool(self._state),
-            ReflectTool(self._state),
-            DecomposeTaskTool(self._state),
-        ]
+        self._tools: list[ITool] = []
+        if plan_tools:
+            self._tools.extend([
+                CreatePlanTool(self._state),
+                ValidatePlanTool(self._state),
+                VerifyMilestoneTool(self._state),
+                ReflectTool(self._state),
+                DecomposeTaskTool(self._state),
+            ])
         if self._registry is not None:
             for sub_id in self._registry.ids():
                 self._tools.append(SubAgentTool(self._registry, sub_id, self._state))

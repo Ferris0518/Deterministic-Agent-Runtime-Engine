@@ -28,7 +28,7 @@ from dare_framework.agent.simple_chat import SimpleChatAgent
 from dare_framework.config.action_handler import ConfigActionHandler
 from dare_framework.config.kernel import IConfigProvider
 from dare_framework.config.types import Config
-from dare_framework.context import Budget, Context, IAssembleContext
+from dare_framework.context import Budget, Context, IAssembleContext, SmartContext
 from dare_framework.event import DefaultEventLog
 from dare_framework.event.kernel import IEventLog
 from dare_framework.hook.interfaces import IHookManager
@@ -82,6 +82,7 @@ from dare_framework.tool.types import RunContext
 from dare_framework.transport.interaction.control_handler import AgentControlHandler
 from dare_framework.transport.interaction.dispatcher import ActionHandlerDispatcher
 from dare_framework.transport.kernel import AgentChannel
+from dare_framework.context.manage_context import ManageContextTool, MANAGE_CONTEXT_TOOL_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,8 @@ class _BaseAgentBuilder(Generic[TAgent]):
 
         # Shared configuration surface (used by all builder variants).
         self._config: Config | None = None
+        # 可选：上下文策略名称（如 "basic" / "smart"），由具体 Builder 解释含义。
+        self._context_strategy: str | None = None
         self._config_provider: IConfigProvider | None = None
         self._model_adapter_manager: IModelAdapterManager | None = None
         self._planner_manager: IPlannerManager | None = None
@@ -204,6 +207,18 @@ class _BaseAgentBuilder(Generic[TAgent]):
 
     def with_context(self: TBuilder, assemble_context: IAssembleContext) -> TBuilder:
         self._assemble_context = assemble_context
+        return self
+
+    def with_context_strategy(self: TBuilder, strategy: str) -> TBuilder:
+        """指定上下文策略名称，由具体 AgentBuilder 决定如何映射到具体 Context 实现。
+
+        约定：
+        - ReactAgentBuilder:
+          - "basic" -> 使用基础 Context，不自动挂载 manage_context。
+          - "smart"（默认）-> 使用 SmartContext，并自动挂载 manage_context。
+        - 其它 Builder 可以按需扩展或忽略该字段。
+        """
+        self._context_strategy = strategy.strip() or None
         return self
 
     def with_budget(self: TBuilder, budget: Budget) -> TBuilder:
@@ -521,6 +536,10 @@ class _BaseAgentBuilder(Generic[TAgent]):
             explicit.append(ask_user_tool)
         return explicit
 
+    def _context_class(self) -> type[Context]:
+        """Override in ReactAgentBuilder to use SmartContext (update_core, task_complete, etc.)."""
+        return Context
+
     def _build_context(
             self,
             *,
@@ -531,7 +550,7 @@ class _BaseAgentBuilder(Generic[TAgent]):
     ) -> Context:
         """Build context with shared defaults for all builder variants."""
         sys_skill = None if self._enable_skill_tool else self._sys_skill
-        return Context(
+        return self._context_class()(
             id=f"context_{self._name}",
             short_term_memory=self._short_term_memory,
             long_term_memory=self._resolved_long_term_memory(),
@@ -572,7 +591,20 @@ class ReactAgentBuilder(_BaseAgentBuilder[ReactAgent]):
 
     Optional plan: use with_plan_provider(plan_v2.Planner(state)) to mount plan tools;
     the agent then exposes agent.plan_provider (e.g. .state for copy_for_execution).
+    Uses SmartContext (update_core, task_complete, stm_remove_by_ids).
     """
+
+    def _context_class(self) -> type[Context]:
+        """根据上下文策略选择 Context 实现。
+
+        - 默认 / 未设置 -> 基础 Context（pure ReAct）。
+        - strategy == "smart" -> SmartContext（启用 CORE / task_complete / manage_context 能力）。
+        - 其它策略名称目前等价于默认（基础 Context），预留扩展点。
+        """
+        strategy = (getattr(self, "_context_strategy", None) or "").strip().lower()
+        if strategy == "smart":
+            return SmartContext
+        return Context
 
     def __init__(self, name: str) -> None:
         super().__init__(name)
@@ -583,12 +615,27 @@ class ReactAgentBuilder(_BaseAgentBuilder[ReactAgent]):
         self._max_tool_rounds = max_rounds
         return self
 
+    def _resolve_tools(self, knowledge: IKnowledge | None, skill_store: ISkillStore | None) -> list[ITool]:
+        """在基类工具集合基础上，为 ReactAgent 自动挂载 manage_context（仅 smart 策略下）。
+
+        - 默认 / 非 "smart" 策略：不自动挂 manage_context，保持纯 ReAct 行为。
+        - strategy == "smart"：若尚未存在同名工具，则自动追加 ManageContextTool。
+        """
+        tools = super()._resolve_tools(knowledge, skill_store)
+        strategy = (getattr(self, "_context_strategy", None) or "").strip().lower()
+        if strategy != "smart":
+            return tools
+
+        if not any(getattr(t, "name", "") == MANAGE_CONTEXT_TOOL_NAME for t in tools):
+            tools.append(ManageContextTool())
+        return tools
+
     def _build_impl(
             self,
             *,
             config: Config,
             model: IModelAdapter,
-            context: Context,
+            context: SmartContext,
             tool_gateway: IToolGateway,
             approval_manager: ToolApprovalManager,
             agent_channel: AgentChannel | None,

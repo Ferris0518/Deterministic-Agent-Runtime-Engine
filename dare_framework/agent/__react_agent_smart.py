@@ -1,4 +1,4 @@
-"""ReactAgent - agent with ReAct tool loop (Reason → Act → Observe).
+"""ReactAgent - Chat agent with ReAct tool loop (Reason → Act → Observe).
 
 When the model returns tool_calls, this agent executes them, adds tool results
 to context, and calls the model again until the model returns a final text response.
@@ -34,11 +34,9 @@ def _colored_print(agent_name: str, msg: str, tool_name: str | None = None) -> N
     print(f"{color}{msg}{_ANSI_RESET}", flush=True)
 
 
-from dare_framework.agent._internal.output_normalizer import build_output_envelope
 from dare_framework.agent.base_agent import BaseAgent
-from dare_framework.context import Context, Message, SmartContext
+from dare_framework.context import Message, SmartContext
 from dare_framework.context.types import MessageMark
-from dare_framework.context.manage_context import MANAGE_CONTEXT_TOOL_NAME
 
 
 def _print_tools_sent_to_llm(agent_name: str, tools: list[Any]) -> None:
@@ -91,15 +89,17 @@ from dare_framework.plan.types import Envelope
 from dare_framework.plan.types import RunResult
 from dare_framework.plan.types import Task
 from dare_framework.tool import IToolGateway, IToolProvider
+from dare_framework.context.manage_context import MANAGE_CONTEXT_TOOL_NAME
 from dare_framework.transport.kernel import AgentChannel
 
 
 class ReactAgent(BaseAgent):
     """Chat agent that executes tool calls in a ReAct loop.
 
-    当 context 是 SmartContext 且配置挂载了 manage_context 工具时，
-    会启用 SmartContext 能力（CORE / task_complete / manage_context 约束）；
-    否则退化为基础 ReAct 循环。
+    Same context-centric setup as SimpleChatAgent, but when the model returns
+    tool_calls, executes each tool via the injected tool gateway (e.g. ToolGateway),
+    adds tool result messages to STM, reassembles, and calls the model again.
+    Loops until the model returns no tool_calls, then returns that content.
     """
 
     def __init__(
@@ -107,7 +107,7 @@ class ReactAgent(BaseAgent):
         name: str,
         *,
         model: IModelAdapter,
-        context: Context,
+        context: SmartContext,
         tool_gateway: IToolGateway,
         plan_provider: IToolProvider | None = None,
         max_tool_rounds: int = 10,
@@ -121,11 +121,8 @@ class ReactAgent(BaseAgent):
         self._plan_provider = plan_provider
         self._context.set_tool_gateway(self._tool_gateway)
 
-        # 运行时检测是否可以启用 SmartContext 能力
-        self._smart_context_enabled = isinstance(context, SmartContext)
-
     @property
-    def context(self) -> Context:
+    def context(self) -> SmartContext:
         return self._context
 
     @property
@@ -139,168 +136,6 @@ class ReactAgent(BaseAgent):
         *,
         transport: AgentChannel | None = None,
     ) -> RunResult:
-        """根据当前 context 类型与配置，选择基础 ReAct 或 SmartContext 增强模式。"""
-        if self._smart_context_enabled:
-            return await self._execute_with_smart_context(task, transport=transport)
-        return await self._execute_basic(task, transport=transport)
-
-    async def _execute_basic(
-        self,
-        task: str | Task,
-        *,
-        transport: AgentChannel | None = None,
-    ) -> RunResult:
-        """原始基础 ReAct 循环实现。"""
-        _ = transport
-        task_description = task.description if isinstance(task, Task) else task
-        user_message = Message(role="user", content=task_description)
-        self._context.stm_add(user_message)
-
-        gateway = self._tool_gateway
-
-        last_tool_signature: tuple[str, ...] | None = None
-        repeated_tool_rounds = 0
-        latest_usage: dict[str, Any] | None = None
-
-        for round_idx in range(self._max_tool_rounds):
-            print(f"[{self.name}] Round {round_idx + 1}/{self._max_tool_rounds}: 调用模型中...", flush=True)
-            assembled = self._context.assemble()
-            messages = list(assembled.messages)
-            prompt_def = getattr(assembled, "sys_prompt", None)
-            if prompt_def is not None:
-                messages = [
-                    Message(
-                        role=prompt_def.role,
-                        content=prompt_def.content,
-                        name=prompt_def.name,
-                        metadata=dict(prompt_def.metadata),
-                    ),
-                    *messages,
-                ]
-            # Inject critical_block from plan_provider (maintained by plan tools)
-            if self._plan_provider is not None:
-                state = getattr(self._plan_provider, "state", None)
-                critical_block = getattr(state, "critical_block", "") if state else ""
-                if critical_block:
-                    print("\n--- [Plan State] (injected) ---\n" + critical_block + "\n---\n", flush=True)
-                    messages.insert(
-                        1,
-                        Message(role="system", content=critical_block, name="plan_state"),
-                    )
-
-            model_input = ModelInput(
-                messages=messages,
-                tools=assembled.tools,
-                metadata=assembled.metadata,
-            )
-            response = await self._model.generate(model_input)
-            usage = response.usage if isinstance(response.usage, dict) and response.usage else None
-            if usage is not None:
-                usage_total_tokens = _usage_total_tokens(usage)
-                # Keep the latest meaningful usage totals. Some adapters emit
-                # placeholder zero usage in later rounds and should not erase
-                # previously reported non-zero usage.
-                if usage_total_tokens > 0 or latest_usage is None:
-                    latest_usage = usage
-            n_tools = len(response.tool_calls) if response.tool_calls else 0
-            print(f"[{self.name}] 模型返回, tool_calls={n_tools}", flush=True)
-
-            if usage is not None:
-                tokens = _usage_total_tokens(usage)
-                if tokens:
-                    self._context.budget_use("tokens", tokens)
-            self._context.budget_check()
-
-            if not response.tool_calls:
-                final_text = (response.content or "").strip()
-                if not final_text:
-                    final_text = "模型未返回可显示的文本回复。请重试，或明确要求先调用 ask_user 再继续。"
-                assistant_message = Message(role="assistant", content=final_text)
-                self._context.stm_add(assistant_message)
-                output = build_output_envelope(
-                    final_text,
-                    usage=latest_usage,
-                )
-                return RunResult(
-                    success=True,
-                    output=output,
-                    output_text=output["content"],
-                )
-
-            current_signature = _tool_calls_signature(response.tool_calls)
-            if current_signature and current_signature == last_tool_signature:
-                repeated_tool_rounds += 1
-            else:
-                repeated_tool_rounds = 1
-            last_tool_signature = current_signature
-
-            if repeated_tool_rounds >= 3:
-                loop_guard = "模型连续重复调用相同工具，已停止自动循环。请换一种描述，或明确要求先调用 ask_user 再继续。"
-                self._context.stm_add(Message(role="assistant", content=loop_guard))
-                output = build_output_envelope(loop_guard, usage=latest_usage)
-                return RunResult(success=True, output=output, output_text=output["content"])
-
-            assistant_msg = Message(
-                role="assistant",
-                content=response.content or "",
-                metadata={"tool_calls": response.tool_calls},
-            )
-            self._context.stm_add(assistant_msg)
-
-            envelope = Envelope()
-            for tool_call in response.tool_calls:
-                name = tool_call.get("name", "")
-                tool_call_id = tool_call.get("id", "")
-                params = _normalize_tool_args(tool_call.get("arguments", {}))
-                # 打印工具调用信息：名称、参数
-                params_str = json.dumps(params, ensure_ascii=False)
-                params_preview = params_str[:300] + ("..." if len(params_str) > 300 else "")
-                print(f"[{self.name}] 工具调用: {name} | id={tool_call_id or '-'} | args={params_preview}", flush=True)
-
-                try:
-                    result = await gateway.invoke(name, envelope=envelope, **params)
-                except Exception as exc:
-                    result = type("R", (), {"success": False, "output": {}, "error": str(exc)})()
-
-                success = getattr(result, "success", False)
-                output = getattr(result, "output", {})
-                # 打印工具执行结果摘要
-                out_preview = _preview_output(output)
-                print(f"[{self.name}] 工具结果: {name} | success={success} | {out_preview}", flush=True)
-                error = getattr(result, "error", "") or ""
-
-                tool_content = json.dumps(
-                    {"success": success, "output": output, "error": error} if not success
-                    else {"success": True, "output": output},
-                    ensure_ascii=False,
-                )
-                tool_msg = Message(role="tool", name=tool_call_id or name, content=tool_content)
-                self._context.stm_add(tool_msg)
-
-        final_message = "模型在工具循环中未收敛（达到最大轮次）。请缩小范围，或明确要求先调用 ask_user 再继续。"
-        output = build_output_envelope(final_message, usage=latest_usage)
-        return RunResult(
-            success=True,
-            output=output,
-            output_text=output["content"],
-        )
-
-    async def _execute_with_smart_context(
-        self,
-        task: str | Task,
-        *,
-        transport: AgentChannel | None = None,
-    ) -> RunResult:
-        """启用 SmartContext 能力的 ReAct 循环。
-
-        需要：
-        - context 为 SmartContext 实例；
-        - tools 中存在 manage_context 工具（由 ReactAgentBuilder 自动挂载）。
-        """
-        if not isinstance(self._context, SmartContext):
-            # 防御性降级：即使标记为 smart 也要保证类型安全
-            return await self._execute_basic(task, transport=transport)
-
         _ = transport
         task_description = task.description if isinstance(task, Task) else task
         user_message = Message(
@@ -311,7 +146,7 @@ class ReactAgent(BaseAgent):
         )
         self._context.stm_add(user_message)
 
-        # 临时信息，注入 llm，但是不放入 stm_add，用完即失效
+        # 临时信息，注入llm，但是不放入stm_add，用完即失效
         self._next_round_reflection_prompt: Message | None = None
 
         gateway = self._tool_gateway
@@ -331,6 +166,8 @@ class ReactAgent(BaseAgent):
                 content="【提示】请先调用 manage_context 根据任务初始化 context 状态。",
             )
 
+        """last_tool_signature: tuple[str, ...] | None = None
+        repeated_tool_rounds = 0"""
         # Agent 工程约束：执行其它 tool 之前，必须至少执行过一次 manage_context
         manage_context_has_run = False
 
@@ -392,15 +229,17 @@ class ReactAgent(BaseAgent):
                 if not final_text:
                     final_text = "模型未返回可显示的文本回复。\n"
 
+
                 if has_manage_context_tool:
                     task_complete = self._context.get_task_complete()
                     if not task_complete:
                         self._next_round_reflection_prompt = Message(
                             role="assistant",
-                            content=final_text + "任务未完成，请先调用 manage_context 仔细审视任务是否完成。",
+                            content=final_text+"任务未完成，请先调用 manage_context 仔细审视任务是否完成。",
                         )
                         continue
 
+                
                 assistant_message = Message(role="assistant", content=final_text)
                 self._context.stm_add(assistant_message)
                 return RunResult(
@@ -409,8 +248,27 @@ class ReactAgent(BaseAgent):
                     output_text=final_text,
                 )
 
+            """current_signature = _tool_calls_signature(response.tool_calls)
+            if current_signature and current_signature == last_tool_signature:
+                repeated_tool_rounds += 1
+            else:
+                repeated_tool_rounds = 1
+            last_tool_signature = current_signature
+
+            if repeated_tool_rounds >= 3:
+                loop_guard = "模型连续重复调用相同工具，已停止自动循环。请换一种描述，或明确要求先调用 ask_user 再继续。"
+                self._context.stm_add(Message(role="assistant", content=loop_guard))
+                return RunResult(success=True, output=loop_guard, output_text=loop_guard)"""
+
             # 将本轮带有 tool_calls 的 assistant 消息写入 STM，
             # 供 OpenRouter/OpenAI 风格的 tool calling 正确关联后续 tool 结果（tool_call_id 必须能在对话中找到）。
+            """assistant_msg = Message(
+                role="assistant",
+                content=response.content or "",
+                metadata={"tool_calls": response.tool_calls},
+            )
+            self._context.stm_add(assistant_msg)"""
+
             tool_names = [str(t.get("name", "")) for t in response.tool_calls if isinstance(t, dict)]
             has_manage_context = MANAGE_CONTEXT_TOOL_NAME in tool_names
 
@@ -419,10 +277,7 @@ class ReactAgent(BaseAgent):
 
             if has_manage_context_tool and has_manage_context:
                 # 只执行第一个 manage_context，其他工具本轮不执行
-                mc_calls = [
-                    t for t in response.tool_calls
-                    if isinstance(t, dict) and t.get("name") == MANAGE_CONTEXT_TOOL_NAME
-                ]
+                mc_calls = [t for t in response.tool_calls if isinstance(t, dict) and t.get("name") == MANAGE_CONTEXT_TOOL_NAME]
                 tool_calls_to_run = mc_calls[:1] if mc_calls else []
                 for tool_call in tool_calls_to_run:
                     name = tool_call.get("name", "")
@@ -430,11 +285,7 @@ class ReactAgent(BaseAgent):
                     params = _normalize_tool_args(tool_call.get("arguments", {}))
                     params_str = json.dumps(params, ensure_ascii=False)
                     params_preview = params_str[:800] + ("..." if len(params_str) > 800 else "")
-                    _colored_print(
-                        self.name,
-                        f"[{self.name}] 工具调用: {name} | id={tool_call_id or '-'} | args={params_preview}",
-                        tool_name=name,
-                    )
+                    _colored_print(self.name, f"[{self.name}] 工具调用: {name} | id={tool_call_id or '-'} | args={params_preview}", tool_name=name)
                     try:
                         result = await gateway.invoke(name, envelope=envelope, context=self._context, **params)
                     except Exception as exc:
@@ -442,12 +293,8 @@ class ReactAgent(BaseAgent):
                     success = getattr(result, "success", False)
                     output = getattr(result, "output", {})
                     out_preview = _preview_output(output)
-                    _colored_print(
-                        self.name,
-                        f"[{self.name}] 工具结果: {name} | success={success} | {out_preview}",
-                        tool_name=name,
-                    )
-
+                    _colored_print(self.name, f"[{self.name}] 工具结果: {name} | success={success} | {out_preview}", tool_name=name)
+                    
                     if success:
                         manage_context_succeeded = True
                         self._next_round_reflection_prompt = Message(
@@ -463,9 +310,9 @@ class ReactAgent(BaseAgent):
                         )
             elif has_manage_context_tool and not manage_context_has_run:
                 self._next_round_reflection_prompt = Message(
-                    role="assistant",
-                    content="还未调用manage_context来更新context状态，请先调用manage_context去更新context状态...\n",
-                )
+                            role="assistant",
+                            content="还未调用manage_context来更新context状态，请先调用manage_context去更新context状态...\n",
+                        )
             else:
                 assistant_msg = Message(
                     role="assistant",
@@ -481,11 +328,7 @@ class ReactAgent(BaseAgent):
                     params = _normalize_tool_args(tool_call.get("arguments", {}))
                     params_str = json.dumps(params, ensure_ascii=False)
                     params_preview = params_str[:800] + ("..." if len(params_str) > 800 else "")
-                    _colored_print(
-                        self.name,
-                        f"[{self.name}] 工具调用: {name} | id={tool_call_id or '-'} | args={params_preview}",
-                        tool_name=name,
-                    )
+                    _colored_print(self.name, f"[{self.name}] 工具调用: {name} | id={tool_call_id or '-'} | args={params_preview}", tool_name=name)
                     try:
                         result = await gateway.invoke(name, envelope=envelope, context=self._context, **params)
                     except Exception as exc:
@@ -493,11 +336,7 @@ class ReactAgent(BaseAgent):
                     success = getattr(result, "success", False)
                     output = getattr(result, "output", {})
                     out_preview = _preview_output(output)
-                    _colored_print(
-                        self.name,
-                        f"[{self.name}] 工具结果: {name} | success={success} | {out_preview}",
-                        tool_name=name,
-                    )
+                    _colored_print(self.name, f"[{self.name}] 工具结果: {name} | success={success} | {out_preview}", tool_name=name)
                     error = getattr(result, "error", "") or ""
                     tool_content = json.dumps(
                         {"success": success, "output": output, "error": error} if not success
@@ -507,13 +346,14 @@ class ReactAgent(BaseAgent):
                     tool_msg = Message(role="tool", name=tool_call_id or name, content=tool_content)
                     self._context.stm_add(tool_msg)
                 self._next_round_reflection_prompt = Message(
-                    role="assistant",
-                    content="工具调用结束(或成功或失败)，请调用 manage_context反思当前进展、更新context状态。",
-                )
+                            role="assistant",
+                            content="工具调用结束(或成功或失败)，请调用 manage_context反思当前进展、更新context状态。",
+                        )
             if manage_context_succeeded:
                 manage_context_has_run = True
             else:
                 manage_context_has_run = False
+            
 
         final_message = "模型在工具循环中未收敛（达到最大轮次）。请缩小范围，或明确要求先调用 ask_user 再继续。"
         return RunResult(
@@ -523,26 +363,13 @@ class ReactAgent(BaseAgent):
         )
 
 
-def _preview_output(output: Any, max_len: int = 120) -> str:
-    """生成 output 的简短预览，用于日志打印。"""
+def _preview_output(output: Any) -> str:
+    """完整打印 tool output，不做过滤或截断。"""
     if output is None:
         return "output=None"
     if isinstance(output, dict):
-        # 常见字段优先展示
-        for key in ("content", "path", "matches", "paths"):
-            if key in output:
-                val = output[key]
-                if isinstance(val, str):
-                    preview = val[:max_len] + ("..." if len(val) > max_len else "")
-                elif isinstance(val, list):
-                    preview = f"list[{len(val)}]"
-                else:
-                    preview = str(val)[:max_len]
-                return f"{key}={preview}"
-        s = json.dumps(output, ensure_ascii=False)[:max_len]
-        return s + ("..." if len(json.dumps(output, ensure_ascii=False)) > max_len else "")
-    s = str(output)[:max_len]
-    return s + ("..." if len(str(output)) > max_len else "")
+        return json.dumps(output, ensure_ascii=False, indent=None)
+    return str(output)
 
 
 def _normalize_tool_args(raw_args: Any) -> dict[str, Any]:
