@@ -85,6 +85,8 @@
 | `Project_Architecture_and_Priorities.md` | 以“实现视角”梳理现状与优先级（阅读入口指向权威设计） | ✅ 实现视角 |
 | `todos/README.md` | TODO 目录维护规则与生命周期说明 | ✅ 全局规划 |
 | `todos/project_overall_todos.md` | 项目总体 TODO 清单（跨模块路线图） | ✅ 全局规划 |
+| `todos/templates/change_execution_todo_template.md` | 活跃 change 的 execution board 模板（大包认领，小 task 验收） | ✅ 协作模板 |
+| `plans/2026-02-28-spec-driven-collaboration-granularity-design.md` | spec-driven 协作粒度设计说明 | ✅ 协作设计 |
 
 ### 3️⃣ 附录与工程实践
 
@@ -97,6 +99,7 @@
 | `guides/Evidence_Truth_Implementation_Strategy.md` | Evidence Truth 固化策略：证据结构、审计要求、CI 分阶段落地 |
 | `governance/Documentation_Management_Model.md` | 文档管理模型：目录分层、文档类型规则、生命周期依赖、OpenSpec/无 OpenSpec 协作 |
 | `features/README.md` | 特性聚合文档规范：单一状态源、证据回写与归档迁移 |
+| `guides/Team_Agent_Collab_Playbook.md` | 团队并行开发协作手册，含 spec-driven 认领粒度与 execution board 规则 |
 | `guides/Tool_Approval_Memory.md` | 工具审批记忆使用指南：pending/grant/deny/revoke、scope/matcher、持久化与接线方式 |
 
 ---
