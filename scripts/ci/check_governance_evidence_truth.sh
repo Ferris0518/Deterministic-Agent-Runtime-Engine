@@ -107,6 +107,16 @@ extract_subsection() {
   ' "$file"
 }
 
+extract_subsection_from_section() {
+  local section="$1"
+  local start_heading="$2"
+  awk -v start="$start_heading" '
+    $0 == start {in_section=1; next}
+    in_section && $0 ~ /^###[[:space:]]+/ {in_section=0}
+    in_section {print}
+  ' <<<"$section"
+}
+
 normalize_status() {
   local status="$1"
   tr '[:upper:]' '[:lower:]' <<<"$status" | tr '-' '_' | tr -d '[:space:]'
@@ -143,6 +153,44 @@ has_observability_na_fallback() {
   grep -Eiq '(^|[[:space:][:punct:]])(none|n/a|n\.a)([[:space:][:punct:]]|$)' <<<"$section" &&
     grep -Eiq '(reason|because|rationale)' <<<"$section" &&
     grep -Eiq '(fallback|evidence|commands|regression|verification)' <<<"$section"
+}
+
+is_placeholder_token() {
+  local token="$1"
+  local normalized
+  normalized="$(tr '[:upper:]' '[:lower:]' <<<"$token" | tr -d '[:space:]')"
+  [[ "$normalized" == "none" || "$normalized" == "n/a" || "$normalized" == "n.a" || "$normalized" == "na" || "$normalized" == "tbd" || "$normalized" == "todo" ]]
+}
+
+count_non_placeholder_backticked_tokens() {
+  local section="$1"
+  local count=0
+  local token
+  while IFS= read -r token; do
+    if [[ -z "$token" ]]; then
+      continue
+    fi
+    if ! is_placeholder_token "$token"; then
+      count=$((count + 1))
+    fi
+  done < <(grep -Eo '`[^`]+`' <<<"$section" | sed -E 's/^`(.*)`$/\1/' || true)
+  echo "$count"
+}
+
+dimension_none_without_reason() {
+  local section="$1"
+  local dimension_pattern="$2"
+  local line
+  while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    if grep -Eiq '(^|[[:space:][:punct:]])(none|n/a|n\.a)([[:space:][:punct:]]|$)' <<<"$line" &&
+      ! grep -Eiq '(reason|because|rationale)' <<<"$line"; then
+      return 0
+    fi
+  done < <(grep -Ei -- "$dimension_pattern" <<<"$section" || true)
+  return 1
 }
 
 extract_pr_number_for_marker() {
@@ -236,7 +284,7 @@ check_feature_doc() {
   fi
 
   if [[ -n "$contract_heading" ]]; then
-    contract_section="$(extract_subsection "$file" "$contract_heading")"
+    contract_section="$(extract_subsection_from_section "$evidence_section" "$contract_heading")"
     if ! grep -Eiq 'schema' <<<"$contract_section"; then
       log "Contract Delta missing schema semantics in $file"
       failures=$((failures + 1))
@@ -249,20 +297,35 @@ check_feature_doc() {
       log "Contract Delta missing retry semantics in $file"
       failures=$((failures + 1))
     fi
+    if dimension_none_without_reason "$contract_section" 'schema'; then
+      log "Contract Delta schema uses none/n.a without rationale in $file"
+      failures=$((failures + 1))
+    fi
+    if dimension_none_without_reason "$contract_section" '(error[[:space:]_-]?semantics|error[_[:space:]-]?code|error[_[:space:]-]?type|exception[_[:space:]-]?class|toolresult\.error)'; then
+      log "Contract Delta error semantics use none/n.a without rationale in $file"
+      failures=$((failures + 1))
+    fi
+    if dimension_none_without_reason "$contract_section" 'retry'; then
+      log "Contract Delta retry semantics use none/n.a without rationale in $file"
+      failures=$((failures + 1))
+    fi
   fi
 
   if [[ -n "$golden_heading" ]]; then
-    golden_section="$(extract_subsection "$file" "$golden_heading")"
-    if ! grep -Eq '`[^`]+`' <<<"$golden_section" && \
-      ! grep -Eiq '(none|n/a).*(reason|because)' <<<"$golden_section"; then
+    golden_section="$(extract_subsection_from_section "$evidence_section" "$golden_heading")"
+    local golden_tokens
+    golden_tokens="$(count_non_placeholder_backticked_tokens "$golden_section")"
+    if [[ "$golden_tokens" -lt 1 ]] && ! grep -Eiq '(none|n/a).*(reason|because|rationale)' <<<"$golden_section"; then
       log "Golden Cases must list file names (extension optional) or explicit none-with-reason in $file"
       failures=$((failures + 1))
     fi
   fi
 
   if [[ -n "$regression_heading" ]]; then
-    regression_section="$(extract_subsection "$file" "$regression_heading")"
-    if ! grep -Eq '`[^`]+`' <<<"$regression_section"; then
+    regression_section="$(extract_subsection_from_section "$evidence_section" "$regression_heading")"
+    local regression_tokens
+    regression_tokens="$(count_non_placeholder_backticked_tokens "$regression_section")"
+    if [[ "$regression_tokens" -lt 1 ]]; then
       log "Regression Summary missing runner commands in $file"
       failures=$((failures + 1))
     fi
@@ -273,7 +336,7 @@ check_feature_doc() {
   fi
 
   if [[ -n "$observability_heading" ]]; then
-    observability_section="$(extract_subsection "$file" "$observability_heading")"
+    observability_section="$(extract_subsection_from_section "$evidence_section" "$observability_heading")"
     if has_observability_na_fallback "$observability_section"; then
       log "Observability N/A accepted with reason + fallback evidence in $file"
     else
@@ -297,7 +360,7 @@ check_feature_doc() {
   fi
 
   if [[ -n "$structured_review_heading" ]]; then
-    structured_review_section="$(extract_subsection "$file" "$structured_review_heading")"
+    structured_review_section="$(extract_subsection_from_section "$evidence_section" "$structured_review_heading")"
     for topic in \
       "Changed Module Boundaries / Public API" \
       "New State" \
@@ -340,7 +403,7 @@ check_feature_doc() {
 
   # Require both intent/implementation links and at least one review link.
   if [[ -n "$review_heading" ]]; then
-    review_section="$(extract_subsection "$file" "$review_heading")"
+    review_section="$(extract_subsection_from_section "$evidence_section" "$review_heading")"
     local pr_link_count
     pr_link_count="$(grep -Eo 'https://github\.com/[^/[:space:]]+/[^/[:space:]]+/pull/[0-9]+' <<<"$review_section" | wc -l | tr -d '[:space:]' || true)"
     if [[ "$pr_link_count" -lt 2 ]]; then

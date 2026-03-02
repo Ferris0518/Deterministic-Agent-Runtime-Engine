@@ -253,6 +253,51 @@ mode: openspec
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Observability section missing 'start' marker", result.stdout)
 
+    def test_in_review_extracts_contract_delta_from_evidence_only(self) -> None:
+        doc = _base_doc(status="in_review")
+        doc = doc.replace(
+            "## Evidence",
+            "## Scope\n### Contract Delta\n- schema: changed in scope.\n- error semantics: error_type.\n- retry semantics: changed in scope.\n\n## Evidence",
+        )
+        doc = doc.replace(
+            "### Contract Delta\n- schema: none, reason: docs-only governance check.\n- error semantics: error_type (framework-native marker).\n- retry semantics: none, reason: deterministic docs gate.\n\n",
+            "### Contract Delta\n- TODO: fill later.\n\n",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Contract Delta missing schema semantics", result.stdout)
+
+    def test_in_review_contract_none_requires_reason(self) -> None:
+        doc = _base_doc(status="in_review")
+        doc = doc.replace(
+            "- schema: none, reason: docs-only governance check.\n- error semantics: error_type (framework-native marker).\n- retry semantics: none, reason: deterministic docs gate.\n",
+            "- schema: none\n- error semantics: none\n- retry semantics: none\n",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("schema uses none/n.a without rationale", result.stdout)
+        self.assertIn("error semantics use none/n.a without rationale", result.stdout)
+        self.assertIn("retry semantics use none/n.a without rationale", result.stdout)
+
+    def test_in_review_golden_placeholder_token_requires_reason(self) -> None:
+        doc = _base_doc(status="in_review").replace("- `golden_case`", "- `none`")
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Golden Cases must list file names", result.stdout)
+
+    def test_in_review_regression_placeholder_token_rejected(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+            "- Runner: `none`",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Regression Summary missing runner commands", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
