@@ -1,4 +1,3 @@
-
 # Additional Constraints
 
 - When writing code, add necessary comments to clarify non-obvious logic or intent.

@@ -12,8 +12,8 @@
 5. 任何 `skip/only/exclude` 必须说明理由并经 review。
 
 对应规则来源：
-- `/Users/lysander/projects/dare-framework/docs/agent_rules.md`
-- `/Users/lysander/projects/dare-framework/.github/pull_request_template.md`
+- `docs/agent_rules.md`
+- `.github/pull_request_template.md`
 
 ## 2. 日常工作流（每次都按这个走）
 
@@ -38,7 +38,7 @@ pytest -q tests/smoke -m smoke
 ## 3. 当前 CI 闸门说明（按阶段）
 
 工作流：
-- `/Users/lysander/projects/dare-framework/.github/workflows/ci-gate.yml`
+- `.github/workflows/ci-gate.yml`
 
 当前检查项：
 - `lint`
@@ -49,12 +49,12 @@ pytest -q tests/smoke -m smoke
 - `lockfile-policy`
 
 治理配置说明：
-- `/Users/lysander/projects/dare-framework/docs/governance/branch-protection.md`
+- `docs/governance/branch-protection.md`
 
 ## 4. 免费版主干护栏（main-guard）
 
 工作流：
-- `/Users/lysander/projects/dare-framework/.github/workflows/main-guard.yml`
+- `.github/workflows/main-guard.yml`
 
 触发：
 - 每次 `push` 到 `main`
@@ -73,7 +73,7 @@ pytest -q tests/smoke -m smoke
 ## 4.1 合并人工审批护栏（manual-merge-guard）
 
 工作流：
-- `/Users/lysander/projects/dare-framework/.github/workflows/manual-merge-guard.yml`
+- `.github/workflows/manual-merge-guard.yml`
 
 作用：
 1. PR 合入 `main` 后检查是否符合人工审批策略。
@@ -92,6 +92,65 @@ pytest -q tests/smoke -m smoke
 3. 目录归属清晰：跨模块改动必须写影响分析。
 4. 锁文件有纪律：lockfile 改动必须同 PR 同步 manifest。
 5. 风险路径强约束：鉴权/并发/执行控制改动必须带 `risk-matrix` 证据。
+
+## 5.1 Spec-Driven 认领粒度（新增）
+
+适用前提：
+- 已完成文档先行最小闭环：设计文档更新、gap analysis、execution TODO、OpenSpec artifacts 已入库。
+- 当前工作属于 active change，而不是纯 backlog 条目。
+
+执行规则：
+1. 外层认领单位默认是 `TODO scope` 或 `change slice`，不是单个 TODO bullet，也不是整个模块。
+2. 进入 active change 后，内层协作单位才是 `work package`；一个 `work package` 由一个人独占，目标是在 `0.5-2` 天内交付一个可验证闭环。
+3. 一个 `work package` 最多跨 1 个 Gate；如果同时跨协议冻结、执行链路、观测治理，必须拆包。
+4. work package 内部可以保留多个细粒度 task，但这些 task 默认只用于验收和回写，不单独并行认领。
+5. 共享契约先冻结再并行：schema、payload、状态机、日志字段、审计字段都属于 Gate 级接口，不允许多人同时自由演化。
+
+推荐口号：
+- 大包认领，小 task 验收。
+- 先冻结接口，再放开并行。
+
+## 5.2 三层协作板
+
+1. `docs/design/TODO_INDEX.md`：设计 backlog，只看“还有什么要做”，不做认领板。
+2. `docs/todos/project_overall_todos.md`：项目路线图 + 外层 `Claim Ledger`，只认领 TODO scope，不记 work package 施工细节。
+3. `docs/todos/YYYY-MM-DD_<change-id>_execution_todos.md`：活跃 change 的执行协作板，记录 work package、依赖、冻结点、PR、证据。
+
+要求：
+1. 不要把 feature 内部的 work package 施工细节写到 `project_overall_todos.md`。
+2. 不要从 `TODO_INDEX` 直接抢任务；必须先声明 TODO scope，再视协作复杂度落到 execution board。
+3. 存在多人并行、共享接口或 Gate 冻结需求的活跃 change，必须有一份 execution board，且与 `openspec/changes/<change-id>/tasks.md` 双向关联。
+
+## 5.3 Intent PR 门禁
+
+1. `Claim Ledger`、OpenSpec artifacts、execution board 都先在本地准备好。
+2. 准备好后，先发一个 docs-only `spec-sync / intent PR`。
+3. `intent PR` 只允许包含治理文档，不允许夹带实现代码。
+4. 只有 `intent PR` 合入 `main` 后，才允许开始实现分支与后续 `impl PR`。
+5. 高冲突 change 可进一步拆成 `intent PR -> Gate freeze PR -> impl PR`。
+
+## 5.4 execution board 最小字段
+
+每个 `work package` 至少记录：
+- `WP`
+- `Goal`
+- `Owner`
+- `Depends On`
+- `Touch Scope`
+- `Freeze Gate`
+- `Status`
+- `Branch/Worktree`
+- `PR`
+- `Evidence`
+- `Last Updated`
+
+推荐状态：
+- `todo -> claimed -> doing -> review -> done`
+- `todo/claimed/doing -> blocked -> doing/dropped`
+
+配套模板：
+- `docs/todos/templates/change_execution_todo_template.md`
+- 参考实例：`docs/todos/agentscope_domain_execution_todos.md`
 
 ## 6. Docs 组织规范（队友新增文档时）
 
