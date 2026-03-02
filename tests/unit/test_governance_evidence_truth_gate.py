@@ -152,6 +152,27 @@ class GovernanceEvidenceTruthGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("passed", result.stdout)
 
+    def test_intent_marker_without_pr_url_fails_even_with_other_links(self) -> None:
+        doc = _base_doc().replace(
+            "- Intent PR: https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/120",
+            "- Intent PR: TBD",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Intent PR marker must include a valid GitHub PR link", result.stdout)
+
+    def test_error_message_only_is_not_accepted_as_error_locator(self) -> None:
+        observability_body = (
+            "- Markers: start, tool_call, end, fail.\n"
+            "- Fields: run_id, tool_call_id, capability_id, attempt, trace_id.\n"
+            "- Error locator: error_message only."
+        )
+        result = self._run_gate_with_doc(_base_doc(observability_body=observability_body))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing error locator semantics", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

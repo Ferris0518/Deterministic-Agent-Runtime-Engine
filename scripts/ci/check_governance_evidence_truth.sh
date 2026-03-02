@@ -244,7 +244,7 @@ check_feature_doc() {
           failures=$((failures + 1))
         fi
       done
-      if ! grep -Eiq '(error[_[:space:]-]?code|error[_[:space:]-]?type|exception[_[:space:]-]?class|toolresult\.error|error[[:space:]_-]?message)' <<<"$observability_section"; then
+      if ! grep -Eiq '(error[_[:space:]-]?code|error[_[:space:]-]?type|exception[_[:space:]-]?class|toolresult\.error)' <<<"$observability_section"; then
         log "Observability section missing error locator semantics (error_code/error_type/exception_class/ToolResult.error) in $file"
         failures=$((failures + 1))
       fi
@@ -318,6 +318,14 @@ check_feature_doc() {
 
     intent_pr_number="$(extract_pr_number_for_marker "$review_section" 'intent[[:space:]_-]+pr')"
     implementation_pr_number="$(extract_pr_number_for_marker "$review_section" 'implementation[[:space:]_-]+pr')"
+    if [[ -z "$intent_pr_number" ]]; then
+      log "Intent PR marker must include a valid GitHub PR link in $file"
+      failures=$((failures + 1))
+    fi
+    if [[ -z "$implementation_pr_number" ]]; then
+      log "Implementation PR marker must include a valid GitHub PR link in $file"
+      failures=$((failures + 1))
+    fi
     if [[ -n "$intent_pr_number" && -n "$implementation_pr_number" && "$intent_pr_number" == "$implementation_pr_number" ]]; then
       log "Intent PR and Implementation PR must reference different pull requests in $file"
       failures=$((failures + 1))
