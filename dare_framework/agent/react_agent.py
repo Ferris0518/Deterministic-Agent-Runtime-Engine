@@ -6,6 +6,7 @@ to context, and calls the model again until the model returns a final text respo
 
 from __future__ import annotations
 
+import math
 import json
 from typing import Any
 
@@ -782,6 +783,8 @@ def _clamp_ratio(value: Any, *, default: float) -> float:
     try:
         ratio = float(value)
     except (TypeError, ValueError):
+        return default
+    if not math.isfinite(ratio):
         return default
     if ratio <= 0:
         return default

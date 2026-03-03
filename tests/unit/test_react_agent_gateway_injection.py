@@ -390,6 +390,29 @@ async def test_react_agent_auto_compress_triggers_before_model_call() -> None:
 
 
 @pytest.mark.asyncio
+async def test_react_agent_auto_compress_nan_ratios_fallback_to_defaults() -> None:
+    context = _CompressionRecordingContext(config=Config())
+    context.budget.max_tokens = 100
+    gateway = _RecordingGateway("injected")
+    agent = ReactAgent(
+        name="react-test-auto-compress-nan-ratios",
+        model=_FinalOnlyModel(),
+        context=context,
+        tool_gateway=gateway,
+        auto_compress=True,
+        compress_trigger_ratio=float("nan"),
+        compress_target_ratio=float("nan"),
+    )
+
+    result = await agent("x" * 600)
+
+    assert result.success is True
+    assert len(context.compress_calls) >= 1
+    first_call = context.compress_calls[0]
+    assert first_call.get("target_tokens") == 75
+
+
+@pytest.mark.asyncio
 async def test_react_agent_without_auto_compress_keeps_legacy_behavior() -> None:
     context = _CompressionRecordingContext(config=Config())
     gateway = _RecordingGateway("injected")
