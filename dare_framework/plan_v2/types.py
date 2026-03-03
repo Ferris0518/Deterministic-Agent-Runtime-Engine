@@ -15,7 +15,7 @@ from typing import Any, Literal
 PlanStateName = Literal["todo", "in_progress", "done", "abandoned"]
 STEP_STATES: tuple[PlanStateName, ...] = ("todo", "in_progress", "done", "abandoned")
 _ALLOWED_STATE_TRANSITIONS: dict[str, set[str]] = {
-    "todo": {"todo", "in_progress", "abandoned"},
+    "todo": {"todo", "in_progress", "done", "abandoned"},
     "in_progress": {"in_progress", "done", "abandoned"},
     "done": {"done"},
     "abandoned": {"abandoned"},

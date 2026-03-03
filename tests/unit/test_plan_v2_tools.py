@@ -3,10 +3,12 @@ from __future__ import annotations
 import pytest
 
 from dare_framework.plan_v2.planner import Planner
+from dare_framework.plan_v2.registry import SubAgentRegistry
 from dare_framework.plan_v2.tools import (
     CreatePlanTool,
     FinishPlanTool,
     ReviseCurrentPlanTool,
+    SubAgentTool,
     ValidatePlanTool,
 )
 from dare_framework.plan_v2.types import PlannerState, Step, is_valid_state_transition
@@ -125,6 +127,29 @@ async def test_finish_plan_done_honors_legacy_completed_markers_without_status()
     assert state.plan_status == "done"
     assert result.output is not None
     assert result.output.get("pending") == []
+
+
+@pytest.mark.asyncio
+async def test_finish_plan_done_allows_restored_todo_plan_with_no_pending_steps() -> None:
+    class _LegacyStep:
+        def __init__(self, step_id: str, description: str) -> None:
+            self.step_id = step_id
+            self.description = description
+            self.params = {}
+
+    state = PlannerState(
+        plan_description="legacy-restored-plan",
+        steps=[_LegacyStep(step_id="s1", description="legacy done step")],
+        plan_status="todo",
+        plan_validated=True,
+    )
+    state.completed_step_ids = {"s1"}
+    finish_tool = FinishPlanTool(state)
+
+    result = await finish_tool.execute(run_context=_run_context(), target_state="done")
+
+    assert result.success is True
+    assert state.plan_status == "done"
 
 
 @pytest.mark.asyncio
@@ -311,3 +336,43 @@ async def test_critical_block_honors_legacy_completed_markers_without_status() -
     assert "- Completed: ['s1']" in state.critical_block
     assert "- Pending: []" in state.critical_block
     assert "finish_plan" in state.critical_block
+
+
+@pytest.mark.asyncio
+async def test_sub_agent_tool_blocks_legacy_completed_step_delegation() -> None:
+    class _LegacyStep:
+        def __init__(self, step_id: str, description: str) -> None:
+            self.step_id = step_id
+            self.description = description
+            self.params = {}
+
+    class _DummyAgent:
+        calls = 0
+
+        async def run(self, message: str, **kwargs: object) -> str:
+            _ = message
+            _ = kwargs
+            type(self).calls += 1
+            return "ok"
+
+    state = PlannerState(
+        plan_description="legacy-sub-agent",
+        steps=[_LegacyStep(step_id="s1", description="already done in legacy session")],
+        plan_status="in_progress",
+        plan_validated=True,
+    )
+    state.completed_step_ids = {"s1"}
+    registry = SubAgentRegistry()
+    registry.register("worker", "test worker", _DummyAgent)
+    tool = SubAgentTool(registry, "worker", state)
+
+    result = await tool.execute(
+        run_context=_run_context(),
+        task="should not execute",
+        step_id="s1",
+    )
+
+    assert result.success is False
+    assert isinstance(result.error, str)
+    assert "terminal" in result.error
+    assert _DummyAgent.calls == 0

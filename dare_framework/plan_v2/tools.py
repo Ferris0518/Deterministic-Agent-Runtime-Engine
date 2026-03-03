@@ -861,11 +861,12 @@ class SubAgentTool(ITool):
             step = self._state.get_step(step_id)
             if step is None:
                 return ToolResult(success=False, output=None, error=f"unknown step_id: {step_id}")
-            if _step_state(step) in _TERMINAL_STATES:
+            terminal_state = "done" if _is_step_completed(self._state, step) else _step_state(step)
+            if terminal_state in _TERMINAL_STATES:
                 return ToolResult(
                     success=False,
                     output=None,
-                    error=f"step already terminal: {step_id} ({_step_state(step)})",
+                    error=f"step already terminal: {step_id} ({terminal_state})",
                 )
             self._state.transition_step(step_id, "in_progress")
             if self._state.plan_status == "todo":
