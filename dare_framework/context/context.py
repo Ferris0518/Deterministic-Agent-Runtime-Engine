@@ -193,14 +193,16 @@ class Context(IContext):
             if isinstance(raw_max_messages, int) and raw_max_messages >= 0
             else None
         )
-        if callable(compress_impl):
-            if not has_advanced_options:
-                compress_impl(max_messages=max_messages)
-                return
-            if max_messages is not None:
-                compress_impl(max_messages=max_messages)
+        if callable(compress_impl) and not has_advanced_options:
+            compress_impl(max_messages=max_messages)
+            return
 
         compress_context(self, **options)
+
+        # For advanced compression, run backend max-message retention after strategy
+        # execution so strategy implementations can inspect full pre-trim history.
+        if callable(compress_impl) and has_advanced_options and max_messages is not None:
+            compress_impl(max_messages=max_messages)
 
 
 class DefaultAssembledContext(IAssembleContext):

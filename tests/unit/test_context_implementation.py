@@ -478,9 +478,10 @@ def test_context_compress_advanced_path_preserves_backend_semantics(monkeypatch:
     )
     ctx = Context(config=Config(), short_term_memory=stm)
     calls: list[dict[str, object]] = []
+    stm_sizes_seen_by_strategy: list[int] = []
 
     def _record_compress_context(context: Context, **kwargs: object) -> None:
-        _ = context
+        stm_sizes_seen_by_strategy.append(len(context.stm_get()))
         calls.append(dict(kwargs))
 
     monkeypatch.setattr(
@@ -493,4 +494,5 @@ def test_context_compress_advanced_path_preserves_backend_semantics(monkeypatch:
     assert len(stm.compress_calls) == 1
     assert stm.compress_calls[0].get("max_messages") == 2
     assert calls and calls[0].get("max_messages") == 2
+    assert stm_sizes_seen_by_strategy == [3]
     assert [message.content for message in ctx.stm_get()] == ["m1", "m2"]
