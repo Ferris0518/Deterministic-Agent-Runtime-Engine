@@ -507,7 +507,9 @@ async def test_run_tool_loop_retries_until_done_predicate_is_satisfied() -> None
             ToolResult(success=True, output={"stage": 1}),
             ToolResult(success=True, output={"done": True}),
         ],
-        max_calls=2,
+        # Keep max_calls above the expected completion point so the assertion
+        # proves the loop exits on the done predicate rather than budget exhaustion.
+        max_calls=3,
     )
     request = ToolLoopRequest(
         capability_id="tool.echo",

@@ -32,6 +32,7 @@ mode: openspec
 - `git worktree add .worktrees/refactor-dare-agent-structure-split -b codex/refactor-dare-agent-structure-split origin/main`
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py tests/unit/test_five_layer_agent.py tests/unit/test_dare_agent_hook_governance.py tests/unit/test_dare_agent_hook_transport_boundary.py`
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py -k 'before_model_hook_blocks or no_tool_calls or preflight_denies or done_predicate_is_satisfied or plan_policy_failure'`
+- `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py::test_run_tool_loop_retries_until_done_predicate_is_satisfied`
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py`
 - `../../.venv/bin/python -m pytest -q tests/unit/test_five_layer_agent.py tests/unit/test_dare_agent_hook_governance.py tests/unit/test_dare_agent_hook_transport_boundary.py`
 
@@ -40,6 +41,7 @@ mode: openspec
 - `git worktree add ... origin/main`: created an isolated continuation workspace for the final A-101 closeout from `origin/main` commit `5d1cfb4`.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py tests/unit/test_five_layer_agent.py tests/unit/test_dare_agent_hook_governance.py tests/unit/test_dare_agent_hook_transport_boundary.py`: baseline passed (`43 passed, 1 warning`) before adding new tests, confirming the change started from a clean regression surface.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py -k 'before_model_hook_blocks or no_tool_calls or preflight_denies or done_predicate_is_satisfied or plan_policy_failure'`: passed (`4 passed, 5 deselected, 1 warning`) after adding the new direct `_internal` branch coverage.
+- `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py::test_run_tool_loop_retries_until_done_predicate_is_satisfied`: passed (`1 passed, 1 warning`) after the PR #163 review fix raised `max_calls` above the expected completion point, so the retry coverage now proves the loop exits on `done_predicate` satisfaction instead of coincidentally stopping at the budget ceiling.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py`: passed (`9 passed, 1 warning`) with both the existing façade delegation assertions and the new direct execution-unit tests.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_five_layer_agent.py tests/unit/test_dare_agent_hook_governance.py tests/unit/test_dare_agent_hook_transport_boundary.py`: passed (`39 passed, 1 warning`) after the new unit tests landed, confirming no regression on the previously accepted A-101 coverage surface.
 
@@ -59,3 +61,4 @@ mode: openspec
 - Historical implementation PR (merged): `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/117`
 - Historical owner feedback thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/117`
 - Final verification PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/163`
+- PR #163 review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/163#discussion_r2875871921`
