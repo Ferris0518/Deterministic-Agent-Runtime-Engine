@@ -406,7 +406,7 @@ class ReviseCurrentPlanTool(ITool):
 
         if steps is not None:
             old_by_id = {
-                step_id: _step_state(step)
+                step_id: ("done" if _is_step_completed(self._state, step) else _step_state(step))
                 for step in self._state.steps
                 if (step_id := _step_id(step)) is not None
             }
@@ -515,11 +515,10 @@ class FinishPlanTool(ITool):
             )
 
         if target_state == "abandoned":
-            for step in self._state.steps:
-                if _step_state(step) in _PENDING_STATES:
-                    step_id = _step_id(step)
-                    if step_id:
-                        self._state.transition_step(step_id, "abandoned")
+            for step in _pending_steps(self._state):
+                step_id = _step_id(step)
+                if step_id:
+                    self._state.transition_step(step_id, "abandoned")
 
         try:
             self._state.transition_plan(target_state)

@@ -190,6 +190,33 @@ async def test_revise_current_plan_handles_dict_backed_steps() -> None:
 
 
 @pytest.mark.asyncio
+async def test_revise_current_plan_preserves_legacy_completed_markers_without_status() -> None:
+    class _LegacyStep:
+        def __init__(self, step_id: str, description: str) -> None:
+            self.step_id = step_id
+            self.description = description
+            self.params = {}
+
+    state = PlannerState(
+        plan_description="legacy-revise",
+        steps=[_LegacyStep(step_id="s1", description="legacy done step")],
+        plan_status="in_progress",
+    )
+    state.completed_step_ids = {"s1"}
+    revise_tool = ReviseCurrentPlanTool(state)
+
+    result = await revise_tool.execute(
+        run_context=_run_context(),
+        steps=[{"step_id": "s1", "description": "legacy done step revised"}],
+    )
+
+    assert result.success is True
+    assert len(state.steps) == 1
+    assert state.steps[0].status == "done"
+    assert state.completed_step_ids == {"s1"}
+
+
+@pytest.mark.asyncio
 async def test_finish_plan_handles_dict_backed_steps() -> None:
     state = PlannerState(
         plan_description="dict-backed",
@@ -211,6 +238,35 @@ async def test_finish_plan_handles_dict_backed_steps() -> None:
     assert state.plan_status == "abandoned"
     assert result.output is not None
     assert result.output.get("pending") == []
+
+
+@pytest.mark.asyncio
+async def test_finish_plan_abandoned_preserves_legacy_completed_markers_without_status() -> None:
+    class _LegacyStep:
+        def __init__(self, step_id: str, description: str) -> None:
+            self.step_id = step_id
+            self.description = description
+            self.params = {}
+
+    state = PlannerState(
+        plan_description="legacy-abandoned",
+        steps=[_LegacyStep(step_id="s1", description="legacy done step")],
+        plan_status="in_progress",
+        plan_validated=True,
+    )
+    state.completed_step_ids = {"s1"}
+    finish_tool = FinishPlanTool(state)
+
+    result = await finish_tool.execute(
+        run_context=_run_context(),
+        target_state="abandoned",
+    )
+
+    assert result.success is True
+    assert state.plan_status == "abandoned"
+    assert state.completed_step_ids == {"s1"}
+    assert result.output is not None
+    assert result.output.get("completed") == ["s1"]
 
 
 @pytest.mark.asyncio
