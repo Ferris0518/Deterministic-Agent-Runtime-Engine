@@ -353,6 +353,8 @@ async def test_react_agent_emits_terminal_message_for_max_round_exit() -> None:
     assert getattr(last_envelope, "event_type", None) == TransportEventType.MESSAGE.value
     assert "达到最大轮次" in str(getattr(last_envelope, "payload", {}).get("resp", {}).get("output", ""))
 
+
+@pytest.mark.asyncio
 async def test_react_agent_auto_compress_triggers_before_model_call() -> None:
     context = _CompressionRecordingContext(config=Config())
     context.budget.max_tokens = 100
