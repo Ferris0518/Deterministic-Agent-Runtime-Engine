@@ -281,6 +281,19 @@ mode: openspec
         self.assertIn("error semantics use none/n.a without rationale", result.stdout)
         self.assertIn("retry semantics use none/n.a without rationale", result.stdout)
 
+    def test_in_review_contract_placeholder_values_are_rejected(self) -> None:
+        doc = _base_doc(status="in_review")
+        doc = doc.replace(
+            "- schema: none, reason: docs-only governance check.\n- error semantics: error_type (framework-native marker).\n- retry semantics: none, reason: deterministic docs gate.\n",
+            "- schema: TBD\n- error semantics: TODO\n- retry semantics: placeholder\n",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("schema uses placeholder value", result.stdout)
+        self.assertIn("error semantics use placeholder value", result.stdout)
+        self.assertIn("retry semantics use placeholder value", result.stdout)
+
     def test_in_review_golden_placeholder_token_requires_reason(self) -> None:
         doc = _base_doc(status="in_review").replace("- `golden_case`", "- `none`")
         result = self._run_gate_with_doc(doc)
@@ -333,6 +346,16 @@ mode: openspec
         doc = _base_doc(status="in_review").replace(
             "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
             "- Artifact: `tests/unit/test_governance_evidence_truth_gate.py`",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Regression Summary missing runner commands", result.stdout)
+
+    def test_in_review_regression_assignment_token_is_not_runner(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+            "- Runner: `pass=1`",
         )
         result = self._run_gate_with_doc(doc)
 

@@ -160,7 +160,7 @@ is_placeholder_token() {
   local token="$1"
   local normalized
   normalized="$(tr '[:upper:]' '[:lower:]' <<<"$token" | tr -d '[:space:]')"
-  [[ "$normalized" == "none" || "$normalized" == "n/a" || "$normalized" == "n.a" || "$normalized" == "na" || "$normalized" == "tbd" || "$normalized" == "todo" ]]
+  [[ "$normalized" == "none" || "$normalized" == "n/a" || "$normalized" == "n.a" || "$normalized" == "na" || "$normalized" == "tbd" || "$normalized" == "todo" || "$normalized" == "placeholder" ]]
 }
 
 count_non_placeholder_backticked_tokens() {
@@ -225,8 +225,8 @@ is_command_like_token() {
   fi
 
   # Accept shell-like shape (command + args or shell operators). A bare file path
-  # like tests/unit/test_x.py must not count as a runner command.
-  if grep -Eq '[[:space:]|&;=]' <<<"$normalized" || [[ "$normalized" == ./* ]]; then
+  # like tests/unit/test_x.py or assignment-only token pass=1 must not count.
+  if grep -Eq '[[:space:]|&;]' <<<"$normalized" || [[ "$normalized" == ./* ]]; then
     return 0
   fi
   # Accept known single-token runners (for example: pytest, tox, make).
@@ -256,6 +256,21 @@ count_command_like_backticked_tokens() {
   done <<<"$section"
 
   echo "$count"
+}
+
+dimension_uses_placeholder_value() {
+  local section="$1"
+  local dimension_pattern="$2"
+  local line
+  while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    if grep -Eiq '(^|[[:space:][:punct:]])(tbd|todo|placeholder|unknown)([[:space:][:punct:]]|$)' <<<"$line"; then
+      return 0
+    fi
+  done < <(grep -Ei -- "$dimension_pattern" <<<"$section" || true)
+  return 1
 }
 
 dimension_none_without_reason() {
@@ -382,12 +397,24 @@ check_feature_doc() {
       log "Contract Delta schema uses none/n.a without rationale in $file"
       failures=$((failures + 1))
     fi
+    if dimension_uses_placeholder_value "$contract_section" 'schema'; then
+      log "Contract Delta schema uses placeholder value in $file"
+      failures=$((failures + 1))
+    fi
     if dimension_none_without_reason "$contract_section" '(error[[:space:]_-]?semantics|error[_[:space:]-]?code|error[_[:space:]-]?type|exception[_[:space:]-]?class|toolresult\.error)'; then
       log "Contract Delta error semantics use none/n.a without rationale in $file"
       failures=$((failures + 1))
     fi
+    if dimension_uses_placeholder_value "$contract_section" '(error[[:space:]_-]?semantics|error[_[:space:]-]?code|error[_[:space:]-]?type|exception[_[:space:]-]?class|toolresult\.error)'; then
+      log "Contract Delta error semantics use placeholder value in $file"
+      failures=$((failures + 1))
+    fi
     if dimension_none_without_reason "$contract_section" 'retry'; then
       log "Contract Delta retry semantics use none/n.a without rationale in $file"
+      failures=$((failures + 1))
+    fi
+    if dimension_uses_placeholder_value "$contract_section" 'retry'; then
+      log "Contract Delta retry semantics use placeholder value in $file"
       failures=$((failures + 1))
     fi
   fi
