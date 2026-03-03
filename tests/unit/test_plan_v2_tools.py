@@ -439,6 +439,40 @@ async def test_sub_agent_tool_progress_excludes_legacy_completed_steps_from_pend
 
 
 @pytest.mark.asyncio
+async def test_sub_agent_tool_progress_includes_pending_placeholder_for_invalid_step_id() -> None:
+    class _DummyAgent:
+        async def run(self, message: str, **kwargs: object) -> dict[str, str]:
+            _ = message
+            _ = kwargs
+            return {"ok": "true"}
+
+    state = PlannerState(
+        plan_description="invalid-id-progress",
+        steps=[
+            Step(step_id="s1", description="active step"),
+            Step(step_id="   ", description="unnamed pending step"),
+        ],
+        plan_status="in_progress",
+        plan_validated=True,
+    )
+    registry = SubAgentRegistry()
+    registry.register("worker", "test worker", _DummyAgent)
+    tool = SubAgentTool(registry, "worker", state)
+
+    result = await tool.execute(
+        run_context=_run_context(),
+        task="execute named step",
+        step_id="s1",
+    )
+
+    assert result.success is True
+    assert isinstance(result.output, dict)
+    progress = result.output.get("progress")
+    assert isinstance(progress, str)
+    assert "Pending: ['<unknown:1>']" in progress
+
+
+@pytest.mark.asyncio
 async def test_finish_plan_done_rejects_pending_step_without_valid_id() -> None:
     state = PlannerState(
         plan_description="finish-guard-invalid-id",
@@ -454,3 +488,20 @@ async def test_finish_plan_done_rejects_pending_step_without_valid_id() -> None:
     assert state.plan_status != "done"
     assert isinstance(result.error, str)
     assert "pending steps exist" in result.error
+
+
+@pytest.mark.asyncio
+async def test_finish_plan_abandoned_marks_invalid_id_pending_step_abandoned() -> None:
+    state = PlannerState(
+        plan_description="abandon-invalid-id",
+        steps=[Step(step_id="   ", description="unnamed pending step", status="todo")],
+        plan_status="in_progress",
+        plan_validated=True,
+    )
+    finish_tool = FinishPlanTool(state)
+
+    result = await finish_tool.execute(run_context=_run_context(), target_state="abandoned")
+
+    assert result.success is True
+    assert state.plan_status == "abandoned"
+    assert state.steps[0].status == "abandoned"

@@ -69,6 +69,14 @@ def _step_has_explicit_status(step: Any) -> bool:
     return hasattr(step, "status")
 
 
+def _set_step_state(step: Any, status: PlanStateName) -> None:
+    """Set step status for object/dict-backed step entries."""
+    if isinstance(step, dict):
+        step["status"] = status
+        return
+    setattr(step, "status", status)
+
+
 def _is_step_completed(state: PlannerState, step: Any) -> bool:
     """Return whether a step should be treated as completed, including legacy markers."""
     if _step_state(step) == "done":
@@ -528,6 +536,8 @@ class FinishPlanTool(ITool):
                 step_id = _step_id(step)
                 if step_id:
                     self._state.transition_step(step_id, "abandoned")
+                else:
+                    _set_step_state(step, "abandoned")
 
         try:
             self._state.transition_plan(target_state)
@@ -891,7 +901,7 @@ class SubAgentTool(ITool):
             if self._state and self._state.steps:
                 self._state.sync_completed_step_ids()
                 completed = sorted(self._state.completed_step_ids)
-                pending = [step_id for s in _pending_steps(self._state) if (step_id := _step_id(s)) is not None]
+                pending = [(_step_id(s) or f"<unknown:{i + 1}>") for i, s in enumerate(_pending_steps(self._state))]
                 progress = f"Completed: {completed}. Pending: {pending}."
                 if isinstance(result, dict):
                     output = {**result, "progress": progress}
