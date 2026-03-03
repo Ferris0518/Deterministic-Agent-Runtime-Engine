@@ -30,6 +30,19 @@ FAILED tests/unit/test_event_sqlite_event_log.py::test_verify_chain_detects_tamp
     ]
 
 
+def test_extract_failed_tests_includes_error_node_ids() -> None:
+    output = """
+=========================== short test summary info ============================
+ERROR tests/unit/test_p0_gate_ci.py::test_extract_failed_tests_includes_error_node_ids
+ERROR tests/integration/test_p0_conformance_gate.py::test_default_event_log_replay_and_hash_chain_hold_for_runtime_session - RuntimeError: boom
+"""
+
+    assert extract_failed_tests(output) == [
+        "tests/unit/test_p0_gate_ci.py::test_extract_failed_tests_includes_error_node_ids",
+        "tests/integration/test_p0_conformance_gate.py::test_default_event_log_replay_and_hash_chain_hold_for_runtime_session",
+    ]
+
+
 def test_format_summary_reports_pass_for_all_categories() -> None:
     summary = format_summary(
         [

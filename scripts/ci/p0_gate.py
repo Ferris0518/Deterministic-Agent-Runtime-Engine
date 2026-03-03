@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-FAILED_TEST_RE = re.compile(r"^FAILED\s+([^\s]+)")
+FAILED_TEST_RE = re.compile(r"^(?:FAILED|ERROR)\s+([^\s]+)")
 
 
 @dataclass(frozen=True, slots=True)

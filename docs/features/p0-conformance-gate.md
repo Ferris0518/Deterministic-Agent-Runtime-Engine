@@ -56,7 +56,7 @@ mode: openspec
 - `../../.venv/bin/python -m pytest -q tests/integration/test_p0_conformance_gate.py`: passed (`2 passed, 1 warning`) after adding the missing step-driven integration anchor that exercises the full `agent("task")` closed loop, covering both ordered happy-path execution and fail-fast behavior when the first validated step fails.
 - `../../.venv/bin/python -m pytest -q tests/integration/test_security_policy_gate_flow.py tests/integration/test_p0_conformance_gate.py tests/unit/test_dare_agent_step_driven_mode.py`: passed (`28 passed, 1 warning`) after the new `p0` integration file also absorbed the default event-log replay/hash-chain runtime anchor, confirming the security gate slice, step-driven closed-loop slice, and audit-chain slice can run together as the emerging P0 gate bundle.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_security_policy_gate.py tests/unit/test_dare_agent_security_boundary.py tests/unit/test_five_layer_agent.py`: passed (`50 passed, 1 warning`) after the new security-gate integration coverage landed, confirming the added integration assertions do not regress the existing direct runtime and no-planner approval semantics.
-- `../../.venv/bin/python -m pytest -q tests/unit/test_p0_gate_ci.py`: passed (`3 passed`) after adding the CI-side unit contract for `p0-gate` failure extraction and summary formatting.
+- `../../.venv/bin/python -m pytest -q tests/unit/test_p0_gate_ci.py`: passed (`4 passed`) after extending the CI-side unit contract so `p0-gate` also preserves node ids from pytest `ERROR` summary lines, not only assertion-style `FAILED` lines.
 - `../../.venv/bin/python scripts/ci/p0_gate.py`: passed and emitted:
   `p0-gate: PASS`
   `- SECURITY_REGRESSION: 0 failures`
@@ -81,6 +81,7 @@ mode: openspec
 - Error branch: task `2.3` now proves the same runtime-backed SQLite log fails `verify_chain()` after on-disk payload tampering, so the audit-chain invariant is validated against actual session data rather than only synthetic unit fixtures.
 - Happy path: task `3.1` now exposes a single CI command entrypoint, `python scripts/ci/p0_gate.py`, that runs the three category bundles without relying on ad hoc workflow-local command duplication.
 - Error branch: task `3.3` now guarantees failed `p0-gate` runs produce deterministic category-tagged triage output with failing node ids, module ownership, and first-action guidance instead of raw pytest noise alone.
+- Error branch: the latest PR review fix now keeps deterministic node ids even when pytest stops in collection/import/runtime with `ERROR` summary lines, so CI triage does not collapse to `<no failing test ids captured>` for non-assertion failures.
 - Happy path: tasks `4.1-4.3` now publish a single runbook that tells contributors exactly how to run `p0-gate`, where to look first for each category, how to archive release evidence, and how to record flaky incidents without inventing a second workflow.
 - Error branch: the runbook now forbids silent anchor removal and silent rerun-based “fixes”; failed `p0-gate` runs must either be repaired or escalated through the documented flaky/quarantine path with owner and expiry.
 
