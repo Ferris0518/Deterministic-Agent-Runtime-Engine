@@ -37,7 +37,7 @@ Unify documentation management structure, lifecycle governance, and SOP-to-skill
 - `openspec validate enhance-doc-governance-traceability --type change --strict --json --no-interactive`
 
 ### Results
-- `../../.venv/bin/python -m pytest -q tests/unit/test_governance_traceability_gate.py`: passed (`7 passed`) after extending the traceability gate regression suite to also cover stale active index entries and discrete `todo_ids` token matching, in addition to the earlier template/index/skill-mapping/pilot-linkage checks.
+- `../../.venv/bin/python -m pytest -q tests/unit/test_governance_traceability_gate.py`: passed (`9 passed`) after extending the traceability gate regression suite to also cover stale active index entries, discrete `todo_ids` token matching, full lifecycle checkpoint coverage, and date-prefixed archived change task discovery.
 - `bash -n scripts/ci/check_governance_traceability.sh`: passed, confirming the new gate script is shell-valid before execution.
 - `./scripts/ci/check_governance_traceability.sh`: passed against the real repository tree after adding the feature template, archive index, and active feature index entries.
 - `./scripts/ci/check_governance_evidence_truth.sh`: passed, confirming the new traceability assets do not break the existing evidence-first contract.

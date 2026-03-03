@@ -192,7 +192,9 @@ check_checkpoint_skill_mapping() {
     require_line "documentation-management" "$model" "documentation-management mapping"
     require_line "development-workflow" "$model" "development-workflow mapping"
     require_line "kickoff" "$model" "kickoff checkpoint"
+    require_line "execution-sync" "$model" "execution-sync checkpoint"
     require_line "verification" "$model" "verification checkpoint"
+    require_line "review-merge-gate" "$model" "review-merge-gate checkpoint"
     require_line "completion-archive" "$model" "completion-archive checkpoint"
   fi
 }
@@ -241,7 +243,7 @@ check_feature_doc() {
   while IFS= read -r change_id; do
     [[ -z "$change_id" ]] && continue
     if [[ ! -f "openspec/changes/$change_id/tasks.md" ]] && \
-      ! find openspec/changes/archive -type f -path "*/$change_id/tasks.md" | grep -q .; then
+      ! find openspec/changes/archive -type f \( -path "*/$change_id/tasks.md" -o -path "*/????-??-??-$change_id/tasks.md" \) | grep -q .; then
       log "missing OpenSpec tasks artifact for change_id '$change_id' declared in $file"
       failures=$((failures + 1))
     fi

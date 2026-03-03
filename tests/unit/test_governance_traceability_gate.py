@@ -124,7 +124,9 @@ mode: openspec
 
 ## 7. Checkpoint-to-Skill Mapping
 - kickoff -> `development-workflow` + `documentation-management`
+- execution-sync -> `development-workflow` + `documentation-management`
 - verification -> `development-workflow`
+- review-merge-gate -> `development-workflow` + `documentation-management`
 - completion-archive -> `documentation-management`
 """,
     )
@@ -203,6 +205,26 @@ class GovernanceTraceabilityGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing checkpoint-to-skill mapping", result.stdout)
 
+    def test_gate_requires_all_declared_lifecycle_checkpoints(self) -> None:
+        def mutate(root: Path) -> None:
+            model = root / "docs" / "governance" / "Documentation_Management_Model.md"
+            model.write_text(
+                """# Documentation Management Model
+
+## 7. Checkpoint-to-Skill Mapping
+- kickoff -> `development-workflow` + `documentation-management`
+- verification -> `development-workflow`
+- completion-archive -> `documentation-management`
+""",
+                encoding="utf-8",
+            )
+
+        result = self._run_gate(mutate)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing execution-sync checkpoint", result.stdout)
+        self.assertIn("missing review-merge-gate checkpoint", result.stdout)
+
     def test_gate_fails_when_declared_todo_id_has_no_matching_todo_ledger(self) -> None:
         def mutate(root: Path) -> None:
             (root / "docs" / "todos" / "demo_master_todo.md").write_text("# empty\n", encoding="utf-8")
@@ -235,6 +257,32 @@ class GovernanceTraceabilityGateTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing TODO mapping for feature doc", result.stdout)
+
+    def test_gate_accepts_date_prefixed_archived_change_tasks(self) -> None:
+        def mutate(root: Path) -> None:
+            feature_doc = root / "docs" / "features" / "demo-change.md"
+            feature_doc.write_text(
+                feature_doc.read_text(encoding="utf-8").replace('change_ids: ["demo-change"]', 'change_ids: ["archived-change"]'),
+                encoding="utf-8",
+            )
+            todo_doc = root / "docs" / "todos" / "demo_master_todo.md"
+            todo_doc.write_text(
+                todo_doc.read_text(encoding="utf-8").replace("`demo-change`", "`archived-change`"),
+                encoding="utf-8",
+            )
+            active_change_dir = root / "openspec" / "changes" / "demo-change"
+            for path in active_change_dir.iterdir():
+                path.unlink()
+            active_change_dir.rmdir()
+            _write(
+                root / "openspec" / "changes" / "archive" / "2026-03-03-archived-change" / "tasks.md",
+                "- [x] archived\n",
+            )
+
+        result = self._run_gate(mutate)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("passed", result.stdout)
 
 
 if __name__ == "__main__":
