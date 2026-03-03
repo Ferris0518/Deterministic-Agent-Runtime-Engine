@@ -224,8 +224,9 @@ is_command_like_token() {
     return 1
   fi
 
-  # Accept shell-like shape (command + args/path/operator/path).
-  if grep -Eq '[[:space:]/|&;=]' <<<"$normalized" || [[ "$normalized" == ./* ]]; then
+  # Accept shell-like shape (command + args or shell operators). A bare file path
+  # like tests/unit/test_x.py must not count as a runner command.
+  if grep -Eq '[[:space:]|&;=]' <<<"$normalized" || [[ "$normalized" == ./* ]]; then
     return 0
   fi
   # Accept known single-token runners (for example: pytest, tox, make).

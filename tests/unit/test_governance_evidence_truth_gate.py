@@ -329,6 +329,16 @@ mode: openspec
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Regression Summary missing runner commands", result.stdout)
 
+    def test_in_review_regression_path_only_token_is_not_runner(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+            "- Artifact: `tests/unit/test_governance_evidence_truth_gate.py`",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Regression Summary missing runner commands", result.stdout)
+
     def test_in_review_regression_accepts_single_token_runner_command(self) -> None:
         doc = _base_doc(status="in_review").replace(
             "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
