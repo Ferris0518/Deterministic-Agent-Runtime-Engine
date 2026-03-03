@@ -90,8 +90,14 @@ extract_section() {
   local file="$1"
   local start_heading="$2"
   awk -v start="$start_heading" '
-    $0 == start {in_section=1; next}
-    in_section && $0 ~ /^```/ {in_fence = !in_fence; print; next}
+    $0 ~ /^```/ {
+      in_fence = !in_fence
+      if (in_section) {
+        print
+      }
+      next
+    }
+    !in_section && !in_fence && $0 == start {in_section=1; next}
     in_section && !in_fence && $0 ~ /^#[[:space:]]+/ {in_section=0}
     in_section && !in_fence && $0 ~ /^##[[:space:]]+/ {in_section=0}
     in_section {print}
@@ -102,8 +108,14 @@ extract_subsection() {
   local file="$1"
   local start_heading="$2"
   awk -v start="$start_heading" '
-    $0 == start {in_section=1; next}
-    in_section && $0 ~ /^```/ {in_fence = !in_fence; print; next}
+    $0 ~ /^```/ {
+      in_fence = !in_fence
+      if (in_section) {
+        print
+      }
+      next
+    }
+    !in_section && !in_fence && $0 == start {in_section=1; next}
     in_section && !in_fence && $0 ~ /^###[[:space:]]+/ {in_section=0}
     in_section && !in_fence && $0 ~ /^##[[:space:]]+/ {in_section=0}
     in_section {print}
@@ -114,8 +126,14 @@ extract_subsection_from_section() {
   local section="$1"
   local start_heading="$2"
   awk -v start="$start_heading" '
-    $0 == start {in_section=1; next}
-    in_section && $0 ~ /^```/ {in_fence = !in_fence; print; next}
+    $0 ~ /^```/ {
+      in_fence = !in_fence
+      if (in_section) {
+        print
+      }
+      next
+    }
+    !in_section && !in_fence && $0 == start {in_section=1; next}
     in_section && !in_fence && $0 ~ /^###[[:space:]]+/ {in_section=0}
     in_section {print}
   ' <<<"$section"
@@ -130,7 +148,11 @@ resolve_heading_line() {
   local file="$1"
   local pattern="$2"
   local heading
-  heading="$(grep -Ei -- "$pattern" "$file" | head -n 1 || true)"
+  heading="$(awk -v pattern="$pattern" '
+    BEGIN { IGNORECASE = 1 }
+    /^```/ { in_fence = !in_fence; next }
+    !in_fence && $0 ~ pattern { print; exit }
+  ' "$file" || true)"
   echo "$heading"
 }
 
@@ -138,7 +160,11 @@ resolve_heading_in_section() {
   local section="$1"
   local pattern="$2"
   local heading
-  heading="$(grep -Ei -- "$pattern" <<<"$section" | head -n 1 || true)"
+  heading="$(awk -v pattern="$pattern" '
+    BEGIN { IGNORECASE = 1 }
+    /^```/ { in_fence = !in_fence; next }
+    !in_fence && $0 ~ pattern { print; exit }
+  ' <<<"$section" || true)"
   echo "$heading"
 }
 
