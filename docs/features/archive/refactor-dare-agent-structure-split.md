@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["agent", "refactor", "orchestration", "testing"]
 created: 2026-03-03
 updated: 2026-03-03
-status: active
+status: archived
 mode: openspec
 ---
 
@@ -16,9 +16,11 @@ mode: openspec
 
 ## OpenSpec Artifacts
 
-- Proposal: `openspec/changes/refactor-dare-agent-structure-split/proposal.md`
-- Design: `openspec/changes/refactor-dare-agent-structure-split/design.md`
-- Tasks: `openspec/changes/refactor-dare-agent-structure-split/tasks.md`
+- Proposal: `openspec/changes/archive/2026-03-03-refactor-dare-agent-structure-split/proposal.md`
+- Design: `openspec/changes/archive/2026-03-03-refactor-dare-agent-structure-split/design.md`
+- Specs:
+  - `openspec/changes/archive/2026-03-03-refactor-dare-agent-structure-split/specs/core-runtime/spec.md`
+- Tasks: `openspec/changes/archive/2026-03-03-refactor-dare-agent-structure-split/tasks.md`
 
 ## Governance Anchors
 
@@ -35,6 +37,11 @@ mode: openspec
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py::test_run_tool_loop_retries_until_done_predicate_is_satisfied`
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py`
 - `../../.venv/bin/python -m pytest -q tests/unit/test_five_layer_agent.py tests/unit/test_dare_agent_hook_governance.py tests/unit/test_dare_agent_hook_transport_boundary.py`
+- `git push origin codex/refactor-dare-agent-structure-split`
+- `openspec archive refactor-dare-agent-structure-split -y`
+- `openspec list`
+- `openspec validate --specs --strict --json --no-interactive`
+- `./scripts/ci/check_governance_evidence_truth.sh`
 
 ### Results
 
@@ -44,6 +51,11 @@ mode: openspec
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py::test_run_tool_loop_retries_until_done_predicate_is_satisfied`: passed (`1 passed, 1 warning`) after the PR #163 review fix raised `max_calls` above the expected completion point, so the retry coverage now proves the loop exits on `done_predicate` satisfaction instead of coincidentally stopping at the budget ceiling.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_dare_agent_orchestration_split.py`: passed (`9 passed, 1 warning`) with both the existing façade delegation assertions and the new direct execution-unit tests.
 - `../../.venv/bin/python -m pytest -q tests/unit/test_five_layer_agent.py tests/unit/test_dare_agent_hook_governance.py tests/unit/test_dare_agent_hook_transport_boundary.py`: passed (`39 passed, 1 warning`) after the new unit tests landed, confirming no regression on the previously accepted A-101 coverage surface.
+- `git push origin codex/refactor-dare-agent-structure-split`: published the verification branch and enabled PR `#163`.
+- `openspec archive refactor-dare-agent-structure-split -y`: archived the completed change to `openspec/changes/archive/2026-03-03-refactor-dare-agent-structure-split/` and synced the modularization requirement back into the main `core-runtime` spec.
+- `openspec list`: after archive, `refactor-dare-agent-structure-split` no longer appears in the active change list, confirming the change is out of execution scope.
+- `openspec validate --specs --strict --json --no-interactive`: passed (`39/39` specs valid, `0` failures) after the `core-runtime` spec was updated during archive.
+- `./scripts/ci/check_governance_evidence_truth.sh`: passed after the archive move, artifact-link rewrite, and evidence closeout updates were synchronized.
 
 ### Behavior Verification
 
@@ -62,3 +74,4 @@ mode: openspec
 - Historical owner feedback thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/117`
 - Final verification PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/163`
 - PR #163 review thread: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/163#discussion_r2875871921`
+- Archive target: `openspec/changes/archive/2026-03-03-refactor-dare-agent-structure-split/`
