@@ -216,6 +216,8 @@ count_file_like_backticked_tokens() {
 is_command_like_token() {
   local token="$1"
   local normalized
+  local words=()
+  local idx cmd remainder
   normalized="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$token")"
   if [[ -z "$normalized" ]]; then
     return 1
@@ -224,13 +226,57 @@ is_command_like_token() {
     return 1
   fi
 
-  # Accept shell-like shape (command + args or shell operators). A bare file path
-  # like tests/unit/test_x.py or assignment-only token pass=1 must not count.
-  if grep -Eq '[[:space:]|&;]' <<<"$normalized" || [[ "$normalized" == ./* ]]; then
+  if is_known_single_command "$normalized"; then
     return 0
   fi
-  # Accept known single-token runners (for example: pytest, tox, make).
-  if is_known_single_command "$normalized"; then
+  if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*=.*$' <<<"$normalized" && ! grep -Eq '[[:space:]]' <<<"$normalized"; then
+    return 1
+  fi
+
+  if [[ "$normalized" == ./* || "$normalized" == /* ]]; then
+    return 0
+  fi
+
+  # Parse shell-like tokens; skip env-assignment prefixes and require a plausible command shape.
+  read -r -a words <<<"$normalized"
+  idx=0
+  while ((idx < ${#words[@]})); do
+    if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*=.*$' <<<"${words[$idx]}"; then
+      idx=$((idx + 1))
+      continue
+    fi
+    break
+  done
+
+  if ((idx >= ${#words[@]})); then
+    return 1
+  fi
+
+  cmd="${words[$idx]}"
+  remainder="${normalized#*${cmd}}"
+  remainder="$(sed -E 's/^[[:space:]]+//g' <<<"$remainder")"
+
+  if is_known_single_command "$cmd" || [[ "$cmd" == ./* || "$cmd" == /* ]]; then
+    return 0
+  fi
+
+  if grep -Eq '[|&;]' <<<"$normalized"; then
+    return 0
+  fi
+  if grep -Eq '(^|[[:space:]])-[A-Za-z0-9-]+' <<<"$remainder"; then
+    return 0
+  fi
+
+  return 1
+}
+
+is_candidate_regression_command_line() {
+  local line="$1"
+  if grep -Eiq '(runner|command)' <<<"$line"; then
+    return 0
+  fi
+  # Accept unlabeled bullet commands like: - `pytest -q tests/...`
+  if grep -Eq '^[[:space:]]*[-*]?[[:space:]]*`[^`]+`[[:space:]]*$' <<<"$line"; then
     return 0
   fi
   return 1
@@ -243,6 +289,9 @@ count_command_like_backticked_tokens() {
 
   while IFS= read -r line; do
     if [[ -z "$line" ]]; then
+      continue
+    fi
+    if ! is_candidate_regression_command_line "$line"; then
       continue
     fi
     while IFS= read -r token; do
@@ -436,6 +485,7 @@ check_feature_doc() {
   if [[ -n "$regression_heading" ]]; then
     regression_section="$(extract_subsection_from_section "$evidence_section" "$regression_heading")"
     local regression_tokens
+    local regression_summary_surface
     if [[ "$strict_acceptance_pack" == "true" ]]; then
       regression_tokens="$(count_command_like_backticked_tokens "$regression_section")"
     else
@@ -445,16 +495,14 @@ check_feature_doc() {
       log "Regression Summary missing runner commands in $file"
       failures=$((failures + 1))
     fi
+    # Summary tokens must come from prose summary, not from command snippets in backticks.
+    regression_summary_surface="$(sed -E 's/`[^`]+`//g' <<<"$regression_section")"
     for summary_token in pass fail skip; do
-      if ! grep -Eiq "\\b${summary_token}\\b" <<<"$regression_section"; then
+      if ! grep -Eiq "\\b${summary_token}\\b" <<<"$regression_summary_surface"; then
         log "Regression Summary missing '${summary_token}' summary token in $file"
         failures=$((failures + 1))
       fi
     done
-    if ! grep -Eiq '(pass|fail|skip)' <<<"$regression_section"; then
-      log "Regression Summary missing pass/fail/skip summary in $file"
-      failures=$((failures + 1))
-    fi
   fi
 
   if [[ -n "$observability_heading" ]]; then

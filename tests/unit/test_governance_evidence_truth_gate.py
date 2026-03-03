@@ -362,6 +362,16 @@ mode: openspec
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Regression Summary missing runner commands", result.stdout)
 
+    def test_in_review_regression_free_text_token_is_not_runner(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+            "- Runner: `totally fake`",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Regression Summary missing runner commands", result.stdout)
+
     def test_in_review_regression_accepts_single_token_runner_command(self) -> None:
         doc = _base_doc(status="in_review").replace(
             "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
@@ -381,6 +391,22 @@ mode: openspec
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("passed", result.stdout)
+
+    def test_in_review_regression_summary_tokens_must_not_come_from_backticks(self) -> None:
+        doc = _base_doc(status="in_review").replace(
+            "- Runner: `pytest -q tests/unit/test_governance_evidence_truth_gate.py`",
+            "- Runner: `pytest -q --report pass fail skip`",
+        )
+        doc = doc.replace(
+            "- Summary: pass 1, fail 0, skip 0.",
+            "- Summary: pending.",
+        )
+        result = self._run_gate_with_doc(doc)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing 'pass' summary token", result.stdout)
+        self.assertIn("missing 'fail' summary token", result.stdout)
+        self.assertIn("missing 'skip' summary token", result.stdout)
 
     def test_evidence_section_stops_at_top_level_heading_boundary(self) -> None:
         doc = _base_doc(status="in_review")
