@@ -61,4 +61,4 @@
 - 模块级测试锚点覆盖不足（FR-GAP-008）
 - embedding 域缺少直接测试资产（FR-GAP-009）
 
-详见：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`。
+详见：`docs/todos/archive/2026-02-27_full_design_review_gap_analysis.md`。

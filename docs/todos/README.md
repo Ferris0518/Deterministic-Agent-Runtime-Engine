@@ -7,10 +7,10 @@
 
 - `project_overall_todos.md`：项目总体演进 TODO（跨模块、跨阶段）。
 - `YYYY-MM-DD_<change-id>_execution_todos.md`：活跃 change 的执行协作板，用于多人协作、Gate 冻结与回写。
-- `2026-02-27_full_design_review_gap_analysis.md`：全量设计文档评审差异分析（第二轮刷新，持续治理中）。
-- `2026-02-27_full_design_review_gap_todo.md`：全量设计文档评审对应 TODO 清单（持续治理中）。
-- `2026-02-27_design_reconstructability_gap_analysis.md`：可重建性差异分析（P0/P1 已闭环，后续与 full-review 联动）。
-- `2026-02-27_design_reconstructability_gap_todo.md`：可重建性治理 TODO 清单（已回写 done，待按周期归档）。
+- `archive/2026-02-27_full_design_review_gap_analysis.md`：全量设计文档评审差异分析（第二轮，已归档）。
+- `archive/2026-02-27_full_design_review_gap_todo.md`：全量设计文档评审对应 TODO 清单（全部 done，已归档）。
+- `archive/2026-02-27_design_reconstructability_gap_analysis.md`：可重建性差异分析（P0/P1 闭环，已归档）。
+- `archive/2026-02-27_design_reconstructability_gap_todo.md`：可重建性治理 TODO 清单（全部 done，已归档）。
 - `archive/2026-03-02_client_cli_host_orchestration_gap_analysis.md`：Issue #135 的 `/client` 宿主编排协议差距分析（已归档，2026-03-03 完成 A/B/C/D 全部切片）。
 - `archive/2026-03-02_client_cli_host_orchestration_master_todo.md`：Issue #135 对应 master TODO 与切片规划（已归档，2026-03-03 完成 A/B/C/D 全部切片）。
 - `archive/2026-02-27_design_code_gap_analysis.md`：当前设计与实现差异分析基线（文档先行治理，已归档）。
@@ -34,14 +34,18 @@
 
 ## 3. 文档生命周期
 
+切片命名规范（统一）：
+- Domain execution：`D*_a/b/c`（例如 `D3_a`）。
+- Project execution：`T*-*_a/b/c`（例如 `T1-2_a`）。
+
 每个 TODO 项都建议包含以下字段：
 
 - `ID`：唯一标识（如 `T1-3`）。
 - `Priority`：`P0/P1/P2/P3`。
 - `Status`：`todo` / `doing` / `blocked` / `done` / `dropped`。
 - `Owner`：责任人或责任小组。
-- `Claim Status`：`planned` / `active` / `released` / `done` / `expired`。
-- `Claim Expires`：认领过期时间（`YYYY-MM-DD`）。
+- `Claim Status`：`planned` / `active` / `done` / `deprecated`。
+- `Claim Expires`：认领过期时间（`YYYY-MM-DD`，到期后回退 `planned`）。
 - `Evidence`：验证命令、测试结果、PR/commit 或文档链接。
 - `Last Updated`：最后更新时间（`YYYY-MM-DD`）。
 
@@ -59,9 +63,9 @@
 - `Claim ID`：唯一认领编号（如 `CLM-20260302-A1`）。
 - `TODO Scope`：被认领的 TODO ID 范围（如 `T5-2`、`D2-1~D2-4`）。
 - `Owner`：当前负责人。
-- `Status`：`planned` / `active` / `released` / `done` / `expired`。
+- `Status`：`planned` / `active` / `done` / `deprecated`。
 - `Declared At`：声明时间（`YYYY-MM-DD`）。
-- `Expires At`：过期时间（建议 1-7 天，超时需续期或释放）。
+- `Expires At`：过期时间（建议 1-7 天，超时需续期或回退 `planned`）。
 - `OpenSpec Change`：对应 change-id；尚未建立时写 `pending`。
 - `Notes`：冲突说明、续期原因、交接备注。
 
@@ -69,8 +73,20 @@
 
 - 在 TODO 进入实现前，必须先写入 `Claim Ledger`。
 - 同一 TODO scope 在同一时刻只能有一个 `planned/active` 认领。
-- 到期未续期的认领应转为 `expired`，并允许他人重新认领。
+- 到期未续期的认领应回退为 `planned`，并允许他人重新认领。
 - `Claim Ledger` 只声明 ownership，不替代 active change 的协作拆包。
+
+状态定义与 Owner 约束：
+- `planned`：已拆分待认领；`Owner` 可空。
+- `active`：已认领执行中；`Owner` 必填。
+- `done`：认领范围已完成；`Owner` 必填。
+- `deprecated`：历史 claim 废弃（被拆分/替代/范围失效）；除 `Notes` 列外整行单元格都应加删除线（含 `Claim ID`、`TODO Scope`、`Owner`、`Status`、日期与 `OpenSpec Change`）；`Owner` 为空时可写 `N/A` 并加删除线。
+
+Claim 状态流转（推荐）：
+- 主路径：`planned -> active -> done`
+- 回退路径：`active -> planned`
+- 超时路径：`planned/active -> planned(重新认领)`
+- 替换路径：`planned(聚合占位) -> deprecated -> planned(子切片 claim)`
 
 ## 4. Spec-Driven 协作粒度
 

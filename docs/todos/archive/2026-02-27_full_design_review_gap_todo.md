@@ -1,6 +1,6 @@
 # 2026-02-27 全量设计文档 Review：TODO 清单（第二轮刷新）
 
-> 来源：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`  
+> 来源：`docs/todos/archive/2026-02-27_full_design_review_gap_analysis.md`  
 > 说明：所有项必须映射 Gap ID，并附可定位证据。
 
 ## 认领声明（Claim Ledger）
