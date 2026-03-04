@@ -1,6 +1,6 @@
-# AgentScope 迁移 Domain 执行清单（详细设计输入版，4人协同）
+# AgentScope 迁移 Domain 执行清单（详细设计输入版：依赖/重要度/复杂度拆分）
 
-> 更新日期：2026-03-02  
+> 更新日期：2026-03-04  
 > 输入基线：  
 > - `docs/design/archive/agentscope-migration-framework-gaps.md`  
 > - `examples/10-agentscope-compat-single-agent/DESIGN.md`  
@@ -13,18 +13,25 @@
 - 不做 HITL 闭环；本轮关注完整权限模型与工具调用权限治理。
 - `client send` 升级为：`content: string` + `uris: list` + `metadata`。
 - `context.assemble` 负责把 `content + uris` 归一化为内部 message 结构。
+- 当前并行约束：最多 3 个并行 active slice（最多 3 个 active claim）；拆分主轴为依赖关系、重要度、复杂度。
 
 ## 0.1 认领声明（Claim Ledger）
 
 > 用途：对本清单中的 TODO 先做执行声明，避免多人并行修改同一子域。  
-> 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；到期需续期或释放。
+> 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；到期需续期或回退 `planned`。
+> Owner 来源：历史 claim 的 owner 继承自已登记记录（2026-03-02 起）；新拆分但未分配的 claim，`Owner` 保持为空。
 
 | Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Notes |
 |---|---|---|---|---|---|---|---|
-| CLM-20260302-D2D4 | D2-1~D2-4, D4-1~D4-4 | zts212653 | active | 2026-03-02 | 2026-03-09 | `agentscope-d2-d4-thinking-transport` | 先处理 P0/P1 的 thinking 与 transport 协议统一（PR #134 review 中）。 |
-| CLM-20260302-D5 | D5-1~D5-4 | zts212653 | active | 2026-03-02 | 2026-03-09 | `agentscope-d5-safe-compression` | D5 实现与回归已完成，PR #136 待审。 |
-| CLM-20260302-D7 | D7-1~D7-4 | zts212653 | planned | 2026-03-02 | 2026-03-09 | `agentscope-d7-plan-state-tools` | plan 状态机与 finish/revise 原生工具补齐。 |
-| CLM-20260302-D1D3 | D1-1~D1-4, D3-1~D3-4 | zts212653 | planned | 2026-03-02 | 2026-03-09 | `agentscope-d1-d3-message-pipeline` | 多模态输入 schema 与 assemble normalize。 |
+| CLM-20260302-D2D4 | D2-1~D2-4, D4-1~D4-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | D2/D4 已完成实现与回归，进入归档/门禁证据补齐。 |
+| CLM-20260302-D5 | D5-1~D5-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d5-safe-compression` | D5 已合入主干（PR #136）。 |
+| CLM-20260302-D7 | D7-1~D7-4 | lang | active | 2026-03-02 | 2026-03-10 | `agentscope-d7-plan-state-tools` | 代码和回归已完成，当前处理 PR/merge gate 收尾。 |
+| ~~CLM-20260302-D1D3~~ | ~~D1_a..D1_c, D3_a..D3_c~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | 历史聚合认领已废弃；后续以 D1S/D3S 子切片 claim 为准。 |
+| ~~CLM-20260303-D6D8~~ | ~~D6_a..D6_c, D8_a..D8_c~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | 聚合占位 claim 已废弃；后续以 D6S/D8S 子切片 claim 为准。 |
+| CLM-20260304-D1S | D1_a~D1_c |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配：输入协议与错误码切片待认领。 |
+| CLM-20260304-D3S | D3_a~D3_c |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配：assemble/URI/降级切片待认领。 |
+| CLM-20260304-D6S | D6_a~D6_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配：权限模型与 gateway 接入切片待认领。 |
+| CLM-20260304-D8S | D8_a~D8_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配：观测日志与脚本治理切片待认领。 |
 
 ---
 
@@ -275,14 +282,67 @@
 
 ---
 
-## 5. 四人并行分工（基于依赖最小阻塞）
+## 5. TODO 声明（按优先级 + 依赖）
 
-| 人员 | 主责 | 第一阶段产出 | 第二阶段产出 |
+> 主任务固定使用 `D*`，仅对强依赖/高复杂任务拆分为 `D*_a/D*_b/D*_c`。
+
+| Priority | TODO | 依赖声明 | 是否拆分 | 拆分切片 | 状态 | Owner |
+|---|---|---|---|---|---|---|
+| P0 | `D7` | 独立，可并行 | 否 | `D7` | active | lang |
+| P1 | `D1` | 无 | 是 | `D1_a/D1_b/D1_c` | planned |  |
+| P1 | `D3` | `D2 -> D3` | 是 | `D3_a/D3_b/D3_c` | planned |  |
+| P1 | `D6` | `D1 + D2 -> D6` | 是 | `D6_a/D6_b/D6_c` | planned |  |
+| P2 | `D8` | `D6 -> D8` | 是 | `D8_a/D8_b/D8_c` | planned |  |
+
+说明：`D2/D4/D5` 已完成，作为依赖基线输入，不再进入待分配池。
+
+### 5.1 依赖执行声明（派工前先看这个）
+
+- `D1`
+- `D2 -> D3`
+- `D1 + D2 -> D6`
+- `D6 -> D8`
+- `D7`（独立收尾）
+
+### 5.2 强依赖任务拆分明细
+
+| Domain | Slice | 范围 | Depends On | 复杂度 |
+|---|---|---|---|---|
+| `D1` | `D1_a` | `ClientSend`/`UriAttachment` schema 定义 | 无 | 中 |
+| `D1` | `D1_b` | 输入约束与错误码主集合 | `D1_a` | 高 |
+| `D1` | `D1_c` | Message 块结构与兼容适配 | `D1_a` | 高 |
+| `D3` | `D3_a` | assemble normalize 主流程接入 | `D1_c` + D2-2 | 高 |
+| `D3` | `D3_b` | URI resolver/policy（元信息优先） | `D1_b` | 中-高 |
+| `D3` | `D3_c` | 多模型降级策略 + D3 回归 | `D3_a` + `D3_b` | 高 |
+| `D6` | `D6_a` | policy types/evaluator 接口 | `D1_b` + D2-3 | 高 |
+| `D6` | `D6_b` | gateway gate 接入（deny/approve_required） | `D6_a` | 高 |
+| `D6` | `D6_c` | risk/schema -> policy rules + 审计字段 | `D6_b` | 高 |
+| `D8` | `D8_a` | 日志字段规范与 helper | `D6_c` | 中 |
+| `D8` | `D8_b` | transport 事件可检索链路 | `D8_a` + D4-3 | 中-高 |
+| `D8` | `D8_c` | 脱敏采样 + 覆盖检查脚本 | `D8_b` | 中 |
+
+执行规则：
+1. 一个 `active claim` 只认领一个切片（`D*_a/b/c`），不跨切片打包认领。
+2. 切片完成后先补 evidence，再进入下个切片。
+3. 严格按依赖顺序启动，禁止先做下游再回填上游。
+4. 任一时刻最多 3 个 `active` 切片并行。
+
+### 5.3 阶段化编号（a/b/c...）
+
+| 阶段 | 编号 | 对应切片 | 目标 |
 |---|---|---|---|
-| Dev-A | D1 + D2 + D3 | Gate-1：`ClientSend` + transport 类型冻结 | Gate-2：assemble 归一化冻结 |
-| Dev-B | D6 | Gate-3：policy gate + decision 结构冻结 | 权限审计证据落地 |
-| Dev-C | D7 | plan 状态机 + finish/revise 工具 | plan 全流程回归 |
-| Dev-D | D4 + D5 + D8 | thinking/usage + 压缩策略实现 | 事件观测与全链路联调 |
+| 第一阶段（基线与协议冻结） | `a` | `D7` | D7 收尾 + 已完成域状态对齐 |
+| 第一阶段（基线与协议冻结） | `b` | `D1_a` | 输入 schema 基线定义 |
+| 第一阶段（基线与协议冻结） | `c1` | `D1_b` | 输入约束与错误码冻结 |
+| 第一阶段（基线与协议冻结） | `c2` | `D1_c` | Message 块结构与兼容适配冻结 |
+| 第一阶段（基线与协议冻结） | `c3` | Gate-1 验收 | 完成 `ClientSend/UriAttachment/error-code` 冻结验收 |
+| 第二阶段（核心链路实现） | `d` | `D3_a` | assemble normalize 主流程接入 |
+| 第二阶段（核心链路实现） | `e1` | `D3_b` + `D3_c` | URI resolver 与降级策略闭环 |
+| 第二阶段（核心链路实现） | `e2` | `D6_a` | policy model/evaluator 接口落地 |
+| 第二阶段（核心链路实现） | `f` | `D6_b` + `D6_c` | gateway gate + risk 映射 + 审计字段冻结 |
+| 第三阶段（观测与联调收敛） | `g` | `D8_a` | 日志字段规范冻结 |
+| 第三阶段（观测与联调收敛） | `h1` | `D8_b` | transport 事件可检索链路打通 |
+| 第三阶段（观测与联调收敛） | `h2` | `D8_c` + Gate-4 验收 | 脱敏采样、检查脚本与全链路验收 |
 
 ---
 

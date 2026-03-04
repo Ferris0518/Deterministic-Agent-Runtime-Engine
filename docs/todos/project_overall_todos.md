@@ -1,34 +1,40 @@
 # DARE Framework 项目总体 TODO
 
-> 更新时间：2026-03-02  
+> 更新时间：2026-03-04  
 > 范围：项目全局演进（非单个 feature 的实现方案）
 
 ## 1. 目标与边界
 
 - 目标：持续收敛 `docs/design` 目标架构与 `dare_framework/` 当前实现，优先保证可运行、可验证、可审计。
 - 边界：这里只记录跨模块、跨阶段事项；具体任务拆解进入 OpenSpec 与模块文档。
+- 当前并行约束：最多 3 人并行开发（同一时刻最多 3 个 `active` claim），但任务拆分主轴以“依赖关系 + 重要程度 + 复杂度”为准。
 
 ## 1.1 认领声明（Claim Ledger）
 
 > 用途：在进入执行前先声明 TODO 负责人与范围，避免多人并行冲突。  
-> 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；过期需续期或释放。
+> 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；到期需续期或回退 `planned`。
+> Owner 来源：历史 claim 的 owner 继承自已登记记录（2026-03-02 起）；新拆分但未分配的 claim，`Owner` 保持为空。
 
 | Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Notes |
 |---|---|---|---|---|---|---|---|
-| CLM-20260302-AG1 | T5-2 | zts212653 | active | 2026-03-02 | 2026-03-09 | `agentscope-d2-d4-thinking-transport` | 对齐 D2/D4：thinking + transport 事件链路（PR #134 review 中）。 |
-| CLM-20260302-AG2 | T2-1 | zts212653 | active | 2026-03-02 | 2026-03-09 | `agentscope-d5-safe-compression` | 对齐 D5：安全压缩与预算收敛（PR #136 待审）。 |
-| CLM-20260302-AG3 | D7-1~D7-4（关联 T5-5） | zts212653 | planned | 2026-03-02 | 2026-03-09 | `agentscope-d7-plan-state-tools` | 先按 AgentScope gap 切片推进 plan 状态机能力。 |
-| CLM-20260302-AG4 | T5-3 | zts212653 | planned | 2026-03-02 | 2026-03-09 | `agentscope-d1-d3-message-pipeline` | 对齐 D1/D3：多模态输入 schema + normalize。 |
+| CLM-20260302-AG1 | T5-2 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | D2/D4 已完成实现与回归，待补归档/门禁链接。 |
+| ~~CLM-20260302-AG2~~ | ~~T2-1~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-03~~ | ~~`agentscope-d5-safe-compression`~~ | D5 已在 PR #136 合入；该历史 claim 已废弃，不再作为当前认领入口。 |
+| CLM-20260302-AG3 | D7-1~D7-4（关联 T5-5） | lang | active | 2026-03-02 | 2026-03-10 | `agentscope-d7-plan-state-tools` | 代码与测试已完成，当前进入 review/merge gate 收尾。 |
+| ~~CLM-20260302-AG4~~ | ~~D1_a..D1_c, D3_a..D3_c（映射 T5-3）~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | 历史聚合认领已废弃；后续以 AG6 子切片 claim 为准。 |
+| ~~CLM-20260303-AG5~~ | ~~D6_a..D6_c, D8_a..D8_c（关联 T5-4）~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | 聚合占位 claim 已废弃；后续以 AG7 子切片 claim 为准。 |
+| CLM-20260304-AG6 | T5-3（D1_a~D1_c, D3_a~D3_c） |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配，详见 AgentScope Claim Ledger。 |
+| CLM-20260304-AG7 | T5-4（D6_a~D6_c, D8_a~D8_c） |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配，详见 AgentScope Claim Ledger。 |
+| CLM-20260304-AG8 | T1-2_a~T1-2_c, T1-5_a~T1-5_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 项目层高复杂切片已拆分，尚未分配负责人。 |
+| CLM-20260304-AG9 | T2-3_a~T2-3_b, T2-4_a~T2-4_b |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 项目层治理切片已拆分，尚未分配负责人。 |
 
 ## 2. 当前基线
 
-- 测试基线（审查时）：`.venv/bin/pytest -q` => `504 passed, 12 skipped, 1 warning`。
+- 测试基线（2026-03-03）：`.venv/bin/pytest -q` => `1 failed, 642 passed, 12 skipped, 1 warning`。
 - 关键问题聚类：
-  - 交互动作枚举与 transport slash-action 解析契约存在边界不一致（待持续回归监控）。
-  - CLI 审批命令调用参数方式与 handler 签名不一致。
-  - 内置 prompt 与测试约定不一致。
+  - `search_file` 输出路径契约回归：实现返回绝对路径，测试期望相对路径（`tests/unit/test_v4_file_tools.py::test_search_file_finds_matching_paths`）。
+  - 全量 TODO / Claim / Feature 状态存在漂移（已 merge 或 archived 的 change 仍标记 active/draft）。
   - 若干 package `__init__.py` 不满足 facade 约束。
-- 设计已定义但实现未闭环：`ISecurityBoundary` 接入、plan 驱动执行、EventLog 默认实现、Context 检索融合、完整 HITL 语义。
+- 设计已定义但实现未闭环：plan attempt 隔离（snapshot/rollback）、Context 检索融合、完整 HITL 语义、P0 conformance gate 与治理自动化门禁。
 
 ## 3. 优先级路线图
 
@@ -49,6 +55,10 @@
   Last Updated: `2026-03-01`
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
+- [ ] T0-6 修复 `search_file` 输出路径契约回归（绝对路径 vs 相对路径）。  
+  Status: `todo`  
+  Evidence: `.venv/bin/pytest -q` 失败用例 `tests/unit/test_v4_file_tools.py::test_search_file_finds_matching_paths`；实现位置 `dare_framework/tool/_internal/tools/search_file.py`  
+  Last Updated: `2026-03-03`
 
 验收：
 
@@ -88,11 +98,76 @@
 - [ ] T3-3 降低 legacy/archived 测试占比，补 canonical 覆盖。
 - [ ] T3-4 固化质量门禁：`ruff` / `black --check` / `mypy --strict` / `pytest`。
 
-## 4. 执行节奏建议
+## 4. 任务拆分（依赖关系 × 重要程度 × 复杂度）
 
-- Phase A（1-2 周）：优先完成 P0。
-- Phase B（2-4 周）：推进 P1。
-- Phase C（持续）：滚动推进 P2/P3。
+### 4.0 编号治理（去重后）
+
+1. `T*`：项目级主清单编号，仅在本文件维护优先级、阶段与里程碑状态。
+2. `D*`：AgentScope domain 编号，仅在 `docs/todos/agentscope_domain_execution_todos.md` 维护子任务状态与依赖。
+3. `WP*`：不再作为独立编号维护；AgentScope 细切统一使用 `D*_a/b/c`。
+4. 同一工作项不得在 `T*` 和 `D*` 两侧重复维护“子切片状态”。
+
+### 4.1 项目层分层（T 编号）
+
+| 分层 | 目标 | 重要程度 | 复杂度 | 关键依赖 | 关联 T |
+|---|---|---|---|---|---|
+| Layer-0 基线阻塞层 | 清零当前红灯，恢复可持续开发基线 | P0 | 中 | 无 | `T0-4` `T0-5` `T0-6` |
+| Layer-1 运行时闭环层 | 关闭核心架构缺口 | P1 | 高 | Layer-0 | `T1-2` `T1-3` `T1-5` |
+| Layer-2 治理能力层 | 收敛上下文/策略/记忆治理能力 | P1/P2 | 高 | Layer-1 | `T2-1` `T2-2` `T2-3` `T2-4` `T5-1` |
+| Layer-3 工程化层 | 质量门禁与文档治理闭环 | P2/P3 | 中-高 | Layer-0~2 | `T3-1` `T3-2` `T3-3` `T3-4` `T4-2` `T4-3` `T5-5` |
+| Layer-AS AgentScope 专项层 | 多模态输入与权限/观测链路 | P1/P2 | 高 | Gate-1 / Gate-3（按 D 域冻结） | `T5-3` `T5-4` |
+
+### 4.2 T 与 D 映射（单向引用，避免重叠跟踪）
+
+| 项目级 T | AgentScope 域映射 | 详细拆分位置 | 状态口径来源 |
+|---|---|---|---|
+| `T5-2` | `D2 + D4` | `docs/todos/agentscope_domain_execution_todos.md` | AgentScope 清单的 `Claim Ledger` + `D*` 状态 |
+| `T2-1` | `D5` | `docs/todos/agentscope_domain_execution_todos.md` | AgentScope 清单的 `Claim Ledger` + `D*` 状态 |
+| `T5-3` | `D1 + D3` | `docs/todos/agentscope_domain_execution_todos.md`（`D1_a/b/c`，`D3_a/b/c`） | AgentScope 清单的 `Claim Ledger` + `D*` 状态 |
+| `T5-4` | `D6 + D8` | `docs/todos/agentscope_domain_execution_todos.md`（`D6_a/b/c`，`D8_a/b/c`） | AgentScope 清单的 `Claim Ledger` + `D*` 状态 |
+| `T5-5`（AgentScope 范围） | `D7` | `docs/todos/agentscope_domain_execution_todos.md` | AgentScope 清单的 `Claim Ledger` + `D*` 状态 |
+
+说明：本文件只维护上述 `T*` 的“是否进入下一阶段”结果，不维护 `D*` 子切片进度。
+
+### 4.3 强依赖/高复杂拆分规则（项目层）
+
+以下条件任一满足，必须拆分为子切片后再认领：
+1. 存在明确上游冻结依赖（schema/payload/policy 字段未冻结时下游无法稳定开发）。
+2. 预计跨 3 个及以上核心目录（例如 `agent/context/tool/transport/observability`）改动。
+3. 同时包含“行为变更 + 契约变更 + 回归门禁”三类交付。
+4. 若任务已映射到 AgentScope `D*`，拆分只在 AgentScope 清单执行，不在本文件重复拆分。
+
+### 4.4 项目层需独立拆分的复杂项（非 AgentScope）
+
+| 父任务 | 子切片 ID | 子切片范围 | 依赖 | 复杂度 |
+|---|---|---|---|---|
+| `T1-2` plan attempt 隔离 | `T1-2_a` | snapshot 持久化与回滚点定义 | Layer-0 | 中 |
+| `T1-2` plan attempt 隔离 | `T1-2_b` | execute/verify 失败回滚路径接入 | `T1-2_a` | 高 |
+| `T1-2` plan attempt 隔离 | `T1-2_c` | 回滚一致性回归与证据补齐 | `T1-2_b` | 中 |
+| `T1-5` HITL 语义闭环 | `T1-5_a` | pause/wait/resume 状态机与错误语义 | Layer-1 | 高 |
+| `T1-5` HITL 语义闭环 | `T1-5_b` | `plan/tool` 双入口语义对齐 | `T1-5_a` | 高 |
+| `T1-5` HITL 语义闭环 | `T1-5_c` | HITL 端到端回归与运维排障说明 | `T1-5_b` | 中 |
+| `T2-3` tool defs 与风险映射 | `T2-3_a` | tool defs schema 统一 | Layer-1 | 高 |
+| `T2-3` tool defs 与风险映射 | `T2-3_b` | risk level 到 policy 映射 | `T2-3_a` | 高 |
+| `T2-4` 审批记忆与策略引擎 | `T2-4_a` | approval memory 数据面统一 | `T2-3_b` | 高 |
+| `T2-4` 审批记忆与策略引擎 | `T2-4_b` | policy 决策链路与审计证据联动 | `T2-4_a` | 高 |
+
+### 4.5 阶段化执行编号（用于派工）
+
+| 阶段 | 编号 | 对应切片 | 目标 |
+|---|---|---|---|
+| 第一阶段（阻塞清零 + 契约冻结） | `a` | `T0-6` | 修复红灯用例，恢复全量基线入口 |
+| 第一阶段（阻塞清零 + 契约冻结） | `b` | `T0-4` + `T0-5` | facade 合规 + 失败映射责任化 |
+| 第一阶段（阻塞清零 + 契约冻结） | `c1` | `T5-3`（执行看 `D1_a/b/c`） | 多模态输入协议冻结（Gate-1） |
+| 第一阶段（阻塞清零 + 契约冻结） | `c2` | `T2-3_a` | tool defs schema 统一 |
+| 第一阶段（阻塞清零 + 契约冻结） | `c3` | `T2-3_b` | risk level 与 policy 映射冻结 |
+| 第二阶段（核心闭环实现） | `d` | `T1-2_a` + `T1-2_b` + `T1-2_c` | plan attempt 隔离闭环 |
+| 第二阶段（核心闭环实现） | `e1` | `T1-5_a` + `T1-5_b` | HITL 语义状态机与双入口对齐 |
+| 第二阶段（核心闭环实现） | `e2` | `T2-4_a` + `T2-4_b` | 审批记忆与策略引擎联动 |
+| 第二阶段（核心闭环实现） | `f` | `T5-4`（执行看 `D6_a/b/c`） | 权限与审计链路冻结（Gate-3） |
+| 第三阶段（治理与发布门禁） | `g` | `T3-1` + `T3-2` | 文档冲突收敛 + 差异模板固定 |
+| 第三阶段（治理与发布门禁） | `h1` | `T3-3` + `T3-4` | 测试结构治理 + 质量门禁 CI 固化 |
+| 第三阶段（治理与发布门禁） | `h2` | `T5-5` + 治理门禁清单 | 架构设计收口与证据门禁闭环 |
 
 ## 5. 维护规则
 
@@ -131,10 +206,12 @@
   范围：补齐 session 生命周期内/跨 session 的 context 读写、恢复、版本化与兼容策略（含失败回滚与迁移策略）；统一接入 context 自动压缩与 session summary 交接链路。  
   交付：最小可用持久化方案 + 回归测试 + 运维排障说明。
 
-- [ ] T5-2 工具调用与 LLM thinking 通过 transport send 输出（含消息类型枚举）  
-  Status: `todo`  
-  范围：将 tool call 中间态、LLM thinking/trace 信息通过统一 transport 通道发送；补齐并统一对应消息类型枚举与序列化协议。  
-  交付：端到端消息流测试（sender/transport/receiver）+ 向后兼容策略。
+- [x] T5-2 工具调用与 LLM thinking 通过 transport send 输出（含消息类型枚举）  
+  Status: `done`  
+  范围：tool call 中间态、LLM thinking/trace 信息通过统一 transport 通道输出，消息类型枚举与序列化协议已对齐。  
+  交付：端到端消息流测试（sender/transport/receiver）+ 向后兼容策略。  
+  Evidence：`openspec/changes/archive/2026-03-03-agentscope-d2-d4-thinking-transport/`，`docs/features/agentscope-d2-d4-thinking-transport.md`，`.venv/bin/pytest -q`（`528 passed, 12 skipped, 1 warning`）  
+  Last Updated: `2026-03-03`
 
 - [ ] T5-3 图片/音频/视频富媒体消息格式支持  
   Status: `todo`  
@@ -163,22 +240,22 @@
   Status: `done`
   范围：覆盖 `docs/design/Architecture.md` 与 `docs/design/modules/*/README.md`，修正与实现冲突的状态断言，并收敛 security canonical 导入路径。
   交付：full review gap 分析 + TODO 清单 + 对应实现/文档修复。  
-  Evidence：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/2026-02-27_full_design_review_gap_todo.md`，`dare_framework/security/__init__.py`
+  Evidence：`docs/todos/archive/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/archive/2026-02-27_full_design_review_gap_todo.md`，`dare_framework/security/__init__.py`
 
 - [x] T6-3 推进“按文档可重建”治理闭环（P0/P1）
   Status: `done`
   范围：基于可重建性 gap 分析，优先补齐追踪矩阵、审批语义决策表、重建 SOP 三项 P0。
-  交付：`docs/todos/2026-02-27_design_reconstructability_gap_analysis.md` + `docs/todos/2026-02-27_design_reconstructability_gap_todo.md` 对应事项回写完成。  
+  交付：`docs/todos/archive/2026-02-27_design_reconstructability_gap_analysis.md` + `docs/todos/archive/2026-02-27_design_reconstructability_gap_todo.md` 对应事项回写完成。  
   Evidence：`openspec/changes/archive/2026-02-27-close-design-reconstructability-gaps/`，`docs/design/Design_Reconstructability_Traceability_Matrix.md`，`docs/guides/Design_Reconstruction_SOP.md`
 
 - [x] T6-4 补齐模块级测试锚点与 embedding 最小测试基线
   Status: `done`
   范围：基于 full review 第二轮结论，为 `docs/design/modules/*/README.md` 补齐测试锚点；为 embedding 域补最小单测并回写文档证据。
-  交付：`docs/todos/2026-02-27_full_design_review_gap_todo.md` 中 FR-009/FR-011 状态闭环。
-  Evidence：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/2026-02-27_full_design_review_gap_todo.md`，`tests/unit/test_embedding_openai_adapter.py`
+  交付：`docs/todos/archive/2026-02-27_full_design_review_gap_todo.md` 中 FR-009/FR-011 状态闭环。
+  Evidence：`docs/todos/archive/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/archive/2026-02-27_full_design_review_gap_todo.md`，`tests/unit/test_embedding_openai_adapter.py`
 
 - [x] T6-5 补 memory/knowledge 域直连单测并替换过渡声明
   Status: `done`
   范围：关闭 FR-GAP-011，对 `memory/knowledge` 域补齐直连单测，移除当前“组合验证锚点 + 缺失声明”的过渡状态。
-  交付：`docs/todos/2026-02-27_full_design_review_gap_todo.md` 中 FR-012 状态闭环。
-  Evidence：`docs/todos/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/2026-02-27_full_design_review_gap_todo.md`，`tests/unit/test_memory_knowledge_direct.py`
+  交付：`docs/todos/archive/2026-02-27_full_design_review_gap_todo.md` 中 FR-012 状态闭环。
+  Evidence：`docs/todos/archive/2026-02-27_full_design_review_gap_analysis.md`，`docs/todos/archive/2026-02-27_full_design_review_gap_todo.md`，`tests/unit/test_memory_knowledge_direct.py`

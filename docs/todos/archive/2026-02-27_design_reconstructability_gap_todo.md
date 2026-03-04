@@ -1,6 +1,6 @@
 # 2026-02-27 可重建性 Gap TODO（P0/P1）
 
-> 来源：`docs/todos/2026-02-27_design_reconstructability_gap_analysis.md`  
+> 来源：`docs/todos/archive/2026-02-27_design_reconstructability_gap_analysis.md`  
 > 执行模型：文档先行 -> OpenSpec change -> 实施 -> 回写证据 -> 归档
 
 ## 认领声明（Claim Ledger）

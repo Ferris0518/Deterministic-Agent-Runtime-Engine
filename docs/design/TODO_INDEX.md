@@ -1,6 +1,6 @@
 # Design TODO Index
 
-> Status: refreshed after full review (2026-02-27).
+> Status: refreshed after full review (2026-03-03).
 >
 > 用途：集中查看当前架构/模块设计文档中的 TODO，便于分工与追踪。
 
@@ -10,8 +10,8 @@
 - [x] A-103 统一输出数据形状（`RunResult.output` envelope: `content/metadata/usage`）
 
 ## agent
-- [ ] DareAgent 按 loop 职责拆分，降低单文件复杂度。(`docs/design/modules/agent/TODO.md`)
-- [ ] 统一跨 agent 的 output 数据形状。(`docs/design/modules/agent/TODO.md`)
+- [x] DareAgent 按 loop 职责拆分，降低单文件复杂度。(`docs/design/modules/agent/TODO.md`)
+- [x] 统一跨 agent 的 output 数据形状。(`docs/design/modules/agent/TODO.md`)
 - [ ] 对齐 Plan 与 Tool 两个入口的审批语义（包含 wait/resume 一致性）。(`docs/design/modules/agent/DareAgent_Detailed.md`)
 
 ## context
