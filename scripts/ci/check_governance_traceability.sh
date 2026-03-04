@@ -411,9 +411,6 @@ check_feature_doc() {
     matched=0
     while IFS= read -r candidate; do
       [[ -z "$candidate" ]] && continue
-      if ! file_has_discrete_token "$candidate" "$todo_id"; then
-        continue
-      fi
       while IFS= read -r change_id; do
         [[ -z "$change_id" ]] && continue
         if file_has_tokens_in_same_record "$candidate" "$todo_id" "$change_id"; then

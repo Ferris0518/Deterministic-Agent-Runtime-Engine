@@ -388,6 +388,39 @@ Skill contract (minimum two skills):
         self.assertEqual(result.returncode, 0)
         self.assertIn("passed", result.stdout)
 
+    def test_gate_accepts_claim_scope_range_without_explicit_todo_token(self) -> None:
+        def mutate(root: Path) -> None:
+            todo_doc = root / "docs" / "todos" / "demo_master_todo.md"
+            todo_doc.write_text(
+                """# Demo TODO
+
+## Claim Ledger
+| Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Notes |
+|---|---|---|---|---|---|---|---|
+| CLM-DEMO | D2-1~D2-4, D4-1~D4-4 | demo | active | 2026-03-03 | 2026-03-10 | `demo-change` | demo |
+
+## Detail Board
+| ID | Task | Status |
+|---|---|---|
+| D2-1 | task 1 | done |
+| D2-2 | task 2 | done |
+""",
+                encoding="utf-8",
+            )
+            feature_doc = root / "docs" / "features" / "demo-change.md"
+            feature_doc.write_text(
+                feature_doc.read_text(encoding="utf-8").replace(
+                    'todo_ids: ["D2-1", "D2-2"]',
+                    'todo_ids: ["D4-3"]',
+                ),
+                encoding="utf-8",
+            )
+
+        result = self._run_gate(mutate)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("passed", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
