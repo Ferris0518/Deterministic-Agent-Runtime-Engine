@@ -1,7 +1,7 @@
 ## 1. Baseline artifacts
 
-- [x] 1.1 Create reconstructability gap analysis (`docs/todos/2026-02-27_design_reconstructability_gap_analysis.md`).
-- [x] 1.2 Create reconstructability TODO list (`docs/todos/2026-02-27_design_reconstructability_gap_todo.md`).
+- [x] 1.1 Create reconstructability gap analysis (`docs/todos/archive/2026-02-27_design_reconstructability_gap_analysis.md`).
+- [x] 1.2 Create reconstructability TODO list (`docs/todos/archive/2026-02-27_design_reconstructability_gap_todo.md`).
 - [x] 1.3 Register entries in TODO index files (`docs/todos/README.md`, `docs/todos/project_overall_todos.md`).
 
 ## 2. P0 reconstructability closure
