@@ -13,6 +13,7 @@ from dare_framework.tool.types import RunContext
 DEFAULT_MAX_BYTES = 1_000_000
 DEFAULT_MAX_RESULTS = 50
 DEFAULT_IGNORE_DIRS = [".git", "node_modules", "__pycache__", ".venv", "venv"]
+_ROOT_PREFIX = "@root["
 
 
 def get_tool_config(context: RunContext[Any], tool_name: str) -> dict[str, Any]:
@@ -93,6 +94,9 @@ def resolve_path(path_value: Any, roots: list[Path]) -> tuple[Path, Path]:
     """Resolve a path value against workspace roots."""
     if not isinstance(path_value, str) or not path_value.strip():
         raise ToolError(code="INVALID_PATH", message="path is required", retryable=False)
+    prefixed_root = _parse_prefixed_root_path(path_value, roots)
+    if prefixed_root is not None:
+        return prefixed_root
     candidate = Path(path_value).expanduser()
     if candidate.is_absolute():
         resolved = candidate.resolve()
@@ -104,6 +108,36 @@ def resolve_path(path_value: Any, roots: list[Path]) -> tuple[Path, Path]:
     resolved = (root / candidate).resolve()
     if not _is_relative_to(resolved, root):
         raise ToolError(code="PATH_NOT_ALLOWED", message="path is outside workspace roots")
+    return resolved, root
+
+
+def _parse_prefixed_root_path(path_value: str, roots: list[Path]) -> tuple[Path, Path] | None:
+    """Parse @root[n]/relative/path references used by file search outputs."""
+    if not path_value.startswith(_ROOT_PREFIX):
+        return None
+
+    marker_end = path_value.find("]/")
+    if marker_end <= len(_ROOT_PREFIX):
+        raise ToolError(code="INVALID_PATH", message="invalid root-prefixed path", retryable=False)
+
+    root_index_raw = path_value[len(_ROOT_PREFIX):marker_end]
+    try:
+        root_index = int(root_index_raw)
+    except ValueError as exc:
+        raise ToolError(code="INVALID_PATH", message="invalid root index in path", retryable=False) from exc
+
+    if root_index < 0 or root_index >= len(roots):
+        raise ToolError(code="PATH_NOT_ALLOWED", message="root index is outside workspace roots", retryable=False)
+
+    relative_fragment = path_value[marker_end + 2:]
+    relative_candidate = Path(relative_fragment)
+    if relative_candidate.is_absolute():
+        raise ToolError(code="PATH_NOT_ALLOWED", message="path is outside workspace roots", retryable=False)
+
+    root = roots[root_index]
+    resolved = (root / relative_candidate).resolve()
+    if not _is_relative_to(resolved, root):
+        raise ToolError(code="PATH_NOT_ALLOWED", message="path is outside workspace roots", retryable=False)
     return resolved, root
 
 

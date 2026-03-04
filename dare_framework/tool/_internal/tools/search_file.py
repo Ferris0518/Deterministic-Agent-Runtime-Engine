@@ -38,7 +38,10 @@ class SearchFileTool(ITool):
 
     @property
     def description(self) -> str:
-        return "Search file paths by glob pattern (e.g. *.py, src/**/*.ts). Returns paths as absolute paths. Use paths directly for read_file."
+        return (
+            "Search file paths by glob pattern (e.g. *.py, src/**/*.ts). "
+            "Returns workspace-relative paths; matches in non-primary roots are prefixed as @root[n]/."
+        )
 
     @property
     def input_schema(self) -> dict[str, Any]:
@@ -57,7 +60,11 @@ class SearchFileTool(ITool):
         return {
             "type": "object",
             "properties": {
-                "paths": {"type": "array", "items": {"type": "string"}, "description": "Absolute paths; use directly for read_file"},
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Workspace-relative paths. Non-primary roots are encoded as @root[n]/<path>.",
+                },
                 "total_matches": {"type": "integer"},
                 "truncated": {"type": "boolean"},
             },
@@ -143,18 +150,18 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
 
     if search_path.is_file():
         abs_path = search_path.resolve()
-        rel_path = _normalized_relative_path(abs_path, root)
-        if _match_pattern(pattern, rel_path):
-            matches.append(str(abs_path).replace("\\", "/"))
+        relative_path = _relative_path_for_match(abs_path, root)
+        if _match_pattern(pattern, relative_path):
+            matches.append(_display_relative_path(relative_path, root, roots))
     else:
         for dirpath, dirs, files in os.walk(search_path, topdown=True, followlinks=False):
             dirs[:] = [d for d in sorted(dirs) if d not in ignore_dirs]
             for filename in sorted(files):
                 abs_path = (Path(dirpath) / filename).resolve()
-                rel_path = _normalized_relative_path(abs_path, root)
-                if not _match_pattern(pattern, rel_path):
+                relative_path = _relative_path_for_match(abs_path, root)
+                if not _match_pattern(pattern, relative_path):
                     continue
-                matches.append(str(abs_path).replace("\\", "/"))
+                matches.append(_display_relative_path(relative_path, root, roots))
                 if len(matches) >= max_results:
                     truncated = True
                     break
@@ -178,8 +185,19 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
     )
 
 
-def _normalized_relative_path(path: Path, root: Path) -> str:
+def _relative_path_for_match(path: Path, root: Path) -> str:
     return relative_to_root(path, root).replace("\\", "/")
+
+
+def _display_relative_path(relative_path: str, root: Path, roots: list[Path]) -> str:
+    try:
+        root_index = roots.index(root)
+    except ValueError:
+        root_index = 0
+
+    if root_index <= 0:
+        return relative_path
+    return f"@root[{root_index}]/{relative_path}"
 
 
 def _match_pattern(pattern: str, relative_path: str) -> bool:
@@ -200,4 +218,3 @@ def _error_result(error: ToolError) -> ToolResult:
         error=error.message,
         evidence=[],
     )
-
