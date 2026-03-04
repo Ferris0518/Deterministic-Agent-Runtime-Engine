@@ -12,6 +12,7 @@ def test_package_initializers_follow_facade_pattern() -> None:
     2. No class or function definitions.
     3. Assignments allowed only for metadata (e.g., __all__, __version__).
     4. Imports allowed for re-exporting.
+    5. Star imports are prohibited.
     """
     repo_root = Path(__file__).resolve().parents[2]
     package_root = repo_root / "dare_framework"
@@ -68,6 +69,10 @@ def test_package_initializers_follow_facade_pattern() -> None:
                     violations.append(f"{path.relative_to(repo_root)}: Prohibited assignment (only __all__/__version__ etc allowed)")
 
             # Rule 4: Imports are allowed (for re-exporting)
+            if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+                violations.append(f"{path.relative_to(repo_root)}: Prohibited star import in package initializer")
+                continue
+
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 continue
             
