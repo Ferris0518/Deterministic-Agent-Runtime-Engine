@@ -38,7 +38,7 @@ class SearchFileTool(ITool):
 
     @property
     def description(self) -> str:
-        return "Search file paths by glob pattern (e.g. *.py, src/**/*.ts). Returns paths as absolute paths. Use paths directly for read_file."
+        return "Search file paths by glob pattern (e.g. *.py, src/**/*.ts). Returns workspace-relative paths."
 
     @property
     def input_schema(self) -> dict[str, Any]:
@@ -57,7 +57,7 @@ class SearchFileTool(ITool):
         return {
             "type": "object",
             "properties": {
-                "paths": {"type": "array", "items": {"type": "string"}, "description": "Absolute paths; use directly for read_file"},
+                "paths": {"type": "array", "items": {"type": "string"}, "description": "Workspace-relative paths"},
                 "total_matches": {"type": "integer"},
                 "truncated": {"type": "boolean"},
             },
@@ -145,7 +145,7 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
         abs_path = search_path.resolve()
         rel_path = _normalized_relative_path(abs_path, root)
         if _match_pattern(pattern, rel_path):
-            matches.append(str(abs_path).replace("\\", "/"))
+            matches.append(rel_path)
     else:
         for dirpath, dirs, files in os.walk(search_path, topdown=True, followlinks=False):
             dirs[:] = [d for d in sorted(dirs) if d not in ignore_dirs]
@@ -154,7 +154,7 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
                 rel_path = _normalized_relative_path(abs_path, root)
                 if not _match_pattern(pattern, rel_path):
                     continue
-                matches.append(str(abs_path).replace("\\", "/"))
+                matches.append(rel_path)
                 if len(matches) >= max_results:
                     truncated = True
                     break
@@ -200,4 +200,3 @@ def _error_result(error: ToolError) -> ToolResult:
         error=error.message,
         evidence=[],
     )
-
