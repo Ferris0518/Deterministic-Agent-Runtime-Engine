@@ -13,25 +13,31 @@
 - 不做 HITL 闭环；本轮关注完整权限模型与工具调用权限治理。
 - `client send` 升级为：`content: string` + `uris: list` + `metadata`。
 - `context.assemble` 负责把 `content + uris` 归一化为内部 message 结构。
-- 当前并行约束：最多 3 个并行 active slice（最多 3 个 active claim）；拆分主轴为依赖关系、重要度、复杂度。
+- 当前并行约束：最多 3 个并行 active claim（TODO 级）；拆分主轴为依赖关系、重要度、复杂度；切片仅在对应 TODO 详细位置维护。
 
 ## 0.1 认领声明（Claim Ledger）
 
 > 用途：对本清单中的 TODO 先做执行声明，避免多人并行修改同一子域。  
 > 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；到期需续期或回退 `planned`。
 > Owner 来源：历史 claim 的 owner 继承自已登记记录（2026-03-02 起）；新拆分但未分配的 claim，`Owner` 保持为空。
+> 对账口径：本表是 AgentScope 补齐工作的详细执行清单；`docs/todos/project_overall_todos.md` 仅维护项目级聚合 claim，并通过 `Project Claim Ref` 与本表对账。
+> 口径约束：本表 Claim Ledger 仅声明 TODO 级范围（`D*`）；`D*_a/b/c` 切片只在 `5.2` 维护。
 
-| Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Notes |
-|---|---|---|---|---|---|---|---|
-| CLM-20260302-D2D4 | D2-1~D2-4, D4-1~D4-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | D2/D4 已完成实现与回归，进入归档/门禁证据补齐。 |
-| CLM-20260302-D5 | D5-1~D5-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d5-safe-compression` | D5 已合入主干（PR #136）。 |
-| CLM-20260302-D7 | D7-1~D7-4 | lang | active | 2026-03-02 | 2026-03-10 | `agentscope-d7-plan-state-tools` | 代码和回归已完成，当前处理 PR/merge gate 收尾。 |
-| ~~CLM-20260302-D1D3~~ | ~~D1_a..D1_c, D3_a..D3_c~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | 历史聚合认领已废弃；后续以 D1S/D3S 子切片 claim 为准。 |
-| ~~CLM-20260303-D6D8~~ | ~~D6_a..D6_c, D8_a..D8_c~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | 聚合占位 claim 已废弃；后续以 D6S/D8S 子切片 claim 为准。 |
-| CLM-20260304-D1S | D1_a~D1_c |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配：输入协议与错误码切片待认领。 |
-| CLM-20260304-D3S | D3_a~D3_c |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配：assemble/URI/降级切片待认领。 |
-| CLM-20260304-D6S | D6_a~D6_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配：权限模型与 gateway 接入切片待认领。 |
-| CLM-20260304-D8S | D8_a~D8_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配：观测日志与脚本治理切片待认领。 |
+| Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Project Claim Ref | Notes |
+|---|---|---|---|---|---|---|---|---|
+| CLM-20260302-D2D4 | D2-1~D2-4, D4-1~D4-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | `CLM-20260302-AG1` | D2/D4 已完成实现与回归，进入归档/门禁证据补齐。 |
+| CLM-20260302-D5 | D5-1~D5-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d5-safe-compression` | `CLM-20260302-AG2` | D5 已合入主干（PR #136）。 |
+| CLM-20260302-D7 | D7-1~D7-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d7-plan-state-tools` | `CLM-20260302-AG3` | PR #138 已合入主干，D7 代码/回归/评审闭环完成。 |
+| ~~CLM-20260302-D1D3~~ | ~~D1 + D3（历史聚合）~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | ~~`CLM-20260302-AG4`~~ | 历史聚合认领已废弃；后续以 D1/D3 的 TODO 级 claim 为准。 |
+| ~~CLM-20260303-D6D8~~ | ~~D6 + D8（历史聚合）~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | ~~`CLM-20260303-AG5`~~ | 聚合占位 claim 已废弃；后续以 D6/D8 的 TODO 级 claim 为准。 |
+| CLM-20260304-D1 | D1 |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | `CLM-20260304-AG6` | 已拆分未分配；切片仅在 `5.2` 维护。 |
+| CLM-20260304-D3 | D3 |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | `CLM-20260304-AG6` | 已拆分未分配；切片仅在 `5.2` 维护。 |
+| CLM-20260304-D6 | D6 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `CLM-20260304-AG7` | 已拆分未分配；切片仅在 `5.2` 维护。 |
+| CLM-20260304-D8 | D8 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `CLM-20260304-AG7` | 已拆分未分配；切片仅在 `5.2` 维护。 |
+
+对账快照（2026-03-04）：
+- 未完成域 `D1/D3/D6/D8` 均已存在 `planned` claim（TODO 级）。
+- 已完成域 `D2/D4/D5/D7` 均已有 `done` claim 并与项目级聚合 claim 对账。
 
 ---
 
@@ -288,7 +294,7 @@
 
 | Priority | TODO | 依赖声明 | 是否拆分 | 拆分切片 | 状态 | Owner |
 |---|---|---|---|---|---|---|
-| P0 | `D7` | 独立，可并行 | 否 | `D7` | active | lang |
+| P0 | `D7` | 独立，可并行 | 否 | `D7` | done | lang |
 | P1 | `D1` | 无 | 是 | `D1_a/D1_b/D1_c` | planned |  |
 | P1 | `D3` | `D2 -> D3` | 是 | `D3_a/D3_b/D3_c` | planned |  |
 | P1 | `D6` | `D1 + D2 -> D6` | 是 | `D6_a/D6_b/D6_c` | planned |  |
@@ -302,7 +308,7 @@
 - `D2 -> D3`
 - `D1 + D2 -> D6`
 - `D6 -> D8`
-- `D7`（独立收尾）
+- `D7`（已完成）
 
 ### 5.2 强依赖任务拆分明细
 
@@ -322,16 +328,17 @@
 | `D8` | `D8_c` | 脱敏采样 + 覆盖检查脚本 | `D8_b` | 中 |
 
 执行规则：
-1. 一个 `active claim` 只认领一个切片（`D*_a/b/c`），不跨切片打包认领。
-2. 切片完成后先补 evidence，再进入下个切片。
-3. 严格按依赖顺序启动，禁止先做下游再回填上游。
-4. 任一时刻最多 3 个 `active` 切片并行。
+1. 一个 `active claim` 只认领一个 TODO（`D*`），不跨 TODO 打包认领。
+2. TODO 内部切片（`D*_a/b/c`）只在 `5.2` 维护，且按依赖顺序推进。
+3. 每个切片完成后先补 evidence，再进入下个切片。
+4. 严格按依赖顺序启动，禁止先做下游再回填上游。
+5. 任一时刻最多 3 个 `active` claim 并行。
 
 ### 5.3 阶段化编号（a/b/c...）
 
 | 阶段 | 编号 | 对应切片 | 目标 |
 |---|---|---|---|
-| 第一阶段（基线与协议冻结） | `a` | `D7` | D7 收尾 + 已完成域状态对齐 |
+| 第一阶段（基线与协议冻结） | `a` | `D7` | D7 已完成并作为后续切片依赖基线 |
 | 第一阶段（基线与协议冻结） | `b` | `D1_a` | 输入 schema 基线定义 |
 | 第一阶段（基线与协议冻结） | `c1` | `D1_b` | 输入约束与错误码冻结 |
 | 第一阶段（基线与协议冻结） | `c2` | `D1_c` | Message 块结构与兼容适配冻结 |

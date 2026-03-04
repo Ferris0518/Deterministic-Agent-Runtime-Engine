@@ -14,18 +14,31 @@
 > 用途：在进入执行前先声明 TODO 负责人与范围，避免多人并行冲突。  
 > 规则：同一 TODO Scope 同时仅允许一个 `planned/active` 认领；到期需续期或回退 `planned`。
 > Owner 来源：历史 claim 的 owner 继承自已登记记录（2026-03-02 起）；新拆分但未分配的 claim，`Owner` 保持为空。
+> 完整性口径：`T5-*`（AgentScope 补齐项）在本表仅维护项目级聚合认领；详细切片与执行状态以 `docs/todos/agentscope_domain_execution_todos.md` 为唯一来源，本表通过 `Detail Claim Ref` 对账。
+> 状态口径：`TODO` 条目与 Claim Ledger 统一使用 `planned/active/done/deprecated`。
 
-| Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Notes |
-|---|---|---|---|---|---|---|---|
-| CLM-20260302-AG1 | T5-2 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | D2/D4 已完成实现与回归，待补归档/门禁链接。 |
-| ~~CLM-20260302-AG2~~ | ~~T2-1~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-03~~ | ~~`agentscope-d5-safe-compression`~~ | D5 已在 PR #136 合入；该历史 claim 已废弃，不再作为当前认领入口。 |
-| CLM-20260302-AG3 | D7-1~D7-4（关联 T5-5） | lang | active | 2026-03-02 | 2026-03-10 | `agentscope-d7-plan-state-tools` | 代码与测试已完成，当前进入 review/merge gate 收尾。 |
-| ~~CLM-20260302-AG4~~ | ~~D1_a..D1_c, D3_a..D3_c（映射 T5-3）~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | 历史聚合认领已废弃；后续以 AG6 子切片 claim 为准。 |
-| ~~CLM-20260303-AG5~~ | ~~D6_a..D6_c, D8_a..D8_c（关联 T5-4）~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | 聚合占位 claim 已废弃；后续以 AG7 子切片 claim 为准。 |
-| CLM-20260304-AG6 | T5-3（D1_a~D1_c, D3_a~D3_c） |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配，详见 AgentScope Claim Ledger。 |
-| CLM-20260304-AG7 | T5-4（D6_a~D6_c, D8_a~D8_c） |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配，详见 AgentScope Claim Ledger。 |
-| CLM-20260304-AG8 | T1-2_a~T1-2_c, T1-5_a~T1-5_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 项目层高复杂切片已拆分，尚未分配负责人。 |
-| CLM-20260304-AG9 | T2-3_a~T2-3_b, T2-4_a~T2-4_b |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 项目层治理切片已拆分，尚未分配负责人。 |
+| Claim ID | TODO Scope | Owner | Status | Declared At | Expires At | OpenSpec Change | Detail Claim Ref | Notes |
+|---|---|---|---|---|---|---|---|---|
+| CLM-20260302-AG1 | T5-2 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | `CLM-20260302-D2D4` | D2/D4 已完成实现与回归，待补归档/门禁链接。 |
+| ~~CLM-20260302-AG2~~ | ~~T2-1~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-03~~ | ~~`agentscope-d5-safe-compression`~~ | ~~`CLM-20260302-D5`~~ | D5 已在 PR #136 合入；该历史 claim 已废弃，不再作为当前认领入口。 |
+| CLM-20260302-AG3 | T5-5（D7 子范围） | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d7-plan-state-tools` | `CLM-20260302-D7` | PR #138 已合入主干，D7 子范围执行闭环完成。 |
+| ~~CLM-20260302-AG4~~ | ~~T5-3（历史聚合）~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | ~~`CLM-20260302-D1D3`~~ | 历史聚合认领已废弃；后续以 AG6（TODO 级 claim）为准。 |
+| ~~CLM-20260303-AG5~~ | ~~T5-4（历史聚合）~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | ~~`CLM-20260303-D6D8`~~ | 聚合占位 claim 已废弃；后续以 AG7（TODO 级 claim）为准。 |
+| CLM-20260304-AG6 | T5-3 |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | `CLM-20260304-D1 + CLM-20260304-D3` | TODO 级认领；切片仅在 AgentScope 详细区维护。 |
+| CLM-20260304-AG7 | T5-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `CLM-20260304-D6 + CLM-20260304-D8` | TODO 级认领；切片仅在 AgentScope 详细区维护。 |
+| CLM-20260304-AG8 | T1-2 + T1-5 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层高复杂 TODO 组待分配；切片见详细拆分区。 |
+| CLM-20260304-AG9 | T2-3 + T2-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层治理 TODO 组待分配；切片见详细拆分区。 |
+| CLM-20260304-AG10 | T0-6 | lang | active | 2026-03-04 | 2026-03-11 | `pending` | `—` | 下一项 fix：P0 红灯且无上游依赖，先修复 `search_file` 路径契约回归。 |
+| CLM-20260304-AG11 | T0-4 + T0-5 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | P0 未完成项补齐认领声明：facade 合规修复与失败映射责任化待分配。 |
+| CLM-20260304-AG12 | T1-3 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | P1 未完成项补齐认领声明：`ISecurityBoundary` 接入待分配。 |
+| CLM-20260304-AG13 | T2-1（剩余范围） + T2-2 + T5-1 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | Layer-2 策略补齐：D5 子范围已完成，剩余上下文融合/多阶段 prompt/session 补齐待分配。 |
+| CLM-20260304-AG14 | T3-1 + T3-2 + T3-3 + T3-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | Layer-3 工程化与文档治理未完成项补齐认领声明。 |
+| CLM-20260304-AG15 | T4-2 + T4-3 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 运行期配置统一与默认可观测采集持久化未完成项补齐认领声明。 |
+| CLM-20260304-AG16 | T5-5（剩余范围，D7 子范围外） |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | D7 子范围已由 `AG3/CLM-20260302-D7` 闭环；本条仅覆盖剩余范围，暂无明细 claim。 |
+
+对账快照（2026-03-04）：
+- AgentScope 聚合 claim（AG1/AG2/AG3/AG6/AG7）均可在 `agentscope_domain_execution_todos.md` 中找到明细 claim 对应。
+- 项目层独立 claim（AG8/AG9/AG10/AG11/AG12/AG13/AG14/AG15/AG16）不在 AgentScope 明细板拆分。
 
 ## 2. 当前基线
 
@@ -54,11 +67,13 @@
   Commands: `.venv/bin/pytest -q tests/unit/test_examples_cli.py tests/unit/test_examples_cli_mcp.py` => `22 passed, 1 warning`  
   Last Updated: `2026-03-01`
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
+  Status: `planned`
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
+  Status: `planned`
 - [ ] T0-6 修复 `search_file` 输出路径契约回归（绝对路径 vs 相对路径）。  
-  Status: `todo`  
+  Status: `active`  
   Evidence: `.venv/bin/pytest -q` 失败用例 `tests/unit/test_v4_file_tools.py::test_search_file_finds_matching_paths`；实现位置 `dare_framework/tool/_internal/tools/search_file.py`  
-  Last Updated: `2026-03-03`
+  Last Updated: `2026-03-04`
 
 验收：
 
@@ -72,12 +87,15 @@
   Evidence: `openspec/changes/p0-step-driven-execution/tasks.md`；`dare_framework/agent/_internal/execute_engine.py`；`dare_framework/agent/dare_agent.py`；`.venv/bin/pytest -q tests/unit/test_dare_agent_step_driven_mode.py tests/unit/test_dare_agent_orchestration_split.py` => `27 passed`  
   Last Updated: `2026-03-01`
 - [ ] T1-2 完成 plan attempt 隔离（snapshot/rollback）闭环。
+  Status: `planned`
 - [ ] T1-3 接入 `ISecurityBoundary`（trust derivation + policy gate）。
+  Status: `planned`
 - [x] T1-4 提供 EventLog 默认实现并接入 builder 推荐路径。  
   Status: `done`  
   Evidence: `openspec/changes/p0-default-eventlog/tasks.md`；`dare_framework/event/_internal/sqlite_event_log.py`；`dare_framework/agent/builder.py`；`dare_framework/agent/dare_agent.py`；`dare_framework/observability/_internal/event_trace_bridge.py`；`.venv/bin/pytest -q tests/unit/test_event_sqlite_event_log.py tests/unit/test_builder_security_boundary.py tests/unit/test_five_layer_agent.py` => `43 passed`  
   Last Updated: `2026-03-01`
 - [ ] T1-5 完成 HITL 语义闭环（pause -> wait -> resume）。
+  Status: `planned`
 
 验收：
 
@@ -87,16 +105,24 @@
 ## P2 上下文工程与治理能力
 
 - [ ] T2-1 落地 STM/LTM/Knowledge 融合策略（含预算归因）。
+  Status: `planned`
 - [ ] T2-2 落地多阶段 prompt（plan/execute/verify）与预算联动。
+  Status: `planned`
 - [ ] T2-3 统一 tool defs schema 与风险等级映射。
+  Status: `planned`
 - [ ] T2-4 打通审批记忆、风险模型与策略引擎。
+  Status: `planned`
 
 ## P3 工程化与文档治理
 
 - [ ] T3-1 收敛文档重复描述与冲突叙述。
+  Status: `planned`
 - [ ] T3-2 固化“实现视图 vs 设计视图”差异模板。
+  Status: `planned`
 - [ ] T3-3 降低 legacy/archived 测试占比，补 canonical 覆盖。
+  Status: `planned`
 - [ ] T3-4 固化质量门禁：`ruff` / `black --check` / `mypy --strict` / `pytest`。
+  Status: `planned`
 
 ## 4. 任务拆分（依赖关系 × 重要程度 × 复杂度）
 
@@ -128,6 +154,7 @@
 | `T5-5`（AgentScope 范围） | `D7` | `docs/todos/agentscope_domain_execution_todos.md` | AgentScope 清单的 `Claim Ledger` + `D*` 状态 |
 
 说明：本文件只维护上述 `T*` 的“是否进入下一阶段”结果，不维护 `D*` 子切片进度。
+AgentScope 补齐详细 TODO 入口：`docs/todos/agentscope_domain_execution_todos.md`（单一详细来源）。
 
 ### 4.3 强依赖/高复杂拆分规则（项目层）
 
@@ -180,29 +207,29 @@
 以下事项来自本地未跟踪版本，作为跨阶段补充跟踪项保留：
 
 - [x] T4-1 会话上下文自动压缩与跨会话交接闭环（已并入 T5-1）  
-  Status: `merged`  
+  Status: `done`  
   说明：与 T5-1 合并，后续以 T5-1 作为唯一执行入口；本项仅保留追溯。  
   Evidence: `dare_framework/context/context.py`, `dare_framework/compression/core.py`, `dare_framework/plan/types.py`
 
 - [ ] T4-2 运行期配置统一收敛（含配额/预算）  
-  Status: `todo`  
+  Status: `planned`  
   现状：模型/MCP/工具等大量配置来自 `Config`；但预算上限（tokens/cost/tool_calls/time）主要通过 `with_budget(Budget)` 注入，`Config` 当前无预算字段，未形成“全走 config”统一面。  
   Evidence: `dare_framework/config/types.py`, `dare_framework/agent/builder.py`, `dare_framework/context/types.py`
 
 - [ ] T4-3 元信息统计默认可采集、可持久化、可查询  
-  Status: `doing`  
+  Status: `planned`  
   现状：token 与 tool 调用在运行中有统计；Observability 模块可采集 metrics/traces，但默认是 no-op，且并非默认持久化输出，API 调用层面的统一报表能力仍需收敛。  
   Evidence: `dare_framework/agent/dare_agent.py`, `dare_framework/observability/_internal/tracing_hook.py`, `dare_framework/observability/_internal/metrics_collector.py`
 
 - [x] T4-4 图片/富媒体一等支持（模型输入与上下文链路，已并入 T5-3）  
-  Status: `merged`  
+  Status: `done`  
   说明：与 T5-3 合并，后续以 T5-3 作为唯一执行入口；本项仅保留追溯。  
   Evidence: `dare_framework/context/types.py`, `dare_framework/model/adapters/openai_adapter.py`, `dare_framework/a2a/server/message_adapter.py`
 
 ## 7. 本次新增事项（2026-02-25）
 
 - [ ] T5-1 session 管理下 context 持久化与跨会话交接闭环  
-  Status: `todo`  
+  Status: `planned`  
   范围：补齐 session 生命周期内/跨 session 的 context 读写、恢复、版本化与兼容策略（含失败回滚与迁移策略）；统一接入 context 自动压缩与 session summary 交接链路。  
   交付：最小可用持久化方案 + 回归测试 + 运维排障说明。
 
@@ -214,17 +241,18 @@
   Last Updated: `2026-03-03`
 
 - [ ] T5-3 图片/音频/视频富媒体消息格式支持  
-  Status: `todo`  
+  Status: `planned`  
   范围：定义并落地多模态 message schema（文本 + 图片 + 音频 + 视频），覆盖模型输入、上下文存储、transport 传输与适配器能力探测；统一替代“图片/富媒体一等支持”的原 T4-4 范围（含 A2A 附件链路规范化）。  
   交付：跨适配器能力矩阵 + 不支持能力时的降级策略 + 示例用例。
 
 - [ ] T5-4 全链路日志输出整理（模块分层与规范化）  
-  Status: `todo`  
+  Status: `planned`  
   范围：收敛 agent/context/tool/model/transport 等关键路径日志，统一字段、级别、trace/session 关联键与脱敏规则。  
   交付：日志规范文档 + 关键流程日志覆盖检查脚本 + 采样策略说明。
 
 - [ ] T5-5 完整架构设计与各 domain 详细设计补齐  
-  Status: `todo`  
+  Status: `planned`  
+  说明：`D7` 子范围已 `done`（对应 `AG3/CLM-20260302-D7`），当前跟踪剩余范围。  
   范围：补齐整体目标架构与 domain 设计文档，至少覆盖关键 API、数据模型、核心流程、异常处理、边界条件与可观测性策略。  
   交付：架构总览文档 + 分 domain 设计文档包 + 设计评审清单与验收标准。
 
