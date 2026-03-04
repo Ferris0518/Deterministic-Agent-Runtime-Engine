@@ -36,6 +36,39 @@ If your GitHub plan supports merge queue:
   - summary contract: `p0-gate` must emit deterministic category labels and failing test/module pointers before it can become a required branch check
   - repo-admin action: after this change merges, add `p0-gate` to the protected-branch required checks list / ruleset
 
+## P0-Gate Required Check Rollout (Admin Checklist)
+
+> Tracking scope: `openspec/changes/p0-conformance-gate/tasks.md` item `3.2`.
+
+### Preconditions
+
+1. `p0-conformance-gate` change has been merged to `main`.
+2. Latest `main` run shows `p0-gate` green with all three categories reported.
+3. `.github/workflows/ci-gate.yml` still contains job name `p0-gate` (required-check name must match exactly).
+
+### Execution Steps
+
+1. Open `Settings -> Branches` (or repository Rulesets) for `main`.
+2. Enable `Require status checks to pass before merging` if not already enabled.
+3. Add `p0-gate` to required status checks.
+4. Keep existing required checks (`lint`, `build`, and other active phases) unchanged.
+5. Save the branch protection / ruleset change.
+
+### Acceptance
+
+1. Open a test PR targeting `main` and force one `p0-gate` anchor failure; merge must be blocked.
+2. Fix the failure and rerun; merge must be unblocked only after `p0-gate` is green.
+3. Verify merge-queue path (if enabled) also enforces `p0-gate` on `merge_group`.
+
+### Evidence to Record
+
+1. Branch protection / ruleset screenshot or settings URL proving `p0-gate` is required.
+2. One blocked PR run URL where `p0-gate` failed.
+3. One unblocked PR run URL where `p0-gate` passed.
+4. Update:
+   - `openspec/changes/p0-conformance-gate/tasks.md` item `3.2` to `done` with links
+   - `docs/features/p0-conformance-gate.md` `Results` and `Next Milestone`
+
 ## Fallback if Merge Queue Is Unavailable
 Use pre-merge combined checks:
 

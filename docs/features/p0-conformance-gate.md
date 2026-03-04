@@ -3,7 +3,7 @@ change_ids: ["p0-conformance-gate"]
 doc_kind: feature
 topics: ["p0", "conformance", "ci-gate", "runtime-validation"]
 created: 2026-03-03
-updated: 2026-03-03
+updated: 2026-03-04
 status: active
 mode: openspec
 ---
@@ -66,6 +66,7 @@ mode: openspec
 - `openspec validate p0-conformance-gate --type change --strict --json --no-interactive`: passed (`1/1` change valid, `0` issues) after restoring the missing active feature aggregation record for this change.
 - `./scripts/ci/check_governance_evidence_truth.sh`: initially failed because the restored feature doc lacked historical PR/review links; after linking the already-landed P0 evidence PRs, the governance gate passed, and remained green after task `1.1-1.3` synchronized the gate scope matrix and rollout contract into the active docs/spec set.
 - `./scripts/ci/check_governance_evidence_truth.sh`: remained green after adding `docs/guides/P0_Gate_Runbook.md` plus the new navigation links in `docs/README.md` and `docs/guides/Team_Agent_Collab_Playbook.md`, confirming the operationalization docs did not break the governance acceptance pack.
+- `docs/governance/branch-protection.md`: now includes a dedicated `p0-gate` required-check rollout checklist (preconditions, execution, acceptance, and evidence fields) so task `3.2` can be closed with deterministic admin-side proof.
 
 ### Behavior Verification
 
@@ -105,4 +106,4 @@ mode: openspec
 
 ## Next Milestone
 
-Schedule the repo-admin follow-up for task `3.2`: add `p0-gate` to the protected-branch required checks / ruleset after this change merges.
+Execute the admin rollout checklist in `docs/governance/branch-protection.md` (`P0-Gate Required Check Rollout`) and then close task `3.2` with settings + blocked/pass run evidence links.

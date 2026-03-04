@@ -37,7 +37,7 @@
   Commands: `../../.venv/bin/python scripts/ci/p0_gate.py` => `p0-gate: PASS`  
   Last Updated: `2026-03-03`
 - [ ] 3.2 将 `p0-gate` 配置为主分支 required check。  
-  Note: 该项需要 GitHub branch protection / ruleset 管理员权限；当前仓库内已完成 job 名称与 rollout 文档对齐，但尚未执行远端仓库设置。
+  Note: 该项需要 GitHub branch protection / ruleset 管理员权限；当前仓库内已完成 job 名称与 rollout 文档对齐，但尚未执行远端仓库设置。执行清单见 `docs/governance/branch-protection.md` 的 `P0-Gate Required Check Rollout (Admin Checklist)` 章节，关闭时需补 settings + blocked/pass run 证据链接。
 - [x] 3.3 输出标准化门禁报告（通过率、失败类型、建议排查点）。  
   Evidence: `scripts/ci/p0_gate.py` 的 `format_summary()` 已固定 `PASS/FAIL + category label + failing tests + modules + action` 文本格式，并写入 `GITHUB_STEP_SUMMARY`；`tests/unit/test_p0_gate_ci.py` 锁定该 summary contract。  
   Commands: `../../.venv/bin/python -m pytest -q tests/unit/test_p0_gate_ci.py` => `3 passed`；`../../.venv/bin/python scripts/ci/p0_gate.py` => `p0-gate: PASS`  
