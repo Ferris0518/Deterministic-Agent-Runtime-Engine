@@ -284,9 +284,9 @@ check_index_entry_targets() {
   local index_file="$1"
   local section_heading="$2"
   local stale_label="$3"
-  local valid_glob="$4"
-  local invalid_glob="$5"
-  local path
+  local valid_regex="$4"
+  local invalid_regex="$5"
+  local path basename
 
   while IFS= read -r path; do
     [[ -z "$path" ]] && continue
@@ -295,12 +295,18 @@ check_index_entry_targets() {
       failures=$((failures + 1))
       continue
     fi
-    if [[ -n "$invalid_glob" && "$path" == $invalid_glob ]]; then
+    if [[ -n "$invalid_regex" && "$path" =~ $invalid_regex ]]; then
       log "invalid $stale_label index entry path in $index_file: $path"
       failures=$((failures + 1))
       continue
     fi
-    if [[ "$path" != $valid_glob ]]; then
+    basename="${path##*/}"
+    if [[ "$basename" == "README.md" ]]; then
+      log "invalid $stale_label index entry path in $index_file: $path"
+      failures=$((failures + 1))
+      continue
+    fi
+    if [[ ! "$path" =~ $valid_regex ]]; then
       log "invalid $stale_label index entry path in $index_file: $path"
       failures=$((failures + 1))
     fi
@@ -346,8 +352,8 @@ check_feature_indexes() {
     fi
   done < <(find docs/features/archive -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | sort)
 
-  check_index_entry_targets "$active_index" "## Active Entries" "active feature" "docs/features/*.md" "docs/features/archive/*"
-  check_index_entry_targets "$archive_index" "## Archived Entries" "archived feature" "docs/features/archive/*.md" ""
+  check_index_entry_targets "$active_index" "## Active Entries" "active feature" '^docs/features/[^/]+\.md$' '^docs/features/archive/'
+  check_index_entry_targets "$archive_index" "## Archived Entries" "archived feature" '^docs/features/archive/[^/]+\.md$' ""
 }
 
 check_checkpoint_skill_mapping() {

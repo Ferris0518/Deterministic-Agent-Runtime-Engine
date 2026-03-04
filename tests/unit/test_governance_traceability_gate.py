@@ -229,6 +229,38 @@ class GovernanceTraceabilityGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("invalid active feature index entry path", result.stdout)
 
+    def test_gate_rejects_active_index_readme_entry(self) -> None:
+        def mutate(root: Path) -> None:
+            readme = root / "docs" / "features" / "README.md"
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "## Archive Index\n",
+                    "- `docs/features/README.md`\n\n## Archive Index\n",
+                ),
+                encoding="utf-8",
+            )
+
+        result = self._run_gate(mutate)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid active feature index entry path", result.stdout)
+
+    def test_gate_rejects_archive_index_readme_entry(self) -> None:
+        def mutate(root: Path) -> None:
+            readme = root / "docs" / "features" / "archive" / "README.md"
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "## Archive Migration Rules\n",
+                    "- `docs/features/archive/README.md`\n\n## Archive Migration Rules\n",
+                ),
+                encoding="utf-8",
+            )
+
+        result = self._run_gate(mutate)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid archived feature index entry path", result.stdout)
+
     def test_gate_fails_when_checkpoint_skill_mapping_is_missing(self) -> None:
         def mutate(root: Path) -> None:
             model = root / "docs" / "governance" / "Documentation_Management_Model.md"
