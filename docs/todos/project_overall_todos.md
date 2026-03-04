@@ -29,7 +29,7 @@
 | CLM-20260304-AG8 | T1-2 + T1-5 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层高复杂 TODO 组待分配；切片见详细拆分区。 |
 | CLM-20260304-AG9 | T2-3 + T2-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层治理 TODO 组待分配；切片见详细拆分区。 |
 | CLM-20260304-AG10 | T0-6 | lang | done | 2026-03-04 | 2026-03-11 | `pending` | `—` | `search_file` 路径契约回归已修复并回归通过。 |
-| CLM-20260304-AG11 | T0-4 + T0-5 | lang | active | 2026-03-04 | 2026-03-11 | `pending` | `—` | T0-5 已完成首版映射与 CI 巡检；T0-4 facade 合规收尾中。 |
+| CLM-20260304-AG11 | T0-4 + T0-5 | lang | done | 2026-03-04 | 2026-03-11 | `pending` | `—` | T0-4/T0-5 均已完成并纳入回归与 CI 巡检。 |
 | CLM-20260304-AG12 | T1-3 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | P1 未完成项补齐认领声明：`ISecurityBoundary` 接入待分配。 |
 | CLM-20260304-AG13 | T2-1（剩余范围） + T2-2 + T5-1 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | Layer-2 策略补齐：D5 子范围已完成，剩余上下文融合/多阶段 prompt/session 补齐待分配。 |
 | CLM-20260304-AG14 | T3-1 + T3-2 + T3-3 + T3-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | Layer-3 工程化与文档治理未完成项补齐认领声明。 |
@@ -45,7 +45,6 @@
 - 测试基线（2026-03-04）：`.venv/bin/pytest -q` => `676 passed, 12 skipped, 1 warning`。
 - 关键问题聚类：
   - 全量 TODO / Claim / Feature 状态存在漂移（已 merge 或 archived 的 change 仍标记 active/draft）。
-  - 若干 package `__init__.py` 不满足 facade 约束。
 - 设计已定义但实现未闭环：plan attempt 隔离（snapshot/rollback）、Context 检索融合、完整 HITL 语义、P0 conformance gate 与治理自动化门禁。
 
 ## 3. 优先级路线图
@@ -65,8 +64,10 @@
   Evidence: `examples/05-dare-coding-agent-enhanced/cli.py`、`examples/06-dare-coding-agent-mcp/cli.py`（`_invoke_approval_action` 统一为 `invoke(action, **params)` 形态，移除 `params={...}` 调用分叉）；`tests/unit/test_examples_cli.py`、`tests/unit/test_examples_cli_mcp.py`（新增 kwargs 调用契约回归）  
   Commands: `.venv/bin/pytest -q tests/unit/test_examples_cli.py tests/unit/test_examples_cli_mcp.py` => `22 passed, 1 warning`  
   Last Updated: `2026-03-01`
-- [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
-  Status: `planned`
+- [x] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
+  Status: `done`
+  Evidence: `tests/unit/test_package_initializers_facade_pattern.py` 新增“公开 facade 禁止直接 `._internal` 导入”规则并通过；`dare_framework/{checkpoint,embedding,event,hook,plan,security,transport}/__init__.py` 已切换为 `defaults` / `impl` / `adapters` 公开导出层；新增 `dare_framework/{checkpoint,embedding,event,hook,plan}/defaults.py` 与 `dare_framework/transport/adapters.py`；`.venv/bin/python -m pytest -q tests/unit/test_package_initializers_facade_pattern.py tests/unit/test_event_sqlite_event_log.py tests/unit/test_security_boundary.py tests/unit/test_embedding_openai_adapter.py tests/unit/test_default_planner.py tests/unit/test_default_remediator.py tests/unit/test_hook_extension_point_governance.py tests/unit/test_transport_channel.py tests/unit/test_execution_control.py` => `52 passed`
+  Last Updated: `2026-03-04`
 - [x] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
   Status: `done`
   Evidence: `scripts/ci/p0_gate.py`（category summary 新增 `owner`）；`scripts/ci/check_test_failure_ownership.py`（映射完整性巡检脚本）；`.github/workflows/ci-gate.yml`（新增 `failure-ownership-map` job）；`docs/guides/P0_Gate_Runbook.md`（命令与排障入口更新）；`.venv/bin/python -m pytest -q tests/unit/test_p0_gate_ci.py tests/unit/test_check_test_failure_ownership.py` => `7 passed`

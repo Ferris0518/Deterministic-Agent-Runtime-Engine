@@ -16,7 +16,7 @@ from dare_framework.transport.interaction import (
     ActionHandlerDispatcher,
     ResourceAction,
 )
-from dare_framework.transport._internal import (
+from dare_framework.transport.adapters import (
     DefaultAgentChannel,
     DirectClientChannel,
     StdioClientChannel,

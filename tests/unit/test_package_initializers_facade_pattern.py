@@ -13,6 +13,7 @@ def test_package_initializers_follow_facade_pattern() -> None:
     3. Assignments allowed only for metadata (e.g., __all__, __version__).
     4. Imports allowed for re-exporting.
     5. Star imports are prohibited.
+    6. Public facades must not import from `._internal` directly.
     """
     repo_root = Path(__file__).resolve().parents[2]
     package_root = repo_root / "dare_framework"
@@ -22,6 +23,7 @@ def test_package_initializers_follow_facade_pattern() -> None:
     violations: list[str] = []
     for path in init_files:
         source = path.read_text(encoding="utf-8")
+        is_public_facade = "_internal" not in path.parts
         if not source.strip():
              # Empty files are okay if they are just placeholders, 
              # but the user wanted docstrings.
@@ -72,6 +74,25 @@ def test_package_initializers_follow_facade_pattern() -> None:
             if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
                 violations.append(f"{path.relative_to(repo_root)}: Prohibited star import in package initializer")
                 continue
+
+            # Rule 6: Public facades must not directly import internal modules.
+            if is_public_facade and isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if "._internal" in module:
+                    violations.append(
+                        f"{path.relative_to(repo_root)}: Prohibited direct _internal import ({module})"
+                    )
+                    continue
+
+            if is_public_facade and isinstance(node, ast.Import):
+                for alias in node.names:
+                    if "._internal" in alias.name:
+                        violations.append(
+                            f"{path.relative_to(repo_root)}: Prohibited direct _internal import ({alias.name})"
+                        )
+                        break
+                else:
+                    pass
 
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 continue
