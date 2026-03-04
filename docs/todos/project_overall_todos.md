@@ -19,13 +19,14 @@
 |---|---|---|---|---|---|---|---|
 | CLM-20260302-AG1 | T5-2 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d2-d4-thinking-transport` | D2/D4 已完成实现与回归，待补归档/门禁链接。 |
 | ~~CLM-20260302-AG2~~ | ~~T2-1~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-03~~ | ~~`agentscope-d5-safe-compression`~~ | D5 已在 PR #136 合入；该历史 claim 已废弃，不再作为当前认领入口。 |
-| CLM-20260302-AG3 | D7-1~D7-4（关联 T5-5） | lang | active | 2026-03-02 | 2026-03-10 | `agentscope-d7-plan-state-tools` | 代码与测试已完成，当前进入 review/merge gate 收尾。 |
+| CLM-20260302-AG3 | D7-1~D7-4（关联 T5-5） | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d7-plan-state-tools` | PR #138 已合入主干，D7 执行闭环完成。 |
 | ~~CLM-20260302-AG4~~ | ~~D1_a..D1_c, D3_a..D3_c（映射 T5-3）~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | 历史聚合认领已废弃；后续以 AG6 子切片 claim 为准。 |
 | ~~CLM-20260303-AG5~~ | ~~D6_a..D6_c, D8_a..D8_c（关联 T5-4）~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | 聚合占位 claim 已废弃；后续以 AG7 子切片 claim 为准。 |
 | CLM-20260304-AG6 | T5-3（D1_a~D1_c, D3_a~D3_c） |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | 已拆分未分配，详见 AgentScope Claim Ledger。 |
 | CLM-20260304-AG7 | T5-4（D6_a~D6_c, D8_a~D8_c） |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 已拆分未分配，详见 AgentScope Claim Ledger。 |
 | CLM-20260304-AG8 | T1-2_a~T1-2_c, T1-5_a~T1-5_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 项目层高复杂切片已拆分，尚未分配负责人。 |
 | CLM-20260304-AG9 | T2-3_a~T2-3_b, T2-4_a~T2-4_b |  | planned | 2026-03-04 | 2026-03-11 | `pending` | 项目层治理切片已拆分，尚未分配负责人。 |
+| CLM-20260304-AG10 | T0-6 | lang | active | 2026-03-04 | 2026-03-11 | `pending` | 下一项 fix：P0 红灯且无上游依赖，先修复 `search_file` 路径契约回归。 |
 
 ## 2. 当前基线
 
@@ -56,9 +57,9 @@
 - [ ] T0-4 修复 `__init__.py` facade 违规并固化回归检查。
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
 - [ ] T0-6 修复 `search_file` 输出路径契约回归（绝对路径 vs 相对路径）。  
-  Status: `todo`  
+  Status: `doing`  
   Evidence: `.venv/bin/pytest -q` 失败用例 `tests/unit/test_v4_file_tools.py::test_search_file_finds_matching_paths`；实现位置 `dare_framework/tool/_internal/tools/search_file.py`  
-  Last Updated: `2026-03-03`
+  Last Updated: `2026-03-04`
 
 验收：
 
