@@ -150,18 +150,18 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
 
     if search_path.is_file():
         abs_path = search_path.resolve()
-        rel_path = _normalized_relative_path(abs_path, root, roots)
-        if _match_pattern(pattern, rel_path):
-            matches.append(rel_path)
+        relative_path = _relative_path_for_match(abs_path, root)
+        if _match_pattern(pattern, relative_path):
+            matches.append(_display_relative_path(relative_path, root, roots))
     else:
         for dirpath, dirs, files in os.walk(search_path, topdown=True, followlinks=False):
             dirs[:] = [d for d in sorted(dirs) if d not in ignore_dirs]
             for filename in sorted(files):
                 abs_path = (Path(dirpath) / filename).resolve()
-                rel_path = _normalized_relative_path(abs_path, root, roots)
-                if not _match_pattern(pattern, rel_path):
+                relative_path = _relative_path_for_match(abs_path, root)
+                if not _match_pattern(pattern, relative_path):
                     continue
-                matches.append(rel_path)
+                matches.append(_display_relative_path(relative_path, root, roots))
                 if len(matches) >= max_results:
                     truncated = True
                     break
@@ -185,8 +185,11 @@ def _execute_search_file(input: dict[str, Any], context: RunContext[Any]) -> Too
     )
 
 
-def _normalized_relative_path(path: Path, root: Path, roots: list[Path]) -> str:
-    relative_path = relative_to_root(path, root).replace("\\", "/")
+def _relative_path_for_match(path: Path, root: Path) -> str:
+    return relative_to_root(path, root).replace("\\", "/")
+
+
+def _display_relative_path(relative_path: str, root: Path, roots: list[Path]) -> str:
     try:
         root_index = roots.index(root)
     except ValueError:

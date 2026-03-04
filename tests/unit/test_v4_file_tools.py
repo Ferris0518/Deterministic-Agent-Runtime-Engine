@@ -325,6 +325,28 @@ async def test_search_file_prefixes_secondary_root_paths(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_search_file_matches_directory_glob_in_secondary_root(tmp_path):
+    primary = tmp_path / "primary"
+    secondary = tmp_path / "secondary"
+    primary.mkdir()
+    secondary.mkdir()
+    pkg = secondary / "pkg"
+    pkg.mkdir()
+    (pkg / "c.py").write_text("x\n")
+    ctx = RunContext(
+        deps=None,
+        run_id="run",
+        config={"workspace_roots": [str(primary), str(secondary)]},
+    )
+
+    tool = SearchFileTool()
+    result = await tool.execute(run_context=ctx, pattern="pkg/*.py", path=str(secondary))
+
+    assert result.success is True
+    assert result.output["paths"] == ["@root[1]/pkg/c.py"]
+
+
+@pytest.mark.asyncio
 async def test_read_file_accepts_secondary_root_prefixed_path(tmp_path):
     primary = tmp_path / "primary"
     secondary = tmp_path / "secondary"
