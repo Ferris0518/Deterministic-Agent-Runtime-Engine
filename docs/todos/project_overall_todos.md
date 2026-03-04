@@ -28,10 +28,11 @@
 | CLM-20260304-AG8 | T1-2_a~T1-2_c, T1-5_a~T1-5_c |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层高复杂切片已拆分，尚未分配负责人。 |
 | CLM-20260304-AG9 | T2-3_a~T2-3_b, T2-4_a~T2-4_b |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层治理切片已拆分，尚未分配负责人。 |
 | CLM-20260304-AG10 | T0-6 | lang | active | 2026-03-04 | 2026-03-11 | `pending` | `—` | 下一项 fix：P0 红灯且无上游依赖，先修复 `search_file` 路径契约回归。 |
+| CLM-20260304-AG11 | T0-4 + T0-5 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | P0 未完成项补齐认领声明：facade 合规修复与失败映射责任化待分配。 |
 
 对账快照（2026-03-04）：
 - AgentScope 聚合 claim（AG1/AG2/AG3/AG6/AG7）均可在 `agentscope_domain_execution_todos.md` 中找到明细 claim 对应。
-- 项目层独立 claim（AG8/AG9/AG10）不在 AgentScope 明细板拆分。
+- 项目层独立 claim（AG8/AG9/AG10/AG11）不在 AgentScope 明细板拆分。
 
 ## 2. 当前基线
 
