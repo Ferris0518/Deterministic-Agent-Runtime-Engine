@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ from dare_framework.context import Message, MessageMark
 
 SESSION_SNAPSHOT_SCHEMA_VERSION = "client-session.v1"
 LATEST_SESSION_ALIAS = "latest"
+SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class SessionStoreError(ValueError):
@@ -99,7 +101,11 @@ class ClientSessionStore:
 
     def path_for(self, session_id: str) -> Path:
         normalized = self._normalize_session_id(session_id)
-        return self._session_dir / f"{normalized}.json"
+        path = (self._session_dir / f"{normalized}.json").resolve()
+        session_root = self._session_dir.resolve()
+        if not path.is_relative_to(session_root):
+            raise SessionStoreError(f"invalid session_id path traversal: {normalized}")
+        return path
 
     def save(self, *, state: CLISessionState, messages: list[Message]) -> Path:
         """Persist the current CLI session snapshot."""
@@ -246,6 +252,10 @@ class ClientSessionStore:
         normalized = str(raw).strip() if raw is not None else ""
         if not normalized:
             raise SessionStoreError("session_id is required")
+        if not SESSION_ID_PATTERN.fullmatch(normalized):
+            raise SessionStoreError(f"invalid session_id: {normalized}")
+        if ".." in normalized:
+            raise SessionStoreError(f"invalid session_id: {normalized}")
         return normalized
 
     def _coerce_timestamp(self, raw: Any, *, field_name: str, path: Path) -> float:

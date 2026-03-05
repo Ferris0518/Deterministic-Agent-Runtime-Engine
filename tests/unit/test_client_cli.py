@@ -1806,6 +1806,43 @@ async def test_main_run_resume_missing_session_returns_two(monkeypatch, tmp_path
     assert "resume" in payload["message"]
 
 
+def test_client_session_store_rejects_traversal_session_ids(tmp_path) -> None:
+    store = importlib.import_module("client.session_store")
+    session_store = store.ClientSessionStore(tmp_path / "workspace")
+
+    with pytest.raises(store.SessionStoreError, match="invalid session_id"):
+        session_store.path_for("../../escape")
+
+    with pytest.raises(store.SessionStoreError, match="invalid session_id"):
+        session_store.path_for("session/../../escape")
+
+
+def test_client_session_store_rejects_tampered_snapshot_session_id(tmp_path) -> None:
+    store = importlib.import_module("client.session_store")
+    workspace = tmp_path / "workspace"
+    session_store = store.ClientSessionStore(workspace)
+    tampered = session_store.session_dir / "tampered.json"
+    tampered.write_text(
+        json.dumps(
+            {
+                "schema_version": store.SESSION_SNAPSHOT_SCHEMA_VERSION,
+                "session_id": "../../escape",
+                "mode": "execute",
+                "created_at": 1,
+                "updated_at": 2,
+                "workspace_dir": str(workspace),
+                "messages": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(store.SessionStoreError, match="invalid session_id"):
+        session_store.load("tampered")
+
+    assert session_store.list_sessions() == []
+
+
 @pytest.mark.asyncio
 async def test_main_sessions_list_returns_sorted_session_summaries(monkeypatch, tmp_path, capsys) -> None:
     client_main = importlib.import_module("client.main")
