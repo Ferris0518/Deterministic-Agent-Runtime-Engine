@@ -6,6 +6,7 @@ ROOT_DIR="${GOVERNANCE_INTENT_GATE_ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}"
 cd "$ROOT_DIR"
 
 failures=0
+RESOLVED_PR_STATE=""
 
 log() {
   echo "[governance-intent-gate] $*"
@@ -113,7 +114,22 @@ resolve_changed_files() {
 
 extract_intent_pr_url() {
   local file="$1"
-  grep -Ei 'intent[[:space:]_-]+pr' "$file" \
+  local review_links_section
+  review_links_section="$(awk '
+    $0 ~ /^```/ {
+      in_fence = !in_fence
+      if (in_section) {
+        print
+      }
+      next
+    }
+    !in_section && !in_fence && $0 ~ /^###[[:space:]]+(Review and Merge Gate Links?|Review[[:space:]]*\/[[:space:]]*Merge Gate Links?)[[:space:]]*$/ {in_section=1; next}
+    in_section && !in_fence && $0 ~ /^###[[:space:]]+/ {exit}
+    in_section && !in_fence && $0 ~ /^##[[:space:]]+/ {exit}
+    in_section {print}
+  ' "$file")"
+
+  grep -Ei '^[[:space:]]*-[[:space:]]*Intent[[:space:]_-]+PR[[:space:]]*:' <<<"$review_links_section" \
     | grep -Eo 'https://github\.com/[^/[:space:]]+/[^/[:space:]]+/pull/[0-9]+' \
     | head -n 1 || true
 }
@@ -160,9 +176,11 @@ resolve_pr_state() {
   local pr_number="$3"
   local fixture_state payload api_url
 
+  RESOLVED_PR_STATE=""
+
   # Unit tests can short-circuit remote calls with explicit fixture states.
   if fixture_state="$(lookup_pr_state_fixture "$owner" "$repo" "$pr_number")"; then
-    echo "$fixture_state"
+    RESOLVED_PR_STATE="$fixture_state"
     return 0
   fi
 
@@ -181,12 +199,12 @@ resolve_pr_state() {
   fi
 
   if grep -Eq '"merged":[[:space:]]*true' <<<"$payload"; then
-    echo "merged"
+    RESOLVED_PR_STATE="merged"
     return 0
   fi
 
   if grep -Eq '"merged":[[:space:]]*false' <<<"$payload"; then
-    echo "open"
+    RESOLVED_PR_STATE="open"
     return 0
   fi
 
@@ -263,10 +281,11 @@ main() {
     fi
 
     read -r owner repo pr_number <<<"$components"
-    if ! pr_state="$(resolve_pr_state "$owner" "$repo" "$pr_number")"; then
+    if ! resolve_pr_state "$owner" "$repo" "$pr_number"; then
       failures=$((failures + 1))
       continue
     fi
+    pr_state="$RESOLVED_PR_STATE"
 
     if [[ "$pr_state" != "merged" ]]; then
       log "Intent PR $intent_pr_url is not merged (state=$pr_state)"

@@ -142,6 +142,32 @@ class GovernanceIntentGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing Intent PR link", result.stdout)
 
+    def test_gate_requires_canonical_intent_pr_field_not_any_intent_url_line(self) -> None:
+        def mutate(root: Path) -> None:
+            doc = root / "docs" / "features" / "demo-change.md"
+            updated = doc.read_text(encoding="utf-8").replace(
+                "- Intent PR: https://github.com/example/repo/pull/101\n",
+                "- Intent PR: TBD\n- Historical intent PR note: https://github.com/example/repo/pull/101\n",
+            )
+            doc.write_text(updated, encoding="utf-8")
+
+        result = self._run_gate(
+            changed_files=["client/main.py", "docs/features/demo-change.md"],
+            mutate=mutate,
+            pr_state_fixture="example/repo#101=merged",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing Intent PR link", result.stdout)
+
+    def test_gate_reports_missing_token_for_pr_lookup_failures(self) -> None:
+        result = self._run_gate(
+            changed_files=["client/main.py", "docs/features/demo-change.md"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing GITHUB_TOKEN for PR state lookup", result.stdout)
+
     def test_draft_feature_doc_does_not_satisfy_governed_requirement(self) -> None:
         result = self._run_gate(
             changed_files=["client/main.py", "docs/features/demo-change.md"],
