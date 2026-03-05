@@ -4,6 +4,42 @@ import ast
 from pathlib import Path
 
 
+def _is_internal_module_path(module: str) -> bool:
+    return module == "_internal" or module.startswith("_internal.") or "._internal" in module
+
+
+def _find_direct_internal_import(node: ast.stmt) -> str | None:
+    if isinstance(node, ast.ImportFrom):
+        module = node.module or ""
+        if module and _is_internal_module_path(module):
+            return f"{'.' * node.level}{module}"
+
+        # `from . import _internal` uses `module is None` and stores names in aliases.
+        for alias in node.names:
+            if _is_internal_module_path(alias.name):
+                return f"{'.' * node.level}{alias.name}"
+        return None
+
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if _is_internal_module_path(alias.name):
+                return alias.name
+    return None
+
+
+def test_internal_import_detection_covers_relative_syntax() -> None:
+    cases = {
+        "from ._internal.foo import Bar": "._internal.foo",
+        "from .._internal import Foo": ".._internal",
+        "from . import _internal": "._internal",
+        "from dare_framework.tool._internal.tools import EchoTool": "dare_framework.tool._internal.tools",
+        "from dare_framework.tool.defaults import EchoTool": None,
+    }
+    for source, expected in cases.items():
+        node = ast.parse(source).body[0]
+        assert _find_direct_internal_import(node) == expected
+
+
 def test_package_initializers_follow_facade_pattern() -> None:
     """Asserts that all dare_framework initializers use the facade pattern.
     
@@ -76,23 +112,13 @@ def test_package_initializers_follow_facade_pattern() -> None:
                 continue
 
             # Rule 6: Public facades must not directly import internal modules.
-            if is_public_facade and isinstance(node, ast.ImportFrom):
-                module = node.module or ""
-                if "._internal" in module:
+            if is_public_facade:
+                direct_internal_import = _find_direct_internal_import(node)
+                if direct_internal_import is not None:
                     violations.append(
-                        f"{path.relative_to(repo_root)}: Prohibited direct _internal import ({module})"
+                        f"{path.relative_to(repo_root)}: Prohibited direct _internal import ({direct_internal_import})"
                     )
                     continue
-
-            if is_public_facade and isinstance(node, ast.Import):
-                for alias in node.names:
-                    if "._internal" in alias.name:
-                        violations.append(
-                            f"{path.relative_to(repo_root)}: Prohibited direct _internal import ({alias.name})"
-                        )
-                        break
-                else:
-                    pass
 
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 continue
