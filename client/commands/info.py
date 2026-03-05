@@ -52,7 +52,6 @@ def build_doctor_report(
     api_key_sources = {
         "openrouter": bool(config.llm.api_key or os.getenv("OPENROUTER_API_KEY")),
         "openai": bool(config.llm.api_key or os.getenv("OPENAI_API_KEY")),
-        "anthropic": bool(config.llm.api_key or os.getenv("ANTHROPIC_API_KEY")),
     }
     workspace = Path(config.workspace_dir).expanduser().resolve()
     user_dir = Path(config.user_dir).expanduser().resolve()
@@ -73,7 +72,6 @@ def build_doctor_report(
         "httpx_installed": importlib.util.find_spec("httpx") is not None,
         "openai_sdk_installed": importlib.util.find_spec("openai") is not None,
         "langchain_openai_installed": importlib.util.find_spec("langchain_openai") is not None,
-        "anthropic_sdk_installed": importlib.util.find_spec("anthropic") is not None,
     }
 
     diagnostics: dict[str, Any] = {
@@ -97,7 +95,7 @@ def build_doctor_report(
     warnings: list[str] = []
     if not diagnostics["workspace_exists"]:
         warnings.append("workspace_dir does not exist")
-    if adapter not in {"openai", "openrouter", "anthropic"}:
+    if adapter not in {"openai", "openrouter"}:
         warnings.append(f"unsupported adapter configured: {adapter}")
     if not diagnostics["llm"]["api_key_present"]:
         warnings.append(f"missing API key for adapter={adapter}")
@@ -113,8 +111,6 @@ def build_doctor_report(
         warnings.append("openai SDK is required for openrouter adapter")
     if adapter == "openai" and not deps["langchain_openai_installed"]:
         warnings.append("langchain-openai is required for openai adapter")
-    if adapter == "anthropic" and not deps["anthropic_sdk_installed"]:
-        warnings.append("anthropic SDK is required for anthropic adapter")
     diagnostics["warnings"] = warnings
     diagnostics["ok"] = len(warnings) == 0
     return diagnostics

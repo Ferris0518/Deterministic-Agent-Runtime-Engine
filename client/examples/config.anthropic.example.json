@@ -1,6 +1,0 @@
-{
-  "llm": {
-    "adapter": "anthropic",
-    "model": "claude-sonnet-4-5"
-  }
-}

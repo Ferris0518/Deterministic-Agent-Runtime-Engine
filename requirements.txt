@@ -1,4 +1,3 @@
-anthropic
 langchain-openai
 langchain-core
 pytest

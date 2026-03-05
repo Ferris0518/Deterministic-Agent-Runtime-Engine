@@ -37,7 +37,6 @@
 
 ## Active Entries
 
-- `docs/features/add-anthropic-model-adapter.md`
 - `docs/features/agentscope-d2-d4-thinking-transport.md`
 - `docs/features/agentscope-d5-safe-compression.md`
 - `docs/features/agentscope-d7-plan-state-tools.md`
