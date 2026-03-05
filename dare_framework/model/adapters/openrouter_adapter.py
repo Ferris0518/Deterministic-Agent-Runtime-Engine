@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Literal
+from typing import Any
 
-from dare_framework.infra.component import ComponentType
 from dare_framework.model.kernel import IModelAdapter
 from dare_framework.model.types import GenerateOptions, ModelInput, ModelResponse
-from dare_framework.tool.types import CapabilityDescriptor
 
 
 class OpenRouterModelAdapter(IModelAdapter):
