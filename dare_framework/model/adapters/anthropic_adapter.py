@@ -73,7 +73,11 @@ class AnthropicModelAdapter(IModelAdapter):
             ]
 
         if self._extra:
-            params.update(self._extra)
+            extra_params = dict(self._extra)
+            # Keep normalized max_tokens from _resolve_max_tokens/options; raw extra values
+            # like None/"128" should not override it after merge.
+            extra_params.pop("max_tokens", None)
+            params.update(extra_params)
         if options is not None:
             if options.temperature is not None:
                 params["temperature"] = options.temperature

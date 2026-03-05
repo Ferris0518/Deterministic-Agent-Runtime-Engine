@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["model", "anthropic", "adapter", "cli-doctor"]
 created: 2026-03-05
 updated: 2026-03-05
-status: draft
+status: active
 mode: openspec
 ---
 
@@ -40,12 +40,12 @@ mode: openspec
 
 ### Results
 - OpenSpec change 创建成功（schema: `spec-driven`）。
-- Anthropic adapter 目标测试集通过：`58 passed, 1 warning`。
+- Anthropic adapter 目标测试集通过：`74 passed, 1 warning`。
 
 ### Contract Delta
 - schema: `changed`（新增 `anthropic` adapter 选择与请求/响应规范化行为，模型名为配置直传）。
 - error semantics: `changed`（`anthropic` SDK 缺失时新增明确错误提示）。
-- retry: `none`（未新增重试语义）。
+- retry: `none`（reason: Anthropic adapter 本次仅做请求参数和响应解析适配，未引入新重试策略）。
 
 ### Golden Cases
 - `tests/unit/test_anthropic_model_adapter.py`
@@ -53,20 +53,21 @@ mode: openspec
 - `tests/unit/test_client_cli.py`
 
 ### Regression Summary
-- 定向回归通过，覆盖新增 adapter 的序列化、模型名直传、manager 选择与 CLI doctor 诊断分支。
+- runner: `.venv/bin/pytest -q tests/unit/test_anthropic_model_adapter.py tests/unit/test_default_model_adapter_manager.py tests/unit/test_client_cli.py`
+- summary: pass=74, fail=0, skip=0；覆盖新增 adapter 的序列化、模型名直传、manager 选择与 CLI doctor 诊断分支。
 
 ### Observability and Failure Localization
-- 入口：`DefaultModelAdapterManager.load_model_adapter(config)`。
-- tool_call/tool_result 序列化：`AnthropicModelAdapter._serialize_system_and_messages`。
-- 响应解析：`_extract_response_text` / `_extract_tool_calls` / `_extract_usage`。
-- 失败定位：`_build_client`（依赖缺失）、`build_doctor_report`（依赖与 API key 诊断）。
+- start: adapter 初始化入口为 `DefaultModelAdapterManager.load_model_adapter(config)`，关键定位字段包含 `run_id` 与 `trace_id`。
+- tool_call: `AnthropicModelAdapter._serialize_system_and_messages` 处理 tool_use/tool_result，关键定位字段包含 `tool_call_id`、`capability_id`、`attempt`。
+- end: `client.messages.create(**params)` 返回后经 `_extract_response_text` / `_extract_tool_calls` / `_extract_usage` 归一化并结束本次推理链路。
+- fail: `_build_client` 缺依赖或缺 API key/model 时抛错；`build_doctor_report` 提供依赖与密钥诊断，错误定位语义包含 `error_type` / `error_code` / `ToolResult.error`。
 
 ### Structured Review Report
-- module boundary: 仅新增 Anthropic adapter 模块并修改最小接入面（manager/export/doctor）。
-- state: 无新增全局可变状态，client 延续 lazy client 初始化。
-- concurrency: 复用 async client 调用模型 API，不引入并发共享写路径。
-- side-effect: 新增外部依赖 `anthropic`，其余 side-effect 不变。
-- coverage: 新增/修改行为均有对应单测。
+- Changed Module Boundaries / Public API: 新增 `dare_framework/model/adapters/anthropic_adapter.py`，并在 `model/adapters/__init__.py`、`model/__init__.py`、`DefaultModelAdapterManager` 暴露 `anthropic` adapter 入口。
+- New State: 无新增全局可变状态；adapter 仅维护 lazy 初始化的 SDK client 引用。
+- Concurrency / Timeout / Retry: 复用 async SDK 调用路径；未新增 timeout/retry 语义，保持现有 runtime 并发模型不变。
+- Side Effects and Idempotency: 仅新增 `anthropic` 依赖与 provider 分支；消息序列化与响应解析均为纯转换逻辑，幂等性不变。
+- Coverage and Residual Risk: 相关单测已覆盖 adapter 载入、模型名直传、tool 序列化、doctor 诊断；残余风险是运行时配置错误（缺 model 或 key）导致初始化失败。
 
 ### Behavior Verification
 - Happy path:
@@ -82,5 +83,7 @@ mode: openspec
 - 回滚：删除 `anthropic` 分支与新增 adapter 文件即可恢复至原行为，不影响 OpenAI/OpenRouter 路径。
 
 ### Review and Merge Gate Links
-- Review request: 待创建 PR 后补充。
-- Merge gate: 待 CI 与 reviewer 通过后补充。
+- Intent PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/126`
+- Implementation PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/199`
+- Review request: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/199#pullrequestreview-3894789081`
+- Merge gate: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/199/checks`

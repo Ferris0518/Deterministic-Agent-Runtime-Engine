@@ -156,3 +156,47 @@ async def test_generate_builds_anthropic_payload_and_parses_response() -> None:
     assert result.thinking_content == "plan"
     assert result.tool_calls == [{"id": "toolu_1", "name": "search", "arguments": {"q": "docs"}}]
     assert result.usage == {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12}
+
+
+@pytest.mark.asyncio
+async def test_generate_keeps_normalized_max_tokens_when_extra_value_is_none() -> None:
+    calls: list[dict[str, object]] = []
+
+    class _MessagesAPI:
+        async def create(self, **kwargs):  # noqa: ANN003
+            calls.append(kwargs)
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")], usage=None, stop_reason="end_turn")
+
+    class _FakeClient:
+        def __init__(self) -> None:
+            self.messages = _MessagesAPI()
+
+    adapter = AnthropicModelAdapter(api_key="test-key", model="claude-sonnet-4-5", extra={"max_tokens": None})
+    adapter._client = _FakeClient()  # type: ignore[assignment]
+
+    await adapter.generate(ModelInput(messages=[Message(role="user", content="hello")]))
+
+    assert calls
+    assert calls[0]["max_tokens"] == 2048
+
+
+@pytest.mark.asyncio
+async def test_generate_normalizes_string_max_tokens_from_extra() -> None:
+    calls: list[dict[str, object]] = []
+
+    class _MessagesAPI:
+        async def create(self, **kwargs):  # noqa: ANN003
+            calls.append(kwargs)
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")], usage=None, stop_reason="end_turn")
+
+    class _FakeClient:
+        def __init__(self) -> None:
+            self.messages = _MessagesAPI()
+
+    adapter = AnthropicModelAdapter(api_key="test-key", model="claude-opus-4-1", extra={"max_tokens": "256"})
+    adapter._client = _FakeClient()  # type: ignore[assignment]
+
+    await adapter.generate(ModelInput(messages=[Message(role="user", content="hello")]))
+
+    assert calls
+    assert calls[0]["max_tokens"] == 256
