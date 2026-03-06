@@ -567,7 +567,7 @@ check_todo_claim_to_openspec_task_mapping() {
 check_master_todo_slice_mapping_consistency() {
   local project_file="docs/todos/project_overall_todos.md"
   local detail_file="docs/todos/agentscope_domain_execution_todos.md"
-  local line status_field claim_id change_field detail_refs ref detail_change
+  local line status_field claim_id change_field detail_refs ref detail_change detail_claim_found
   local detail_claim_map
 
   if [[ ! -f "$project_file" || ! -f "$detail_file" ]]; then
@@ -598,8 +598,9 @@ check_master_todo_slice_mapping_consistency() {
 
     while IFS= read -r ref; do
       [[ -z "$ref" ]] && continue
+      detail_claim_found="$(awk -F'|' -v target="$ref" '$1 == target {print "1"; exit}' "$detail_claim_map")"
       detail_change="$(awk -F'|' -v target="$ref" '$1 == target {print $2; exit}' "$detail_claim_map")"
-      if [[ -z "$detail_change" ]]; then
+      if [[ -z "$detail_claim_found" ]]; then
         log "missing Detail Claim Ref mapping in $project_file: $ref"
         failures=$((failures + 1))
         continue

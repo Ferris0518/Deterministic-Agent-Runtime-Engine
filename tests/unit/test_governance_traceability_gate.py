@@ -481,6 +481,22 @@ Skill contract (minimum two skills):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing Detail Claim Ref mapping in docs/todos/project_overall_todos.md", result.stdout)
 
+    def test_gate_accepts_detail_claim_ref_with_empty_change_cell(self) -> None:
+        def mutate(root: Path) -> None:
+            detail_doc = root / "docs" / "todos" / "agentscope_domain_execution_todos.md"
+            detail_doc.write_text(
+                detail_doc.read_text(encoding="utf-8").replace(
+                    "`demo-change` | `CLM-AG1`",
+                    " | `CLM-AG1`",
+                ),
+                encoding="utf-8",
+            )
+
+        result = self._run_gate(mutate)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("passed", result.stdout)
+
     def test_gate_accepts_date_prefixed_archived_change_tasks(self) -> None:
         def mutate(root: Path) -> None:
             feature_doc = root / "docs" / "features" / "demo-change.md"

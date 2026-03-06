@@ -221,12 +221,17 @@ main() {
   fi
 
   local implementation_changed="false"
-  local -a changed_feature_docs=()
+  # Store doc paths as newline-separated strings for set -u portability across
+  # shell versions where empty array expansion can be treated as unbound.
+  local changed_feature_docs=""
   local path
   while IFS= read -r path; do
     [[ -z "$path" ]] && continue
     if [[ "$path" =~ ^docs/features/[^/]+\.md$ ]] && [[ "$path" != "docs/features/README.md" ]]; then
-      changed_feature_docs+=("$path")
+      if [[ -n "$changed_feature_docs" ]]; then
+        changed_feature_docs+=$'\n'
+      fi
+      changed_feature_docs+="$path"
     fi
     if ! is_governance_only_path "$path"; then
       implementation_changed="true"
@@ -238,14 +243,15 @@ main() {
     exit 0
   fi
 
-  if [[ ${#changed_feature_docs[@]} -eq 0 ]]; then
+  if [[ -z "$changed_feature_docs" ]]; then
     log "implementation changes detected but PR must update at least one governed feature doc under docs/features/*.md"
     failures=$((failures + 1))
   fi
 
-  local -a governed_feature_docs=()
+  local governed_feature_docs=""
   local doc frontmatter status normalized_status
-  for doc in "${changed_feature_docs[@]}"; do
+  while IFS= read -r doc; do
+    [[ -z "$doc" ]] && continue
     if [[ ! -f "$doc" ]]; then
       log "changed governed feature doc is missing in workspace: $doc"
       failures=$((failures + 1))
@@ -256,17 +262,21 @@ main() {
     status="$(trim_quotes "$(frontmatter_scalar "$frontmatter" "status")")"
     normalized_status="$(normalize_status "$status")"
     if [[ "$normalized_status" == "active" || "$normalized_status" == "in_review" ]]; then
-      governed_feature_docs+=("$doc")
+      if [[ -n "$governed_feature_docs" ]]; then
+        governed_feature_docs+=$'\n'
+      fi
+      governed_feature_docs+="$doc"
     fi
-  done
+  done <<<"$changed_feature_docs"
 
-  if [[ ${#governed_feature_docs[@]} -eq 0 ]]; then
+  if [[ -z "$governed_feature_docs" ]]; then
     log "implementation changes detected but PR must update at least one governed feature doc (status active/in_review)"
     failures=$((failures + 1))
   fi
 
   local intent_pr_url components owner repo pr_number pr_state
-  for doc in "${governed_feature_docs[@]}"; do
+  while IFS= read -r doc; do
+    [[ -z "$doc" ]] && continue
     intent_pr_url="$(extract_intent_pr_url "$doc")"
     if [[ -z "$intent_pr_url" ]]; then
       log "missing Intent PR link in $doc"
@@ -294,7 +304,7 @@ main() {
     fi
 
     log "validated merged Intent PR for $doc: $intent_pr_url"
-  done
+  done <<<"$governed_feature_docs"
 
   if [[ $failures -gt 0 ]]; then
     log "failed with $failures issue(s)"
