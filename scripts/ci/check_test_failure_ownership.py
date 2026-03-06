@@ -13,22 +13,26 @@ if __package__ in {None, ""}:
 from scripts.ci.p0_gate import DEFAULT_CATEGORY_SPECS, CategorySpec
 
 
-def _normalize_selector_segments(selector: str) -> list[str]:
-    segments = [segment.strip() for segment in selector.split("::")]
-    normalized: list[str] = []
-    for segment in segments:
-        if not segment:
-            continue
+def _normalize_selector_parts(selector: str) -> tuple[list[str], list[str]]:
+    segments = [segment.strip() for segment in selector.split("::") if segment.strip()]
+    if not segments:
+        return [], []
+
+    raw_path = segments[0].replace("\\", "/")
+    path_parts = [part for part in raw_path.split("/") if part and part != "."]
+    node_parts = [
         # `pytest` parametrization suffixes (`test_x[param]`) are narrower matches
         # than the base node (`test_x`) and should count as overlapping selectors.
-        normalized.append(segment.split("[", 1)[0])
-    return normalized
+        segment.split("[", 1)[0]
+        for segment in segments[1:]
+    ]
+    return path_parts, node_parts
 
 
 def _selectors_overlap(left: str, right: str) -> bool:
-    left_segments = _normalize_selector_segments(left)
-    right_segments = _normalize_selector_segments(right)
-    if not left_segments or not right_segments:
+    left_path, left_nodes = _normalize_selector_parts(left)
+    right_path, right_nodes = _normalize_selector_parts(right)
+    if not left_path or not right_path:
         return False
 
     def _is_prefix(prefix: list[str], full: list[str]) -> bool:
@@ -36,7 +40,16 @@ def _selectors_overlap(left: str, right: str) -> bool:
             return False
         return prefix == full[: len(prefix)]
 
-    return _is_prefix(left_segments, right_segments) or _is_prefix(right_segments, left_segments)
+    if left_path == right_path:
+        return _is_prefix(left_nodes, right_nodes) or _is_prefix(right_nodes, left_nodes)
+
+    # `pytest` accepts file_or_dir selectors; a directory selector overlaps any
+    # descendant file/node selector under the same subtree.
+    if _is_prefix(left_path, right_path):
+        return not left_nodes
+    if _is_prefix(right_path, left_path):
+        return not right_nodes
+    return False
 
 
 def validate_category_specs(specs: list[CategorySpec]) -> list[str]:

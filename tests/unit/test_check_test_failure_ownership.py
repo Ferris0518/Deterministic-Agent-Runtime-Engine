@@ -53,6 +53,17 @@ def test_validate_category_specs_rejects_overlapping_test_mapping() -> None:
     assert any("overlapping test selector mapping" in issue for issue in issues)
 
 
+def test_validate_category_specs_rejects_overlapping_directory_selector_mapping() -> None:
+    issues = validate_category_specs(
+        [
+            _spec("SECURITY_REGRESSION", tests=["tests/unit"]),
+            _spec("STEP_EXEC_REGRESSION", tests=["tests/unit/test_a.py::test_x"]),
+        ]
+    )
+
+    assert any("overlapping test selector mapping" in issue for issue in issues)
+
+
 def test_validate_category_specs_rejects_missing_owner() -> None:
     issues = validate_category_specs(
         [
