@@ -46,11 +46,15 @@ def _is_image_attachment(*, mime_type: str | None, filename: str | None, uri: st
     return bool(guessed and guessed.startswith("image/"))
 
 
-def _build_inline_attachment_uri(*, mime_type: str | None, data_b64: str | None) -> str | None:
+def _build_inline_attachment_uri(
+    *, mime_type: str | None, filename: str | None, data_b64: str | None
+) -> str | None:
     """Build a provider-valid data URI for inline image transport."""
     if not isinstance(data_b64, str) or not data_b64.strip():
         return None
-    media_type = (mime_type or "application/octet-stream").strip() or "application/octet-stream"
+    normalized_mime = (mime_type or "").strip()
+    guessed_mime = mimetypes.guess_type(filename or "")[0] if filename else None
+    media_type = normalized_mime or guessed_mime or "application/octet-stream"
     return f"data:{media_type};base64,{data_b64.strip()}"
 
 
@@ -193,6 +197,7 @@ def message_parts_to_message(
             inline = part.get("inlineData")
             attachment_uri = _build_inline_attachment_uri(
                 mime_type=str(part.get("mimeType") or (resolved or {}).get("mimeType") or ""),
+                filename=str(part.get("filename") or (resolved or {}).get("filename") or "") or None,
                 data_b64=inline.get("data") if isinstance(inline, dict) else None,
             )
         elif "uri" in part:

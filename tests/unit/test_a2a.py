@@ -127,6 +127,20 @@ def test_message_parts_to_message_promotes_image_file_to_attachment() -> None:
         assert "a2a_attachments" in message.metadata
 
 
+def test_message_parts_to_message_infers_inline_image_mime_from_filename() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        parts = [
+            {
+                "type": "file",
+                "filename": "photo.png",
+                "inlineData": {"data": base64.b64encode(b"pngdata").decode()},
+            },
+        ]
+        message = message_parts_to_message(parts, workspace_dir=tmp)
+        assert len(message.attachments) == 1
+        assert message.attachments[0].uri.startswith("data:image/png;base64,")
+
+
 def test_message_parts_to_message_preserves_remote_image_uri_for_model_delivery() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         message = message_parts_to_message(

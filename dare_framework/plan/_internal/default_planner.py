@@ -178,7 +178,7 @@ class DefaultPlanner:
         """
         # Get task from context STM
         messages = ctx.stm_get()
-        task_description = messages[-1].text if messages else "Unknown task"
+        task_description = self._describe_task_message(messages[-1] if messages else None)
 
         # Build prompt
         user_prompt = f"""Task: {task_description}
@@ -229,6 +229,20 @@ Output ONLY valid JSON following the structure defined in your instructions."""
             if self._verbose:
                 print(f"[DefaultPlanner] Error: {e}, using fallback")
             return self._fallback_plan(task_description)
+
+    @staticmethod
+    def _describe_task_message(message: Message | None) -> str:
+        """Build a stable planner task description for text or attachment-only prompts."""
+        if message is None:
+            return "Unknown task"
+        if isinstance(message.text, str):
+            normalized_text = message.text.strip()
+            if normalized_text:
+                return normalized_text
+        attachment_count = len(message.attachments or [])
+        if attachment_count > 0:
+            return f"[User provided {attachment_count} attachment(s) with no text input]"
+        return "Unknown task"
 
     def _parse_response(self, content: str) -> dict[str, Any]:
         """Parse LLM response to extract plan JSON."""
