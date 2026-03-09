@@ -344,6 +344,51 @@ async def test_unknown_control_returns_structured_error_reply() -> None:
 
 
 @pytest.mark.asyncio
+async def test_malformed_control_params_returns_structured_error_reply() -> None:
+    seen: list[TransportEnvelope] = []
+    sent = asyncio.Event()
+
+    async def receiver(msg: TransportEnvelope) -> None:
+        seen.append(msg)
+        sent.set()
+
+    client = DummyClientChannel(receiver)
+    channel = AgentChannel.build(client)
+    fake_agent = FakeAgent()
+    channel.add_agent_control_handler(AgentControlHandler(fake_agent))
+
+    await channel.start()
+    try:
+        sender = client.sender
+        assert sender is not None
+        await sender(
+            TransportEnvelope(
+                id="req-control-bad-params",
+                kind=EnvelopeKind.CONTROL,
+                payload=ControlPayload(
+                    id="ctl-bad-params",
+                    control_id="interrupt",
+                    params=None,  # type: ignore[arg-type]
+                ),
+            )
+        )
+        await asyncio.wait_for(sent.wait(), timeout=1.0)
+    finally:
+        await channel.stop()
+
+    assert fake_agent.interrupted is False
+    assert len(seen) == 1
+    response = seen[0]
+    assert response.kind is EnvelopeKind.CONTROL
+    assert isinstance(response.payload, ControlPayload)
+    assert response.payload.control_id == "interrupt"
+    assert response.payload.ok is False
+    assert response.payload.code == "INVALID_CONTROL_PAYLOAD"
+    assert isinstance(response.payload.reason, str)
+    assert "expected params mapping" in response.payload.reason
+
+
+@pytest.mark.asyncio
 async def test_invalid_message_payload_returns_structured_error_and_is_not_enqueued() -> None:
     with pytest.raises(TypeError, match="invalid payload type for envelope kind"):
         TransportEnvelope(

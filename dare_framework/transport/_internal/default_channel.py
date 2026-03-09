@@ -196,7 +196,33 @@ class DefaultAgentChannel(AgentChannel):
                 reason="invalid control payload (expected ControlPayload)",
             )
             return
-        params = {**payload.params, **dict(msg.meta)}
+        if not isinstance(payload.params, dict):
+            await self._send_error(
+                reply_to=msg.id,
+                kind="control",
+                target=payload.control_id or "control",
+                code="INVALID_CONTROL_PAYLOAD",
+                reason="invalid control payload (expected params mapping)",
+            )
+            return
+
+        params: dict[str, object] = {}
+        # Normalize kwargs eagerly so malformed key types return a structured
+        # protocol error instead of being dropped by an uncaught TypeError.
+        for raw_key, value in payload.params.items():
+            if not isinstance(raw_key, str):
+                await self._send_error(
+                    reply_to=msg.id,
+                    kind="control",
+                    target=payload.control_id or "control",
+                    code="INVALID_CONTROL_PAYLOAD",
+                    reason="invalid control payload (expected string param keys)",
+                )
+                return
+            params[raw_key] = value
+
+        for raw_key, value in dict(msg.meta).items():
+            params[str(raw_key)] = value
 
         control = AgentControl.value_of(payload.control_id)
         if control is None:
