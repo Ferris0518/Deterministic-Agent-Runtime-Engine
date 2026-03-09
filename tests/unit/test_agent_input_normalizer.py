@@ -25,3 +25,13 @@ def test_build_task_from_message_uses_metadata_task_id() -> None:
 def test_coerce_user_message_rejects_task_input() -> None:
     with pytest.raises(TypeError, match="unsupported agent input type: Task"):
         coerce_user_message(Task(description="legacy"))
+
+
+def test_coerce_user_message_rejects_non_user_role_message() -> None:
+    with pytest.raises(ValueError, match="agent input message role must be 'user'"):
+        coerce_user_message(Message(role="assistant", text="hello"))
+
+
+def test_coerce_user_message_rejects_non_chat_kind_message() -> None:
+    with pytest.raises(ValueError, match="agent input message kind must be 'chat'"):
+        coerce_user_message(Message(role="user", kind="tool_result", text=None, data={"ok": True}))
