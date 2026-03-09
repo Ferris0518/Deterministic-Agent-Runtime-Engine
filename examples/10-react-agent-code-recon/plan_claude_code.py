@@ -135,13 +135,17 @@ async def main() -> None:
 
     Path(output_dir_abs).mkdir(parents=True, exist_ok=True)
 
-    api_key = os.getenv("OPENROUTER_API_KEY", "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")
+    api_key = os.getenv("OPENROUTER_API_KEY", "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")
     if not api_key:
         print("Error: OPENROUTER_API_KEY environment variable not set")
         sys.exit(1)
 
     model_name = os.getenv("OPENROUTER_MODEL", "moonshotai/kimi-k2.5")
-    max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
+    max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "10240"))
+    # 模型输出 token 上限（completion 长度）和上下文窗口是两码事：
+    # - max_tokens: 传给底层模型 API，限制单次输出长度；
+    # - context_window_tokens: 控制 Context/moving_compression 能为历史保留多少 token。
+    context_window_tokens = int(os.getenv("OPENROUTER_CONTEXT_WINDOW", "128000"))
 
     model = OpenRouterModelAdapter(
         model=model_name,
@@ -183,6 +187,7 @@ async def main() -> None:
         .with_model(model)
         .with_config(base_config)
         .with_context_strategy("basic")
+        .with_context_window_tokens(context_window_tokens)
         .with_prompt(sub_prompt)
         .with_sys_skill(_code_recon_skill)
         .with_skill_tool(False)  # 使用固定 code-recon skill，不启用 search_skill
@@ -198,6 +203,7 @@ async def main() -> None:
         .with_model(model)
         .with_config(base_config)
         .with_context_strategy("basic")
+        .with_context_window_tokens(context_window_tokens)
         .with_prompt(sub_prompt)
         .add_tools(ReadFileTool(), WriteFileTool(), SearchCodeTool(), EditLineTool())
         .build()
@@ -210,6 +216,7 @@ async def main() -> None:
         .with_model(model)
         .with_config(base_config)
         .with_context_strategy("basic")
+        .with_context_window_tokens(context_window_tokens)
         .with_prompt(sub_prompt)
         .add_tools(RunCommandTool(), ReadFileTool())
         .build()
@@ -251,6 +258,7 @@ async def main() -> None:
         .with_config(plan_config)
         .with_model(model)
         .with_context_strategy("basic")
+        .with_context_window_tokens(context_window_tokens)
         .with_prompt(plan_prompt)
         .with_plan_provider(planner)
         .add_tools(ReadFileTool())

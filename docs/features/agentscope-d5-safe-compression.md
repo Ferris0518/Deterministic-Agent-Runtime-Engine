@@ -3,8 +3,8 @@ change_ids: ["agentscope-d5-safe-compression"]
 doc_kind: feature
 topics: ["agentscope", "compression", "context", "react-agent", "budget"]
 created: 2026-03-02
-updated: 2026-03-03
-status: done
+updated: 2026-03-09
+status: in_review
 mode: openspec
 ---
 
@@ -26,6 +26,10 @@ mode: openspec
 - 已完成：OpenSpec tasks 全部打勾（10/10）。
 - 已完成：PR #136 已合并到 `main`。
 - 已完成：评审反馈处理与合并门禁记录闭环。
+- 进行中：对 MovingCompressor 与 Context 集成进行语义修正：
+  - 将 `Budget.max_tokens` 与压缩使用的 `max_context_tokens` 解耦，由调用方或 Context 上的 `context_window_tokens` 显式控制上下文窗口大小；
+  - 压缩内部固定使用专用的摘要 prompt 与语言策略，不再透传外部系统 prompt / language；
+  - 对跨分块产生的 tool_call/tool_result 拆分，仅在压缩层做「call 在 dropped 时将 result 一并并入 dropped」处理，其余结构问题留给上层诊断。
 
 ## Evidence
 

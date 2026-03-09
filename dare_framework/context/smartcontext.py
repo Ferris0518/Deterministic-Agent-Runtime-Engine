@@ -37,6 +37,7 @@ class SmartContext(Context):
         sys_prompt: Prompt | None = None,
         skill: Skill | None = None,
         assemble_context: IAssembleContext | None = None,
+        context_window_tokens: int | None = None,
     ) -> None:
         # SmartContext 默认使用带 id/mark 能力的 InMemorySmartSTM，
         # 仅当外部显式传入 short_term_memory 时才使用外部实现。
@@ -54,6 +55,7 @@ class SmartContext(Context):
             sys_prompt=sys_prompt,
             skill=skill,
             assemble_context=assemble_context,
+            context_window_tokens=context_window_tokens,
         )
 
     # ========== Smart Extensions: Core / TaskComplete / STM Remove ==========

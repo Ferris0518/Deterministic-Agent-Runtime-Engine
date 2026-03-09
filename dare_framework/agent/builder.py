@@ -100,6 +100,8 @@ class _BaseAgentBuilder(Generic[TAgent]):
         self._config: Config | None = None
         # 可选：上下文策略名称（如 "basic" / "smart"），由具体 Builder 解释含义。
         self._context_strategy: str | None = None
+        # 可选：上下文压缩策略（如 "moving" / None），由 Context 解释含义。
+        self._compression_strategy: str | None = None
         self._config_provider: IConfigProvider | None = None
         self._model_adapter_manager: IModelAdapterManager | None = None
         self._planner_manager: IPlannerManager | None = None
@@ -118,6 +120,10 @@ class _BaseAgentBuilder(Generic[TAgent]):
         """Optional; used with config.knowledge to create vector knowledge from config."""
         self._prompt_store: IPromptStore | None = None
         self._sys_prompt: tuple[str | None, Prompt | None] | None = None
+        # Optional: per-context LLM上下文窗口大小（用于压缩），单位 token。
+        # 仅作为 compression.max_context_tokens 的默认值挂载到 Context 上，
+        # 不参与 Budget.max_tokens 计费语义。
+        self._context_window_tokens: int | None = None
         # Tool wiring (shared across variants).
         self._tools: list[ITool] = []
         self._tool_providers: list[IToolProvider] = []
@@ -207,6 +213,18 @@ class _BaseAgentBuilder(Generic[TAgent]):
 
     def with_context(self: TBuilder, assemble_context: IAssembleContext) -> TBuilder:
         self._assemble_context = assemble_context
+        return self
+
+    def with_context_window_tokens(self: TBuilder, max_tokens: int | None) -> TBuilder:
+        """配置单次请求的上下文窗口大小（用于压缩），单位 token。
+
+        - 仅作为 Context 上的 context_window_tokens 挂载给 MovingCompressor 使用；
+        - 不影响 Budget.max_tokens，后者只用于累计花销控制。
+        """
+        if max_tokens is None or max_tokens <= 0:
+            self._context_window_tokens = None
+        else:
+            self._context_window_tokens = int(max_tokens)
         return self
 
     def with_context_strategy(self: TBuilder, strategy: str) -> TBuilder:
@@ -329,6 +347,8 @@ class _BaseAgentBuilder(Generic[TAgent]):
             self._mcp_manager = None
             self._mcp_toolkit = None
         model, model_manager = self._resolve_model_and_model_manager(config)
+        # 记录最终解析出的 model，便于子类在构建 Context 时使用（例如为 MovingCompressor 注入 LLM）。
+        self._model = model
         approval_manager = self._resolve_approval_manager(config)
         sys_prompt = self._resolve_sys_prompt(model)
         knowledge = self._resolved_knowledge()
@@ -548,9 +568,13 @@ class _BaseAgentBuilder(Generic[TAgent]):
             sys_prompt: Prompt | None,
             tool_gateway: IToolGateway | None,
     ) -> Context:
-        """Build context with shared defaults for all builder variants."""
+        """Build context with shared defaults for all builder variants.
+
+        若上下文 compression 策略为 "moving" 且已解析出 model，则为 Context 挂载带 model 的 MovingCompressor（一次性注入 LLM）。
+        这样所有基于 Context 的 Agent（SimpleChat/React/Dare）都具备统一的「moving 压缩」能力，同时可以通过 compression 参数化关闭或更换策略。
+        """
         sys_skill = None if self._enable_skill_tool else self._sys_skill
-        return self._context_class()(
+        context = self._context_class()(
             id=f"context_{self._name}",
             short_term_memory=self._short_term_memory,
             long_term_memory=self._resolved_long_term_memory(),
@@ -561,7 +585,16 @@ class _BaseAgentBuilder(Generic[TAgent]):
             config=config,
             tool_gateway=tool_gateway,
             assemble_context=self._assemble_context,
+            context_window_tokens=self._context_window_tokens,
         )
+        # 若 builder 已解析到 model：
+        # - 默认（compression 为空或其他值）视为启用 "moving" 压缩；
+        # - 显式配置 compression="no_compress" 时不挂载 MovingCompressor。
+        normalized_compression = (self._compression_strategy or "moving").strip().lower()
+        if self._model is not None and normalized_compression == "moving":
+            from dare_framework.compression import MovingCompressor
+            context.set_moving_compressor(MovingCompressor(model=self._model))
+        return context
 
 class SimpleChatAgentBuilder(_BaseAgentBuilder[SimpleChatAgent]):
     """Builder for SimpleChatAgent."""
