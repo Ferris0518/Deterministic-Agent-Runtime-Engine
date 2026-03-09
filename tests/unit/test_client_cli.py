@@ -14,10 +14,11 @@ from client.commands.info import build_doctor_report
 from client.commands.mcp import summarize_tools
 from client.parser.command import Command, CommandType, parse_command
 from client.parser.kv import parse_key_value_args
-from client.runtime.action_client import ActionClientError, _parse_action_response
+from client.runtime.action_client import ActionClientError, TransportActionClient, _parse_action_response
 from client.runtime.task_runner import format_run_output
 from dare_framework.config import Config
 from dare_framework.context import Message
+from dare_framework.transport import ActionPayload, ControlPayload, EnvelopeKind, TransportEnvelope
 
 
 def test_parse_command_mode() -> None:
@@ -74,6 +75,72 @@ def test_parse_action_response_error() -> None:
             expected_kind="action",
         )
     assert excinfo.value.code == "ACTION_HANDLER_FAILED"
+
+
+def test_parse_action_response_accepts_typed_action_payload() -> None:
+    payload = ActionPayload(
+        id="action-reply-1",
+        resource_action="tools:list",
+        ok=True,
+        result={"items": ["read_file"]},
+    )
+
+    assert _parse_action_response(payload, expected_kind="action") == {"items": ["read_file"]}
+
+
+def test_parse_action_response_accepts_typed_control_payload() -> None:
+    payload = ControlPayload(
+        id="control-reply-1",
+        control_id="interrupt",
+        ok=True,
+        result={"accepted": True},
+    )
+
+    assert _parse_action_response(payload, expected_kind="control") == {"accepted": True}
+
+
+@pytest.mark.asyncio
+async def test_transport_action_client_sends_typed_action_and_control_payloads() -> None:
+    sent: list[TransportEnvelope] = []
+
+    class _Channel:
+        async def ask(self, envelope: TransportEnvelope, *, timeout: float | None = None):  # noqa: ANN001
+            _ = timeout
+            sent.append(envelope)
+            if envelope.kind == EnvelopeKind.ACTION:
+                return TransportEnvelope(
+                    id="reply-action",
+                    kind=EnvelopeKind.ACTION,
+                    payload=ActionPayload(
+                        id="reply-action-payload",
+                        resource_action="tools:list",
+                        ok=True,
+                        result={"items": []},
+                    ),
+                )
+            return TransportEnvelope(
+                id="reply-control",
+                kind=EnvelopeKind.CONTROL,
+                payload=ControlPayload(
+                    id="reply-control-payload",
+                    control_id="interrupt",
+                    ok=True,
+                    result={"accepted": True},
+                ),
+            )
+
+    client = TransportActionClient(_Channel())  # type: ignore[arg-type]
+
+    action_result = await client.invoke_action("tools:list", scope="workspace")
+    control_result = await client.invoke_control("interrupt")
+
+    assert action_result == {"items": []}
+    assert control_result == {"accepted": True}
+    assert isinstance(sent[0].payload, ActionPayload)
+    assert sent[0].payload.resource_action == "tools:list"
+    assert sent[0].payload.params == {"scope": "workspace"}
+    assert isinstance(sent[1].payload, ControlPayload)
+    assert sent[1].payload.control_id.value == "interrupt"
 
 
 def test_summarize_tools_split_mcp_and_local() -> None:
