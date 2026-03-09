@@ -40,7 +40,8 @@
 
 输入：
 
-- `str | Task`
+- `str | Message`
+- Public input 先归一为 canonical `Message`；`Task.input_message` 保存内部会话首轮用户消息
 - `Task.task_id` 缺失时在执行入口补齐
 
 输出：

@@ -1,0 +1,5 @@
+- [x] Update design docs to separate canonical `Message` input from orchestration `Task.description`.
+- [x] Add failing tests for transport canonical-message preservation, `Task.input_message`, and stricter `tool_call/tool_result` schema validation.
+- [x] Add `Task.input_message`, normalize public `str` input at the agent boundary, and keep internal execution on canonical `Message`.
+- [x] Update active client/example entry points to send canonical `Message` instead of `Task(description=...)` for direct prompts.
+- [x] Refresh focused tests and replace metadata-only tool-call compatibility assertions with the new canonical schema contract.

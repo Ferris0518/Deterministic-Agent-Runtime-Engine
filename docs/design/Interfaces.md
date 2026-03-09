@@ -33,9 +33,21 @@ dare_framework/<domain>/
 ### 1.1 上下文契约（context/types.py）
 
 - `Message`
-  - `role: str`
-  - `content: str`
+  - framework 内部唯一 canonical message
+  - `id: str | None`
+  - `role: MessageRole`
+  - `kind: MessageKind`
+  - `text: str | None`
+  - `attachments: list[AttachmentRef]`
+  - `data: dict[str, Any] | None`
   - `name: str | None`
+  - `metadata: dict[str, Any]`
+  - `mark: MessageMark`
+- `AttachmentRef`
+  - `kind: AttachmentKind`（首版 `IMAGE`）
+  - `uri: str`
+  - `mime_type: str | None`
+  - `filename: str | None`
   - `metadata: dict[str, Any]`
 - `Budget`
   - limits: `max_tokens/max_cost/max_time_seconds/max_tool_calls`
@@ -49,6 +61,8 @@ dare_framework/<domain>/
 ### 1.2 计划与运行结果契约（plan/types.py）
 
 - `Task`: `description/task_id/milestones/metadata/previous_session_summary`
+  - `input_message: Message | None`
+  - `description` 作为编排输入保留，不再视为真实消息载体
 - `Milestone`: `milestone_id/description/user_input/success_criteria`
 - `ProposedPlan` vs `ValidatedPlan`
 - `Envelope`: `allowed_capability_ids/budget/done_predicate/risk_level`
@@ -71,7 +85,17 @@ dare_framework/<domain>/
 - `TransportEnvelope`
   - `id/reply_to/kind/payload/meta/stream_id/seq`
 - `EnvelopeKind`
-  - `MESSAGE/ACTION/CONTROL`
+  - `MESSAGE/SELECT/ACTION/CONTROL`
+- `EnvelopePayload`
+  - 公共字段：`id/metadata`
+- `MessagePayload`
+  - `id/metadata/role(MessageRole)/message_kind(MessageKind)/text/attachments/data`
+- `SelectPayload`
+  - `id/metadata/select_kind(SelectKind)/select_domain(SelectDomain)/prompt/options/selected`
+- `ActionPayload`
+  - `id/metadata/resource_action/params`
+- `ControlPayload`
+  - `id/metadata/control_id/params`
 
 ---
 
@@ -83,7 +107,7 @@ dare_framework/<domain>/
 class IAgent(ABC):
     async def __call__(
         self,
-        message: str | Task,
+        message: str | Message,
         deps: Any | None = None,
         *,
         transport: AgentChannel | None = None,
@@ -104,7 +128,7 @@ class IAgent(ABC):
 class IAgentOrchestration(ABC):
     async def execute(
         self,
-        task: str | Task,
+        task: Message,
         *,
         transport: AgentChannel | None = None,
     ) -> RunResult: ...
@@ -113,7 +137,8 @@ class IAgentOrchestration(ABC):
 ### 2.3 关键说明
 
 - 统一入口是 `__call__`，而非历史文档中的 `run(...)`。
-- `Task` 与 `str` 并存：支持 simple/react/five-layer 统一调用面。
+- `Message` 是首选直接输入；`Task` 仅用于编排。
+- Public agent input is `Message` (or plain `str` normalized into `Message`); `Task.input_message` 保存 canonical 首轮用户消息，`Task.description` 仅保留给内部规划/里程碑描述。
 
 ---
 
@@ -158,6 +183,7 @@ class IContext(ABC):
     def list_tools(self) -> list[CapabilityDescriptor]: ...
     def assemble(self) -> AssembledContext: ...
     def compress(self, **options: Any) -> None: ...
+
 ```
 
 ---

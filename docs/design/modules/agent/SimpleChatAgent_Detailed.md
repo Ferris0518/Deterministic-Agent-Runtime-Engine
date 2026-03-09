@@ -33,8 +33,9 @@
 
 输入：
 
-- `str | Task`
-- `str` 在入口处转换为 `Task.description`
+- `str | Message`
+- `Message` 是首选直接输入；`str` 会升级为 canonical `Message`
+- `Task` 仅用于编排，真实首轮用户消息来自 `Task.input_message`（若为空则退化为 `description`）
 
 输出：
 

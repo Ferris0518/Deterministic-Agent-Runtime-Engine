@@ -131,14 +131,18 @@
 
 若超时未出现 pending，则 `request=null`。
 
-## 5. Transport 审批事件（推荐）
+## 5. Transport 审批协议（推荐）
 
-当 `requires_approval=true` 的工具调用进入 pending 时，runtime 会通过 transport 主动发出：
+当 `requires_approval=true` 的工具调用进入 pending 时，runtime 会通过 transport 主动发出 `kind="select"` 的 typed payload：
 
-- `event_type="approval.pending"`：包含 pending request 详情
-- `event_type="approval.resolved"`：包含 request_id 与最终 decision（allow/deny）
+- `SelectPayload(select_kind="ask", select_domain="approval")`：包含 pending request 详情
+- `SelectPayload(select_kind="answered", select_domain="approval")`：包含 request_id 与最终 decision（allow/deny）
 
-协议说明：客户端应仅使用 `event_type` 做分流；`payload.type` 已移除。
+协议说明：
+
+- transport 层应基于 `TransportEnvelope.kind="select"` 与 `SelectPayload.select_kind/select_domain` 做分流
+- `event_type="approval.pending|approval.resolved"` 不再是 transport 主协议
+- `client --output json` 的 headless 事件流仍会向外发出 `approval.pending` / `approval.resolved` 作为 CLI 事件名，这是独立于 transport 的输出契约
 
 这允许客户端实现 Codex/Claude Code 风格的“消息流里出现审批卡片”，同时再用 `approvals:grant|deny` 完成决策。
 

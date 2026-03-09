@@ -240,9 +240,9 @@ AgentScope 补齐详细 TODO 入口：`docs/todos/agentscope_domain_execution_to
   Evidence：`openspec/changes/archive/2026-03-03-agentscope-d2-d4-thinking-transport/`，`docs/features/agentscope-d2-d4-thinking-transport.md`，`.venv/bin/pytest -q`（`528 passed, 12 skipped, 1 warning`）  
   Last Updated: `2026-03-03`
 
-- [ ] T5-3 图片/音频/视频富媒体消息格式支持  
-  Status: `planned`  
-  范围：定义并落地多模态 message schema（文本 + 图片 + 音频 + 视频），覆盖模型输入、上下文存储、transport 传输与适配器能力探测；统一替代“图片/富媒体一等支持”的原 T4-4 范围（含 A2A 附件链路规范化）。  
+- [ ] T5-3 图片/音频/视频富媒体消息格式支持
+  Status: `planned`
+  范围：定义并落地多模态消息格式基线。保留 `TransportEnvelope.kind = message/select/action/control`，以 typed payload 替代 `payload: Any + event_type`；升级 canonical `Message` 为 `text + attachments + data` 结构，覆盖模型输入、上下文存储、transport 传输与适配器能力探测；统一替代“图片/富媒体一等支持”的原 T4-4 范围（含 A2A 附件链路规范化）。
   交付：跨适配器能力矩阵 + 不支持能力时的降级策略 + 示例用例。
 
 - [ ] T5-4 全链路日志输出整理（模块分层与规范化）  

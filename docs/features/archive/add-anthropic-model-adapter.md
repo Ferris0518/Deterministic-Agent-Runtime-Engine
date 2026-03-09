@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["model", "anthropic", "adapter", "cli-doctor"]
 created: 2026-03-05
 updated: 2026-03-05
-status: active
+status: archived
 mode: openspec
 ---
 
