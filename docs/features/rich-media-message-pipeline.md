@@ -80,6 +80,6 @@ caching, compression, resume, and dispatch orchestration.
 
 ### Review and Merge Gate Links
 
-- Intent PR: `TBD`
+- Intent PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/206`
 - Implementation PR: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/204`
-- Review request: `TBD`
+- Review request: `https://github.com/zts212653/Deterministic-Agent-Runtime-Engine/pull/206#issuecomment-4023104454`
