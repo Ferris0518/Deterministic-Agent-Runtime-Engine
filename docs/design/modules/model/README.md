@@ -1,11 +1,12 @@
 # Module: model
 
-> Status: detailed design aligned to `dare_framework/model` (2026-03-05).
+> Status: message-codec boundary updated for canonical rich-media messages (2026-03-09).
 
 ## 1. 定位与职责
 
 - 提供统一模型调用抽象：`IModelAdapter.generate`。
 - 定义模型输入/输出结构：`ModelInput`、`ModelResponse`。
+- 负责把 context domain 的 canonical `Message` 序列化为 provider message。
 - 提供 prompt 装载与分层解析能力（store + loader）。
 
 ## 2. 依赖与边界
@@ -15,6 +16,8 @@
 - 类型：`Prompt`, `ModelInput`, `ModelResponse`, `GenerateOptions`
 - 边界约束：
   - model domain 负责“调用与格式适配”，不负责执行循环与工具决策。
+  - provider message 仅存在于 adapter 内部，不进入 context/history。
+  - adapter 必须消费 canonical `Message`，不得要求上游直接构造 provider-native payload。
 
 ## 3. 对外接口（Public Contract）
 
@@ -39,24 +42,54 @@
 - `GenerateOptions`
   - `temperature`, `max_tokens`, `top_p`, `stop`, `metadata`
 
+canonical `Message` 由 context domain 提供，建议字段口径：
+
+- `id`
+- `role`
+  - `MessageRole`
+- `kind`
+  - `MessageKind`
+- `text: str | None`
+- `attachments: list[AttachmentRef]`
+- `data: dict[str, Any] | None`
+- `name`
+- `metadata`
+
+其中：
+
+- `attachments` 中的附件项必须是强类型 `AttachmentRef`。
+- adapter 必须以 `Message.data` 作为 `tool_call/tool_result` 的结构化主语义来源；`metadata` 仅保留非语义附加信息。
+- adapter 可以对 `data/metadata` 做 provider-specific codec，但不得把附件重新退化为无约束字典再回传上游。
+- 非法 canonical message（例如 `tool_call/tool_result` 缺少 `data`）必须在进入 adapter 前失败，而不是在 adapter 内兜底补语义。
+
 ## 5. 关键流程（Runtime Flow）
 
 ```mermaid
 flowchart TD
   A["Agent execute loop"] --> B["Context.assemble -> ModelInput"]
-  B --> C["IModelAdapter.generate"]
-  C --> D["ModelResponse(content, tool_calls, usage)"]
-  D --> E{"tool_calls empty?"}
-  E -- yes --> F["Write assistant message"]
-  E -- no --> G["Tool loop invoke"]
+  B --> C["adapter codec: Message -> provider message"]
+  C --> D["IModelAdapter.generate"]
+  D --> E["ModelResponse(content, tool_calls, usage)"]
+  E --> F{"tool_calls empty?"}
+  F -- yes --> G["Write assistant message"]
+  F -- no --> H["Tool loop invoke"]
 ```
+
 
 ## 6. 与其他模块的交互
 
-- **Context**：提供 messages/tools。
-- **Tool**：通过 `tool_calls` 触发 `IToolGateway.invoke`。
-- **Config**：`Config.llm` 决定 adapter 类型与连接参数。
-- **Observability**：从 `usage` 提取 token 指标。
+- **Context**
+  - 提供 canonical `Message` / tools。
+- **Tool**
+  - 通过 `tool_calls` 触发 `IToolGateway.invoke`。
+- **Transport**
+  - transport 不直接参与 provider 序列化；只负责 message/select/action/control envelope。
+- **Config**
+  - `Config.llm` 决定 adapter 类型与连接参数。
+- **Observability**
+  - 从 `usage` 提取 token 指标。
+- **Session/Memory persistence**
+  - adapter 不持久化 provider-native message；resume/replay 必须基于 canonical `Message` 重新序列化。
 
 ## 6.1 默认 Adapter 能力矩阵
 
@@ -68,12 +101,15 @@ flowchart TD
 
 - 当前流式输出和增量 tool-call 仍是待补齐项。
 - tool defs 仍以 OpenAI function-call schema 为主。
+- 首版 rich-media 只要求 `chat` 支持 `text + image attachments`；不要求图文混排顺序表达。
+- 首版字段约束中，`thinking`、`summary`、`tool_call` 不允许携带附件；`tool_result` 允许附件以支持后续工具富媒体输出。
 
 ## 8. TODO / 未决问题
 
 - TODO: 增加 streaming 与多模型路由策略。
 - TODO: 明确跨 adapter 的 tool schema 归一化规范。
 - TODO: 收敛 adapter client typing，减少 `Any`。
+- TODO: 为 `Message.kind=text/attachments/data` 定义跨 adapter 能力矩阵与降级规则。
 
 ## 能力状态（landed / partial / planned）
 

@@ -5,7 +5,7 @@ topics: ["client-cli", "session-resume", "conversation-history", "t5-1"]
 todo_ids: ["CRES-001", "CRES-002", "CRES-003", "CRES-004", "CRES-005", "CRES-006", "CRES-007"]
 created: 2026-03-04
 updated: 2026-03-05
-status: draft
+status: archived
 mode: openspec
 ---
 

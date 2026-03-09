@@ -30,8 +30,8 @@
 
 ## 4. 对外接口（Public Contract）
 
-- 统一入口：`IAgent.__call__(task, transport=None)`
-- 编排入口：`IAgentOrchestration.execute(task, transport)`
+- 统一入口：`IAgent.__call__(message, transport=None)`，其中 public input 支持 `str | Message`
+- 编排入口：`IAgentOrchestration.execute(message, transport)`，内部统一接收 canonical `Message`
 - 结果契约：统一输出 `RunResult`（含 `output_text`），其中 `RunResult.output` 使用 envelope 结构：
   - `content: str`
   - `metadata: dict`
@@ -44,7 +44,9 @@
 
 ## 5. 核心字段（Core Fields）
 
-- 统一任务输入：`Task`（`description/task_id/milestones/metadata`）
+- 统一顶层输入：`str | Message`
+- `Message`：首选直接用户输入
+- `Task`：内部编排对象（`description/task_id/milestones/metadata/input_message`），不再作为 public agent input
 - 统一运行输出：`RunResult`（`success/output/output_text/errors/metadata`）
   - `output.content`：统一可展示文本
   - `output_text`：与 `output.content` 对齐，供展示与兼容链路消费

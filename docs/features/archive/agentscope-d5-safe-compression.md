@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["agentscope", "compression", "context", "react-agent", "budget"]
 created: 2026-03-02
 updated: 2026-03-09
-status: in_review
+status: archived
 mode: openspec
 ---
 

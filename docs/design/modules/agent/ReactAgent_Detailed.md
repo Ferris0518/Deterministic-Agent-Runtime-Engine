@@ -33,7 +33,8 @@
 
 输入：
 
-- `str | Task`
+- `str | Message`
+- `Message` 是首选直接输入；`Task` 仅作为编排对象
 
 输出：
 

@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["agentscope", "plan_v2", "state-machine", "critical-block"]
 created: 2026-03-02
 updated: 2026-03-04
-status: done
+status: archived
 mode: openspec
 ---
 

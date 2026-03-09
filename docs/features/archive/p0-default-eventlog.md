@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["event-log", "sqlite", "hash-chain", "builder-defaults"]
 created: 2026-03-01
 updated: 2026-03-01
-status: draft
+status: archived
 mode: openspec
 ---
 

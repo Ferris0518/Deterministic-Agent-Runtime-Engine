@@ -10,16 +10,18 @@ The system SHALL define a transport domain that exposes a client-facing adapter 
 - **WHEN** a developer provides a `ClientChannel`
 - **THEN** the system can construct an `AgentChannel` that the agent uses for `poll`/`send`
 
-### Requirement: Transport envelope is content-agnostic and distinct from context messages
-The system SHALL define a `TransportEnvelope` type that is independent from `context.Message` and can carry arbitrary payloads with minimal metadata.
+### Requirement: Transport envelope is independent from context messages and carries typed payload families
+The system SHALL define a `TransportEnvelope` type that is independent from `context.Message` and carries one typed payload family selected by `kind`.
 
-- The envelope MUST provide a primary strong-typed `kind` categorization that can distinguish `message|action|control`.
-- For `kind="action"`, the payload MUST be a deterministic action id string in `resource:action` form (e.g. `tools:list`).
-- For `kind="control"`, the payload MUST be a deterministic runtime control id string from `AgentControl` (e.g. `interrupt|pause|retry|reverse`).
-- The envelope model MUST NOT require a separate subtype field (e.g. `type`) in order to route inbound envelopes.
+- The envelope MUST provide a primary strong-typed `kind` categorization that can distinguish `message|select|action|control`.
+- `kind="message"` MUST carry `MessagePayload`.
+- `kind="select"` MUST carry `SelectPayload`.
+- `kind="action"` MUST carry `ActionPayload`.
+- `kind="control"` MUST carry `ControlPayload`.
+- The envelope model MUST NOT require a separate subtype field (e.g. `event_type` or `type`) in order to route inbound envelopes.
 
 #### Scenario: Envelope carries a control interrupt
-- **WHEN** a client sends a `TransportEnvelope` with `kind="control"` and `payload="interrupt"`
+- **WHEN** a client sends a `TransportEnvelope` with `kind="control"` and `payload=<ControlPayload control_id="interrupt">`
 - **THEN** the channel can route it to control handling without relying on prompt parsing
 
 ### Requirement: Channel routes inbound envelopes by kind before agent consumption
@@ -31,7 +33,7 @@ The system SHALL route inbound envelopes by `kind` in the channel implementation
 - If action/control handler bindings are missing at startup, runtime MUST fail fast with configuration error.
 
 #### Scenario: Action envelope does not enter message inbox
-- **GIVEN** a channel receives `TransportEnvelope(kind="action", payload="tools:list")`
+- **GIVEN** a channel receives `TransportEnvelope(kind="action", payload=<ActionPayload resource_action="tools:list">)`
 - **WHEN** inbound routing is applied
 - **THEN** the channel invokes action handling path
 - **AND** `AgentChannel.poll()` does not return that action envelope
@@ -116,15 +118,16 @@ These operations SHALL be handled without entering the model prompt execution pa
 
 ### Requirement: Envelope kind supports message, action, and control categories
 The transport envelope model SHALL provide a primary categorization field for inbound/outbound envelopes that can distinguish:
-- `message` (prompt/result/hook style messages)
+- `message` (canonical chat/thinking/tool/summary payloads)
+- `select` (approval/choice/form interactions)
 - `action` (deterministic resource actions)
 - `control` (interrupt/pause/retry/reverse)
 
-For `kind="control"`, implementations SHALL represent control variants via the payload value (e.g. `payload="interrupt"`).
-The envelope model MUST NOT require a separate subtype field (e.g. `type`) in order to route inbound envelopes.
+For `kind="control"`, implementations SHALL represent control variants via `ControlPayload.control_id`.
+The envelope model MUST NOT require a separate subtype field (e.g. `event_type`) in order to route inbound envelopes.
 
 #### Scenario: Action envelope is distinguishable without slash parsing
-- **GIVEN** a client sends `TransportEnvelope(kind="action", payload="tools:list")`
+- **GIVEN** a client sends `TransportEnvelope(kind="action", payload=<ActionPayload resource_action="tools:list">)`
 - **WHEN** the channel receives it
 - **THEN** the channel can route it deterministically without inspecting prompt text
 
@@ -144,9 +147,28 @@ The runtime integration with `AgentChannel.poll()` SHALL treat polled envelopes 
 Client entry adapters SHALL normalize input into explicit envelope kinds before transport routing.
 
 - `stdio` adapters MAY map slash commands to structured `ACTION/CONTROL` envelopes.
-- `websocket` and `A2A` adapters MUST send explicit `kind` and structured `payload`; they MUST NOT rely on slash text inference inside transport runtime.
+- `websocket` and `A2A` adapters MUST send explicit `kind` and typed `payload`; they MUST NOT rely on slash text inference or `event_type` aliases inside transport runtime.
 
 #### Scenario: Websocket sends explicit action envelope
 - **GIVEN** a websocket client wants tool introspection
-- **WHEN** it sends `kind="action"` and `payload="tools:list"`
+- **WHEN** it sends `kind="action"` and `payload=<ActionPayload resource_action="tools:list">`
 - **THEN** channel routes the request through action path without text parsing
+
+### Requirement: AgentChannel rejects unsupported inbound envelope payloads deterministically
+The runtime SHALL validate inbound transport envelopes at the channel boundary and reject unsupported payload families with deterministic error semantics before they reach agent execution.
+
+- `EnvelopeKind.MESSAGE` MUST accept only `MessagePayload`.
+- `EnvelopeKind.ACTION` MUST accept only `ActionPayload`.
+- `EnvelopeKind.CONTROL` MUST accept only `ControlPayload`.
+- `EnvelopeKind.SELECT` MUST accept only `SelectPayload`.
+- The runtime MUST NOT accept legacy raw `str` or weakly-typed `dict` payloads as transport request payloads.
+
+#### Scenario: Message envelope with invalid payload is rejected before execution
+- **WHEN** the runtime receives `TransportEnvelope(kind="message")` whose payload is not a `MessagePayload`
+- **THEN** the envelope is rejected before agent execution begins
+- **AND** the requester receives a deterministic typed error reply
+
+#### Scenario: Action envelope with invalid payload is rejected before dispatch
+- **WHEN** the runtime receives `TransportEnvelope(kind="action")` whose payload is not an `ActionPayload`
+- **THEN** the dispatcher is not invoked
+- **AND** the requester receives a deterministic typed error reply

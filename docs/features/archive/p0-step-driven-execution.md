@@ -4,7 +4,7 @@ doc_kind: feature
 topics: ["execution-mode", "step-driven", "plan-execute-verify"]
 created: 2026-03-01
 updated: 2026-03-01
-status: done
+status: archived
 mode: openspec
 ---
 

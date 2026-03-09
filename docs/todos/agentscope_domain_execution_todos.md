@@ -11,8 +11,8 @@
 - 不包含 Session 体系（并行开发中，不在本清单执行范围）。
 - 当前阶段不要求历史兼容（允许直接调整接口，不做迁移层）。
 - 不做 HITL 闭环；本轮关注完整权限模型与工具调用权限治理。
-- `client send` 升级为：`content: string` + `uris: list` + `metadata`。
-- `context.assemble` 负责把 `content + uris` 归一化为内部 message 结构。
+- transport 输入升级为 typed payload：保留 `EnvelopeKind = message/select/action/control`，`kind=message` 时使用 `MessagePayload(text + attachments + data)`。
+- `context.assemble` 负责把 `TransportEnvelope(kind=message)` 的 `MessagePayload` 归一化为内部 canonical `Message`。
 - 当前并行约束：最多 3 个并行 active claim（TODO 级）；拆分主轴为依赖关系、重要度、复杂度；切片仅在对应 TODO 详细位置维护。
 
 ## 0.1 认领声明（Claim Ledger）
@@ -30,16 +30,38 @@
 | CLM-20260302-D7 | D7-1~D7-4 | lang | done | 2026-03-02 | 2026-03-03 | `agentscope-d7-plan-state-tools` | `CLM-20260302-AG3` | PR #138 已合入主干，D7 代码/回归/评审闭环完成。 |
 | ~~CLM-20260302-D1D3~~ | ~~D1 + D3（历史聚合）~~ | ~~lang~~ | ~~deprecated~~ | ~~2026-03-02~~ | ~~2026-03-04~~ | ~~`agentscope-d1-d3-message-pipeline`~~ | ~~`CLM-20260302-AG4`~~ | 历史聚合认领已废弃；后续以 D1/D3 的 TODO 级 claim 为准。 |
 | ~~CLM-20260303-D6D8~~ | ~~D6 + D8（历史聚合）~~ | ~~N/A~~ | ~~deprecated~~ | ~~2026-03-03~~ | ~~2026-03-04~~ | ~~`pending`~~ | ~~`CLM-20260303-AG5`~~ | 聚合占位 claim 已废弃；后续以 D6/D8 的 TODO 级 claim 为准。 |
-| CLM-20260304-D1 | D1 |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | `CLM-20260304-AG6` | 已拆分未分配；切片仅在 `5.2` 维护。 |
-| CLM-20260304-D3 | D3 |  | planned | 2026-03-04 | 2026-03-11 | `agentscope-d1-d3-message-pipeline` | `CLM-20260304-AG6` | 已拆分未分配；切片仅在 `5.2` 维护。 |
+| CLM-20260304-D1 | D1 | lang | done | 2026-03-04 | 2026-03-11 | `archive/2026-03-09-agentscope-d1-d3-message-pipeline` | `CLM-20260304-AG6` | canonical rich-media message schema、typed payload families、adapter codec 基线已完成并归档。 |
+| CLM-20260304-D3 | D3 | lang | done | 2026-03-04 | 2026-03-11 | `archive/2026-03-09-agentscope-d1-d3-message-pipeline` | `CLM-20260304-AG6` | context assemble/message normalization、attachment strategy 与 rich-media adapter 接口已完成并归档。 |
 | CLM-20260304-D6 | D6 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `CLM-20260304-AG7` | 已拆分未分配；切片仅在 `5.2` 维护。 |
 | CLM-20260304-D8 | D8 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `CLM-20260304-AG7` | 已拆分未分配；切片仅在 `5.2` 维护。 |
+| CLM-20260309-D2CUT | D2 transport cutover follow-up | lang | done | 2026-03-09 | 2026-03-12 | `archive/2026-03-09-transport-typed-payload-cutover` | `CLM-20260304-AG6` | transport legacy raw payload / `event_type` 兼容已清理完毕，reply typed payload 契约已归档。 |
+| CLM-20260309-D1INPUT | D1/D3 message input boundary cleanup | lang | done | 2026-03-09 | 2026-03-12 | `archive/2026-03-09-message-input-boundary-cleanup` | `CLM-20260304-AG6` | 收口 canonical `Message` 输入边界：agent 直收 `Message`、`Task.input_message`、transport poll 保真、不再把用户输入重新退化成 `Task.description`，并已归档。 |
 
 对账快照（2026-03-04）：
 - 未完成域 `D1/D3/D6/D8` 均已存在 `planned` claim（TODO 级）。
 - 已完成域 `D2/D4/D5/D7` 均已有 `done` claim 并与项目级聚合 claim 对账。
 
----
+## 0.2 消息管线重构拆分约束（2026-03-07）
+
+- 针对当前富媒体与模型消息能力补齐，`D1 + D3` 后续设计明确拆分为两个独立主题，禁止继续在同一轮设计里混合讨论：
+  - 主题 A：`文本/富媒体/模型消息 format` 设计。
+  - 主题 B：`消息投递/缓存/压缩/resume/分发` 设计。
+- 当前优先级：先完成主题 A 的设计收敛，再以单独设计文档/切片推进主题 B。
+- 主题 B 当前仅作为 TODO 记录，不在本轮消息模型设计里直接落实现有 runtime 机制调整。
+- 主题 B 设计必须显式覆盖：
+  - `stm_add`、历史消息、pending delta、模型侧缓存状态之间的边界。
+  - `assemble(incremental/rebuild)` 的触发条件与失效策略。
+  - 压缩 checkpoint、resume 重建、切模型降级、分发/transport 对 runtime state 的影响。
+
+## 0.3 Transport Cutover Follow-up（2026-03-09）
+
+- `agentscope-d1-d3-message-pipeline` 已完成消息 schema 基线，但 transport runtime 仍残留两层历史兼容：
+  - `TransportEnvelope.event_type`
+  - `message/action/control` raw `str` / raw `dict` payload
+- 后续独立切片 `transport-typed-payload-cutover` 专门负责：
+  - 删除上述 legacy compatibility
+  - 把 transport request/reply 统一收敛到 typed payload families
+  - 同步更新 client/example/test 契约
 
 ## 1. 能力/GAP 覆盖总览（用于确认“每个 TODO 支持什么能力”）
 
@@ -66,14 +88,15 @@
 ## D1 `protocol/message`（输入协议与内部消息模型）
 
 **主要改动**
-- 新定义 `ClientSend` 输入协议（`content`, `uris`, `metadata`）。
-- 新定义 `UriAttachment`（最小必须字段 + 可选 metadata）。
-- 内部 `Message` 支持“文本 + 附件引用块”的统一表达（供 assemble 消费）。
-- 明确输入约束：URI 数量/长度、metadata 大小、空文本处理。
+- 将 transport `payload: Any + event_type` 收敛为 typed payload 体系。
+- 保留 `EnvelopeKind = message/select/action/control`，不再平铺 message 子类型。
+- `MessagePayload` 与 canonical `Message` 高度对齐，支持 `text + attachments + data`。
+- 新定义 `AttachmentRef`（最小必须字段 + 可选 metadata），首版只要求图片。
+- 明确输入约束：附件数量/长度、metadata 大小、空文本处理、字段校验矩阵。
 
 **支撑能力**
-- Msg/TextBlock 基础能力。
-- 为多模态（图片/音频/视频）在协议层预留统一入口。
+- canonical message 基础能力。
+- 为多模态（图片/音频/视频）在消息结构层预留统一入口。
 
 **建议改动位置**
 - `dare_framework/transport/types.py`（客户端输入 envelope 相关类型）
@@ -82,22 +105,23 @@
 
 | ID | 任务 | 主要代码改动 | 支持能力 | 依赖 | 状态 | 输出证据 |
 |---|---|---|---|---|---|---|
-| D1-1 | 定义 `ClientSend` | 新类型 + schema 校验 | Msg 输入标准化 | 无 | todo | 单测：合法/非法输入 |
-| D1-2 | 定义 `UriAttachment` | URI 字段规范 + 校验 | 多模态入口 | 无 | todo | 单测：URI 错误码稳定 |
-| D1-3 | 定义内部 `Message` 块结构 | message 内容块结构 | TextBlock/附件表达 | D1-1/2 | todo | assemble 可消费 |
-| D1-4 | 约束与限制策略 | 限额/空值/超限错误模型 | 稳定输入治理 | D1-1/2/3 | todo | 压测与边界测试 |
+| D1-1 | 定义 `EnvelopePayload` 抽象与四类 payload | typed payload + schema 校验 | transport/message 契约统一 | 无 | todo | 单测：合法/非法输入 |
+| D1-2 | 定义 `AttachmentRef` | URI 字段规范 + 校验 | 富媒体入口 | 无 | todo | 单测：URI 错误码稳定 |
+| D1-3 | 升级 canonical `Message` | `text/attachments/data` 结构 | chat/图片/tool 统一表达 | D1-1/2 | todo | assemble 可消费 |
+| D1-4 | 约束与限制策略 | 字段矩阵/空值/超限错误模型 | 稳定输入治理 | D1-1/2/3 | todo | 压测与边界测试 |
 
 ---
 
 ## D2 `transport`（消息类型与payload协议）
 
 **主要改动**
-- 定义消息类型枚举：`message/tool_call/tool_result/thinking/error/status`。
-- 统一 transport payload envelope 与错误模型。
-- sender/receiver 对消息类型和错误码使用同一协议层定义。
+- 保留 `EnvelopeKind` 大类：`message/select/action/control`。
+- 移除 `event_type` 作为主设计，业务语义转入 typed payload。
+- `approval.pending/resolved` 从 message event 迁回 `select` payload。
+- sender/receiver 按 `kind -> payload family` 做确定性解析。
 
 **支撑能力**
-- Tool/ChatModelBase 执行中间态传输。
+- Tool/ChatModelBase/approval 交互协议统一。
 - 后续 observability 的事件采集基础。
 
 **建议改动位置**
@@ -107,17 +131,17 @@
 
 | ID | 任务 | 主要代码改动 | 支持能力 | 依赖 | 状态 | 输出证据 |
 |---|---|---|---|---|---|---|
-| D2-1 | 定义消息类型枚举 | enum + 常量统一 | thinking/tool 事件标准化 | D1-1 | done | `tests/unit/test_transport_types.py` |
-| D2-2 | 定义 payload 协议 | envelope schema + serializer | transport 语义一致 | D2-1 | done | `tests/unit/test_transport_adapters.py` |
-| D2-3 | 错误码标准化 | error payload model | 可观测错误治理 | D2-2 | done | `tests/unit/test_transport_channel.py` |
-| D2-4 | 协议测试矩阵 | e2e + contract test | 端到端稳定性 | D2-1/2/3 | done | `tests/unit/test_transport_types.py`, `tests/unit/test_transport_adapters.py` |
+| D2-1 | 固化 `EnvelopeKind` 与 payload 家族分派 | enum + typed routing | transport 大类稳定 | D1-1 | todo | `tests/unit/test_transport_types.py` |
+| D2-2 | 定义 typed payload 序列化协议 | envelope schema + serializer | transport 语义一致 | D2-1 | todo | `tests/unit/test_transport_adapters.py` |
+| D2-3 | 错误码标准化 | error payload model | 可观测错误治理 | D2-2 | todo | `tests/unit/test_transport_channel.py` |
+| D2-4 | 审批/选择协议回归 | `select ask/answered` contract test | approval 语义归位 | D2-1/2/3 | todo | contract + e2e 测试 |
 
 ---
 
 ## D3 `context`（assemble 归一化与URI策略）
 
 **主要改动**
-- `assemble` 增加 `ClientSend -> Message` 归一化步骤。
+- `assemble` 增加 `TransportEnvelope(kind=message) -> MessagePayload -> Message` 归一化步骤。
 - URI 解析策略：仅解析元信息 or 预取内容（本轮建议“元信息优先”）。
 - 当模型不支持相关模态时，定义 deterministic 降级策略。
 
@@ -132,7 +156,7 @@
 
 | ID | 任务 | 主要代码改动 | 支持能力 | 依赖 | 状态 | 输出证据 |
 |---|---|---|---|---|---|---|
-| D3-1 | 接入归一化管线 | assemble 前置 normalize | Msg 统一进入模型 | D1-3 + D2-2 | todo | 输入到模型链路测试 |
+| D3-1 | 接入归一化管线 | assemble 前置 normalize | typed message 统一进入模型 | D1-3 + D2-2 | todo | 输入到模型链路测试 |
 | D3-2 | URI 构建策略 | resolver + policy | 附件/富媒体引用处理 | D1-2 | todo | URI 成功/失败路径测试 |
 | D3-3 | 降级策略 | text-only fallback 规则 | 多模型兼容执行 | D3-2 | todo | 不支持模态时行为稳定 |
 | D3-4 | 组装链路回归 | context 集成测试 | 旧文本流程不回归 | D3-1/2/3 | todo | 回归全绿 |
@@ -268,9 +292,9 @@
 
 | 接口项 | 生产方 | 消费方 | 冲突风险 | 冻结时点 |
 |---|---|---|---|---|
-| `ClientSend` schema | D1 | D3/D2 | 字段名变动导致 assemble/transport 断裂 | Gate-1 |
+| `EnvelopePayload` schema | D1 | D3/D2 | payload 字段名变动导致 assemble/transport 断裂 | Gate-1 |
 | `Message` 内容块结构 | D1/D3 | D4/D5 | 模型输入与压缩算法理解不一致 | Gate-2 |
-| transport 消息类型枚举 | D2 | D4/D8/CLI | 事件类型命名漂移 | Gate-1 |
+| transport kind/payload 家族 | D2 | D4/D8/CLI | kind/payload 语义漂移 | Gate-1 |
 | tool_call/tool_result payload 结构 | D2 | D4/D5/D8 | tool pair 匹配失败 | Gate-2 |
 | 错误码模型 | D2 | D6/D8 | deny/error 无法统一观测 | Gate-3 |
 | policy decision 结构 | D6 | D8 | 审计日志字段不一致 | Gate-3 |
@@ -314,9 +338,9 @@
 
 | Domain | Slice | 范围 | Depends On | 复杂度 |
 |---|---|---|---|---|
-| `D1` | `D1_a` | `ClientSend`/`UriAttachment` schema 定义 | 无 | 中 |
+| `D1` | `D1_a` | `EnvelopePayload`/`AttachmentRef` schema 定义 | 无 | 中 |
 | `D1` | `D1_b` | 输入约束与错误码主集合 | `D1_a` | 高 |
-| `D1` | `D1_c` | Message 块结构与兼容适配 | `D1_a` | 高 |
+| `D1` | `D1_c` | canonical `Message` 结构与 typed normalize 适配 | `D1_a` | 高 |
 | `D3` | `D3_a` | assemble normalize 主流程接入 | `D1_c` + D2-2 | 高 |
 | `D3` | `D3_b` | URI resolver/policy（元信息优先） | `D1_b` | 中-高 |
 | `D3` | `D3_c` | 多模型降级策略 + D3 回归 | `D3_a` + `D3_b` | 高 |
@@ -342,7 +366,7 @@
 | 第一阶段（基线与协议冻结） | `b` | `D1_a` | 输入 schema 基线定义 |
 | 第一阶段（基线与协议冻结） | `c1` | `D1_b` | 输入约束与错误码冻结 |
 | 第一阶段（基线与协议冻结） | `c2` | `D1_c` | Message 块结构与兼容适配冻结 |
-| 第一阶段（基线与协议冻结） | `c3` | Gate-1 验收 | 完成 `ClientSend/UriAttachment/error-code` 冻结验收 |
+| 第一阶段（基线与协议冻结） | `c3` | Gate-1 验收 | 完成 `EnvelopePayload/AttachmentRef/error-code` 冻结验收 |
 | 第二阶段（核心链路实现） | `d` | `D3_a` | assemble normalize 主流程接入 |
 | 第二阶段（核心链路实现） | `e1` | `D3_b` + `D3_c` | URI resolver 与降级策略闭环 |
 | 第二阶段（核心链路实现） | `e2` | `D6_a` | policy model/evaluator 接口落地 |
@@ -355,20 +379,20 @@
 
 ## 6. 交接 Gate 定义
 
-1. **Gate-1（协议冻结）**  
-   冻结：`ClientSend`、`UriAttachment`、transport 消息类型枚举、错误码主集合。  
+1. **Gate-1（协议冻结）**
+   冻结：`EnvelopePayload`、`AttachmentRef`、transport kind/payload 家族、错误码主集合。
 2. **Gate-2（组装冻结）**  
    冻结：`assemble` 归一化输入输出结构、tool 事件 payload 结构。  
 3. **Gate-3（治理冻结）**  
    冻结：policy decision 结构、plan 状态字段语义、日志主字段键。  
 4. **Gate-4（联调验收）**  
-   `client send -> assemble -> model/tool loop -> policy gate -> transport -> logs` 全链路通过。
+   `typed payload -> assemble -> model/tool loop -> policy gate -> transport -> logs` 全链路通过。
 
 ---
 
 ## 7. 联调验收（跨域）
 
-- `ClientSend(content+uris)` 能稳定进入模型调用链路。
+- `MessagePayload(text+attachments+data)` 能稳定进入模型调用链路。
 - transport 连续输出 `thinking -> tool_call -> tool_result -> final message`。
 - 未授权工具被 deterministic 拒绝，且有可检索审计证据。
 - 压缩不破坏 tool pair，且预算超限自动触发。

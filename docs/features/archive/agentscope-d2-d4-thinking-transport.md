@@ -5,7 +5,7 @@ topics: ["agentscope", "transport", "thinking", "tool-events", "model-response"]
 todo_ids: ["D2-1", "D2-2", "D2-3", "D2-4", "D4-1", "D4-2", "D4-3", "D4-4"]
 created: 2026-03-02
 updated: 2026-03-03
-status: draft
+status: archived
 mode: openspec
 ---
 
