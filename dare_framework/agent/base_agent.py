@@ -15,7 +15,7 @@ from dare_framework.agent._internal.output_normalizer import normalize_run_outpu
 from dare_framework.agent.interfaces import IAgentOrchestration
 from dare_framework.agent.kernel import IAgent
 from dare_framework.agent.status import AgentStatus
-from dare_framework.context import Message
+from dare_framework.context import Message, MessageKind, MessageRole
 from dare_framework.plan.types import RunResult
 from dare_framework.transport.types import (
     EnvelopeKind,
@@ -389,12 +389,14 @@ def _coerce_polled_envelopes(polled: Any) -> list[TransportEnvelope]:
 def _coerce_transport_prompt(payload: Any) -> Message | None:
     """Normalize transport message payloads into canonical Message input."""
     if isinstance(payload, MessagePayload):
-        if payload.message_kind != "chat":
+        if payload.message_kind is not MessageKind.CHAT:
+            return None
+        if payload.role is not MessageRole.USER:
             return None
         return Message(
             id=payload.id,
-            role=payload.role,
-            kind=payload.message_kind,
+            role=MessageRole.USER,
+            kind=MessageKind.CHAT,
             text=payload.text,
             attachments=list(payload.attachments),
             data=dict(payload.data) if isinstance(payload.data, dict) else None,

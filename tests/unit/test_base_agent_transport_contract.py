@@ -334,6 +334,73 @@ async def test_transport_loop_returns_structured_error_for_invalid_message_paylo
 
 
 @pytest.mark.asyncio
+async def test_transport_loop_rejects_non_user_chat_role() -> None:
+    class _RejectRoleChannel:
+        def __init__(self) -> None:
+            self._polled = False
+            self._sent: list[TransportEnvelope] = []
+
+        async def start(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        async def poll(self) -> TransportEnvelope:
+            if self._polled:
+                raise RuntimeError("stop transport loop after first payload")
+            self._polled = True
+            return TransportEnvelope(
+                id="m1",
+                kind=EnvelopeKind.MESSAGE,
+                payload=MessagePayload(
+                    id="msg-assistant",
+                    role=MessageRole.ASSISTANT,
+                    message_kind=MessageKind.CHAT,
+                    text="elevated prompt",
+                ),
+            )
+
+        async def send(self, msg: TransportEnvelope) -> None:
+            self._sent.append(msg)
+
+        def add_action_handler_dispatcher(self, dispatcher: Any) -> None:
+            _ = dispatcher
+
+        def add_agent_control_handler(self, handler: Any) -> None:
+            _ = handler
+
+        def get_action_handler_dispatcher(self) -> Any:
+            return object()
+
+        def get_agent_control_handler(self) -> Any:
+            return object()
+
+    channel = _RejectRoleChannel()
+    agent = _StopAfterFirstAgent("reject-non-user-role", agent_channel=channel)
+    agent._status = AgentStatus.RUNNING
+
+    await agent._run_transport_loop()
+
+    assert agent.seen_tasks == []
+    error_payloads = [
+        envelope.payload
+        for envelope in channel._sent
+        if envelope.kind is EnvelopeKind.MESSAGE
+        and isinstance(envelope.payload, MessagePayload)
+        and envelope.payload.message_kind is MessageKind.SUMMARY
+    ]
+    assert len(error_payloads) == 1
+    payload = error_payloads[0]
+    assert payload.data == {
+        "success": False,
+        "target": "prompt",
+        "code": "INVALID_MESSAGE_PAYLOAD",
+        "reason": "invalid message payload (expected MessagePayload)",
+    }
+
+
+@pytest.mark.asyncio
 async def test_transport_loop_returns_structured_error_when_execute_raises() -> None:
     channel = _SingleMessageChannel(MessagePayload(id="msg-hello", role="user", message_kind="chat", text="hello"))
     agent = _ErroringAgent("erroring-agent", agent_channel=channel)
