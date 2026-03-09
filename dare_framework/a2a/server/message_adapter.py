@@ -85,51 +85,40 @@ def _decode_inline_file_part(p: dict[str, Any], dest_dir: Path) -> dict[str, Any
     return {"path": str(path.resolve()), "filename": filename, "mimeType": mime}
 
 
-def _fetch_uri_file_part(p: dict[str, Any], dest_dir: Path) -> dict[str, Any] | None:
-    """Fetch URI and save to dest_dir. Returns {path, filename, mimeType} or None."""
+def _describe_uri_file_part(p: dict[str, Any]) -> dict[str, Any] | None:
+    """Describe a provider-safe URI file part without dereferencing it server-side."""
     uri = p.get("uri")
-    if not uri or not isinstance(uri, str):
-        return None
-    try:
-        import httpx
-    except ImportError:
-        return None
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(uri)
-            resp.raise_for_status()
-            raw = resp.content
-            mime_header = resp.headers.get("content-type", "application/octet-stream")
-    except Exception:
+    if not isinstance(uri, str) or not _is_provider_valid_attachment_uri(uri):
         return None
     filename = p.get("filename") or os.path.basename(uri.split("?")[0]) or "attachment"
     filename = os.path.basename(filename) or "attachment"
-    mime = p.get("mimeType") or mime_header.split(";")[0].strip()
-    path = dest_dir / filename
-    if path.exists():
-        path = dest_dir / f"{uuid4().hex}_{filename}"
-    path.write_bytes(raw)
-    return {"path": str(path.resolve()), "filename": filename, "mimeType": mime}
+    mime = p.get("mimeType") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return {"uri": uri, "filename": filename, "mimeType": mime}
 
 
 def message_parts_to_user_input_and_attachments(
     parts: list[PartDict],
     workspace_dir: str | None = None,
-    *,
-    fetch_uri: bool = True,
 ) -> tuple[str, list[dict[str, Any]]]:
-    """Extract user input and resolve file parts to local paths (inline decoded, URI fetched).
+    """Extract user input and attachment descriptors without remote URI downloads.
 
     Returns:
         (user_input_str, attachments) where attachments is a list of
-        {"path": str, "filename": str, "mimeType": str} for DARE task.metadata["a2a_attachments"].
+        `{"path" | "uri", "filename": str, "mimeType": str}` descriptors suitable for
+        `task.metadata["a2a_attachments"]`.
     """
     segments: list[str] = []
     attachments: list[dict[str, Any]] = []
 
     root = Path(workspace_dir) if workspace_dir else Path(tempfile.gettempdir())
-    dest_dir = root / ".a2a_attachments" / uuid4().hex
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_dir: Path | None = None
+
+    def ensure_dest_dir() -> Path:
+        nonlocal dest_dir
+        if dest_dir is None:
+            dest_dir = root / ".a2a_attachments" / uuid4().hex
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        return dest_dir
 
     for p in parts:
         if not isinstance(p, dict):
@@ -139,21 +128,19 @@ def message_parts_to_user_input_and_attachments(
             segments.append((p.get("text") or "").strip())
         elif kind == "file":
             if "inlineData" in p:
-                att = _decode_inline_file_part(p, dest_dir)
+                att = _decode_inline_file_part(p, ensure_dest_dir())
                 if att:
                     attachments.append(att)
                     segments.append(f"[Attachment: {att['path']}]")
                 else:
                     segments.append(f"[Attachment: {p.get('filename') or 'file'}]")
-            elif "uri" in p and fetch_uri:
-                att = _fetch_uri_file_part(p, dest_dir)
+            elif "uri" in p:
+                att = _describe_uri_file_part(p)
                 if att:
                     attachments.append(att)
-                    segments.append(f"[Attachment: {att['path']}]")
+                    segments.append(f"[Attachment: {att['uri']}]")
                 else:
                     segments.append(f"[Attachment: {p.get('uri', 'file')}]")
-            else:
-                segments.append(f"[Attachment: {p.get('filename') or p.get('uri') or 'file'}]")
 
     user_input = "\n".join(s for s in segments if s).strip() or ""
     return (user_input, attachments)
@@ -168,8 +155,9 @@ def message_parts_to_message(
     """Convert A2A parts into a canonical DARE user message.
 
     Text parts stay in `Message.text`. Supported image file parts become
-    `Message.attachments`; unsupported file parts degrade to textual placeholders
-    and remain visible via `metadata["a2a_attachments"]`.
+    `Message.attachments`; unsupported file parts degrade to textual placeholders.
+    Inline file parts are materialized under `workspace_dir/.a2a_attachments/<uuid>/`.
+    Provider-safe remote URIs are preserved as URIs and are not fetched server-side.
     """
     base_metadata = dict(metadata or {})
     text_segments: list[str] = []
@@ -208,23 +196,16 @@ def message_parts_to_message(
                 data_b64=inline.get("data") if isinstance(inline, dict) else None,
             )
         elif "uri" in part:
-            source_uri = str(part.get("uri") or "")
-            resolved = _fetch_uri_file_part(part, ensure_dest_dir())
-            if resolved is None:
-                resolved = {
-                    "path": source_uri,
-                    "filename": str(part.get("filename") or os.path.basename(source_uri) or "attachment"),
-                    "mimeType": str(part.get("mimeType") or ""),
-                }
-            if _is_provider_valid_attachment_uri(source_uri):
-                attachment_uri = source_uri
+            resolved = _describe_uri_file_part(part)
+            if resolved is not None:
+                attachment_uri = str(resolved["uri"])
 
         if resolved is not None:
             resolved_attachments.append(resolved)
             if _is_image_attachment(
                 mime_type=resolved.get("mimeType"),
                 filename=resolved.get("filename"),
-                uri=attachment_uri or resolved.get("path"),
+                uri=attachment_uri or resolved.get("path") or resolved.get("uri"),
             ):
                 # Keep model-facing attachment URIs provider-valid; local temp paths
                 # remain available only through metadata for audit/debugging.

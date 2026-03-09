@@ -127,18 +127,9 @@ def test_message_parts_to_message_promotes_image_file_to_attachment() -> None:
         assert "a2a_attachments" in message.metadata
 
 
-def test_message_parts_to_message_preserves_remote_image_uri_for_model_delivery(monkeypatch) -> None:
+def test_message_parts_to_message_preserves_remote_image_uri_for_model_delivery() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        from dare_framework.a2a.server import message_adapter as adapter
-
-        def _fake_fetch(_part, dest_dir):  # noqa: ANN001
-            path = Path(dest_dir) / "photo.png"
-            path.write_bytes(b"pngdata")
-            return {"path": str(path), "filename": "photo.png", "mimeType": "image/png"}
-
-        monkeypatch.setattr(adapter, "_fetch_uri_file_part", _fake_fetch)
-
-        message = adapter.message_parts_to_message(
+        message = message_parts_to_message(
             [
                 {"type": "file", "uri": "https://example.com/photo.png", "mimeType": "image/png"},
             ],
@@ -147,7 +138,23 @@ def test_message_parts_to_message_preserves_remote_image_uri_for_model_delivery(
 
         assert len(message.attachments) == 1
         assert message.attachments[0].uri == "https://example.com/photo.png"
-        assert message.metadata["a2a_attachments"][0]["path"].endswith("photo.png")
+        assert message.metadata["a2a_attachments"][0]["uri"] == "https://example.com/photo.png"
+        assert not (Path(tmp) / ".a2a_attachments").exists()
+
+
+def test_message_parts_to_message_does_not_fetch_or_attach_unsafe_uri() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        message = message_parts_to_message(
+            [
+                {"type": "file", "uri": "file:///etc/passwd", "mimeType": "image/png"},
+            ],
+            workspace_dir=tmp,
+        )
+
+        assert message.attachments == []
+        assert message.text == "[Attachment: file:///etc/passwd]"
+        assert "a2a_attachments" not in message.metadata
+        assert not (Path(tmp) / ".a2a_attachments").exists()
 
 
 def test_message_parts_to_message_text_only_does_not_create_attachment_dir() -> None:
