@@ -1,12 +1,11 @@
 """Compression utilities for context and memories.
 
-This module provides a single entrypoint, `compress_context`, which agents
-and higher-level flows SHOULD use instead of直接操作 STM，以便集中管理上下文压缩策略。
+- MovingCompressor: 移动窗口式 STM 压缩（LLM 摘要），见 moving_compression。
 """
 
 from __future__ import annotations
 
-from .core import compress_context
+from .moving_compression import MovingCompressor
 
-__all__ = ["compress_context"]
+__all__ = ["MovingCompressor"]
 

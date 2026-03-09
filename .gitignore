@@ -9,6 +9,7 @@ workspace/
 .cursorrules
 agentscope/
 openjiuwen/
+openclaw/
 
 # Environment variables and secrets
 .env
