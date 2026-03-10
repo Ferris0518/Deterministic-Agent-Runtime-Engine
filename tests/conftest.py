@@ -21,6 +21,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Inject ``@pytest.mark.module`` / ``@pytest.mark.owner`` from the ownership map."""
+    import warnings
+
     from scripts.ci.test_ownership_map import OWNERSHIP_MAP
 
     for item in items:
@@ -30,3 +32,14 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.module(entry["module"]))
             if entry.get("owner"):
                 item.add_marker(pytest.mark.owner(entry["owner"]))
+
+    # Warn about test files missing from OWNERSHIP_MAP (soft guard)
+    collected_files = {str(Path(item.fspath).relative_to(ROOT)) for item in items}
+    test_files = {f for f in collected_files if Path(f).name.startswith("test_")}
+    unmapped = test_files - set(OWNERSHIP_MAP.keys())
+    if unmapped:
+        warnings.warn(
+            f"Test files missing from OWNERSHIP_MAP ({len(unmapped)}): "
+            + ", ".join(sorted(unmapped)[:5]),
+            stacklevel=1,
+        )
