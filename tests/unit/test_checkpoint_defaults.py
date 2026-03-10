@@ -130,3 +130,35 @@ def test_stm_contributor_roundtrip_preserves_typed_message_payloads() -> None:
     }
     assert restored_messages[1].mark == MessageMark.IMMUTABLE
     assert restored_messages[1].id == "assistant-1"
+
+
+def test_checkpoint_save_snapshot_deep_copies_nested_message_metadata() -> None:
+    defaults = importlib.import_module("dare_framework.checkpoint.defaults")
+    store = defaults.MemoryCheckpointStore()
+    saver = defaults.DefaultCheckpointSaveRestore(store, [defaults.StmContributor()])
+
+    source_context = Context(config=Config())
+    source_context.stm_add(
+        Message(
+            role="user",
+            text="hello",
+            metadata={"trace": {"step": 1}},
+        )
+    )
+    source_ctx = type("Ctx", (), {"context": source_context})()
+    scope = type(
+        "Scope",
+        (),
+        {"keys_for_save": lambda self: ["stm"], "keys_for_restore": lambda self: ["stm"]},
+    )()
+
+    checkpoint_id = saver.save(scope, source_ctx)
+
+    source_context.stm_get()[0].metadata["trace"]["step"] = 99
+
+    restored_context = Context(config=Config())
+    restored_ctx = type("Ctx", (), {"context": restored_context})()
+    saver.restore(checkpoint_id, scope, restored_ctx)
+
+    restored_messages = restored_context.stm_get()
+    assert restored_messages[0].metadata == {"trace": {"step": 1}}

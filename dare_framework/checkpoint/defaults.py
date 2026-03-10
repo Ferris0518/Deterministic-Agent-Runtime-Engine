@@ -118,7 +118,7 @@ class StmContributor:
                 ],
                 "data": _clone_payload(m.data),
                 "name": m.name,
-                "metadata": dict(getattr(m, "metadata", {}) or {}),
+                "metadata": _clone_payload(getattr(m, "metadata", {}) or {}),
                 "mark": getattr(m, "mark", None),
                 "id": getattr(m, "id", None),
             }
