@@ -6,6 +6,7 @@ were consolidated into ``dare_framework.checkpoint.kernel``.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict
 from typing import Any
 from uuid import uuid4
@@ -48,6 +49,11 @@ def _scope_keys(scope: Any, method_name: str) -> list[str]:
     if isinstance(scope, (list, tuple, set)):
         return [str(v) for v in scope]
     return []
+
+
+def _clone_payload(value: Any) -> Any:
+    """Clone nested checkpoint payloads so save/restore stays side-effect free."""
+    return deepcopy(value)
 
 
 class DefaultCheckpointSaveRestore:
@@ -98,9 +104,23 @@ class StmContributor:
         return [
             {
                 "role": m.role,
+                "kind": m.kind,
                 "text": m.text,
+                "attachments": [
+                    {
+                        "kind": attachment.kind,
+                        "uri": attachment.uri,
+                        "mime_type": attachment.mime_type,
+                        "filename": attachment.filename,
+                        "metadata": _clone_payload(getattr(attachment, "metadata", {}) or {}),
+                    }
+                    for attachment in m.attachments
+                ],
+                "data": _clone_payload(m.data),
                 "name": m.name,
                 "metadata": dict(getattr(m, "metadata", {}) or {}),
+                "mark": getattr(m, "mark", None),
+                "id": getattr(m, "id", None),
             }
             for m in messages
         ]
@@ -116,9 +136,14 @@ class StmContributor:
             context.stm_add(
                 Message(
                     role=item.get("role", "user"),
+                    kind=item.get("kind", "chat"),
                     text=item.get("text") or item.get("content", ""),
+                    attachments=_clone_payload(item.get("attachments")) or [],
+                    data=_clone_payload(item.get("data")),
                     name=item.get("name"),
                     metadata=dict(item.get("metadata") or {}),
+                    mark=item.get("mark", "temporary"),
+                    id=item.get("id"),
                 )
             )
 

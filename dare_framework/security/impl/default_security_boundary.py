@@ -262,8 +262,13 @@ class PolicySecurityBoundary(ISecurityBoundary):
         return await _execute_callable(fn)
 
 
-# Preserve historical facade behavior where `DefaultSecurityBoundary` is permissive.
-DefaultSecurityBoundary = LegacyDefaultSecurityBoundary
+class DefaultSecurityBoundary(LegacyDefaultSecurityBoundary):
+    """Permissive default boundary with legacy `from_config()` compatibility."""
+
+    @classmethod
+    def from_config(cls, config: dict[str, Any] | None) -> PolicySecurityBoundary:
+        """Preserve the historical config-driven constructor contract."""
+        return PolicySecurityBoundary.from_config(config)
 
 
 __all__ = [
