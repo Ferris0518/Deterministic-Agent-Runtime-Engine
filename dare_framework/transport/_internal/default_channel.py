@@ -221,8 +221,29 @@ class DefaultAgentChannel(AgentChannel):
                 return
             params[raw_key] = value
 
-        for raw_key, value in dict(msg.meta).items():
-            params[str(raw_key)] = value
+        if not isinstance(msg.meta, dict):
+            await self._send_error(
+                reply_to=msg.id,
+                kind="control",
+                target=payload.control_id or "control",
+                code="INVALID_CONTROL_PAYLOAD",
+                reason="invalid control payload (expected metadata mapping)",
+            )
+            return
+
+        # Normalize metadata keys eagerly so malformed key types return a
+        # structured protocol error instead of being dropped by TypeError.
+        for raw_key, value in msg.meta.items():
+            if not isinstance(raw_key, str):
+                await self._send_error(
+                    reply_to=msg.id,
+                    kind="control",
+                    target=payload.control_id or "control",
+                    code="INVALID_CONTROL_PAYLOAD",
+                    reason="invalid control payload (expected string metadata keys)",
+                )
+                return
+            params[raw_key] = value
 
         control = AgentControl.value_of(payload.control_id)
         if control is None:
