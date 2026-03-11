@@ -35,7 +35,9 @@ FAILED_TEST_RE = re.compile(r"^FAILED\s+([^\s]+)")
 
 def _looks_like_test_nodeid(token: str) -> bool:
     """Return true when a pytest summary token looks like a real test node id."""
-    return ".py" in token
+    # ``ERROR path/to/test_file.py`` is still a file-level collection/import failure.
+    # Only ``.py::...`` tokens identify a concrete pytest test node.
+    return ".py::" in token
 
 
 def _parse_failed_lines(text: str) -> list[str]:

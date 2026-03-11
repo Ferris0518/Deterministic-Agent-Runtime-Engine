@@ -43,3 +43,24 @@ def test_main_propagates_pytest_collection_errors_without_fake_failed_nodeid(
     assert exit_code == 2
     assert "ERROR collecting tests/unit/test_demo.py" in captured.err
     assert "FAILED collecting" not in captured.out
+
+
+def test_main_propagates_pytest_file_level_errors_without_pseudo_nodeid(
+    monkeypatch, capsys
+) -> None:
+    def _fake_run(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["pytest"],
+            returncode=2,
+            stdout="ERROR tests/unit/test_tmp_collection_error.py",
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    exit_code = module.main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "ERROR tests/unit/test_tmp_collection_error.py" in captured.err
+    assert "FAILED tests/unit/test_tmp_collection_error.py" not in captured.out
