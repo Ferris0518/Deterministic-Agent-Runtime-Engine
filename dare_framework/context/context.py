@@ -206,8 +206,9 @@ class Context(IContext):
     def _drain_guidance(self) -> None:
         """Drain pending guidance items into STM.
 
-        Called at the top of ``assemble()`` so that guidance messages appear in
-        the **next** context assembly cycle and are consumed exactly once.
+        Called before compression and assembly so that guidance messages
+        participate in token-budget pruning and appear in the assembled
+        context exactly once.
         """
         if self._guidance_queue is None:
             return
@@ -237,7 +238,13 @@ class Context(IContext):
         await self._moving_compressor.prune(self, **prune_opts)
 
     async def assemble_for_model(self, **options: Any) -> AssembledContext:
-        """供模型调用的装配入口：在内部静默触发压缩，然后返回 AssembledContext。"""
+        """供模型调用的装配入口：先排空引导队列，再压缩，最后装配。
+
+        Guidance is drained **before** compression so that guidance messages
+        participate in token-budget pruning and do not silently push the
+        final prompt over the configured context window.
+        """
+        self._drain_guidance()
         await self.compress(**options)
         return self.assemble()
 
