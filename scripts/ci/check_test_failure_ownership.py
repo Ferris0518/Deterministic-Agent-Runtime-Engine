@@ -30,16 +30,28 @@ _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-FAILED_TEST_RE = re.compile(r"^(?:FAILED|ERROR)\s+([^\s]+)")
+FAILED_TEST_RE = re.compile(r"^FAILED\s+([^\s]+)")
+
+
+def _looks_like_test_nodeid(token: str) -> bool:
+    """Return true when a pytest summary token looks like a real test node id."""
+    return ".py" in token
 
 
 def _parse_failed_lines(text: str) -> list[str]:
     """Extract ``FAILED``/``ERROR`` test node IDs from raw pytest output."""
     results: list[str] = []
     for line in text.splitlines():
-        m = FAILED_TEST_RE.match(line.strip())
+        stripped = line.strip()
+        m = FAILED_TEST_RE.match(stripped)
         if m:
             results.append(m.group(1))
+            continue
+        if not stripped.startswith("ERROR "):
+            continue
+        parts = stripped.split(maxsplit=2)
+        if len(parts) >= 2 and _looks_like_test_nodeid(parts[1]):
+            results.append(parts[1])
     return results
 
 

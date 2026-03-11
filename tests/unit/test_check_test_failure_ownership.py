@@ -22,3 +22,24 @@ def test_main_propagates_pytest_process_errors_without_failed_nodeids(
     assert exit_code == 4
     assert "ERROR: usage: pytest" in captured.err
     assert "No test failures detected." not in captured.out
+
+
+def test_main_propagates_pytest_collection_errors_without_fake_failed_nodeid(
+    monkeypatch, capsys
+) -> None:
+    def _fake_run(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["pytest"],
+            returncode=2,
+            stdout="ERROR collecting tests/unit/test_demo.py",
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    exit_code = module.main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "ERROR collecting tests/unit/test_demo.py" in captured.err
+    assert "FAILED collecting" not in captured.out
