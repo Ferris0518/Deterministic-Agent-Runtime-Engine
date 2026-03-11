@@ -1,6 +1,6 @@
 # DARE Framework 项目总体 TODO
 
-> 更新时间：2026-03-04  
+> 更新时间：2026-03-11  
 > 范围：项目全局演进（非单个 feature 的实现方案）
 
 ## 1. 目标与边界
@@ -28,7 +28,7 @@
 | CLM-20260304-AG7 | T5-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `CLM-20260304-D6 + CLM-20260304-D8` | TODO 级认领；切片仅在 AgentScope 详细区维护。 |
 | CLM-20260304-AG8 | T1-2 + T1-5 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层高复杂 TODO 组待分配；切片见详细拆分区。 |
 | CLM-20260304-AG9 | T2-3 + T2-4 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 项目层治理 TODO 组待分配；切片见详细拆分区。 |
-| CLM-20260304-AG10 | T0-6 | lang | active | 2026-03-04 | 2026-03-11 | `pending` | `—` | 下一项 fix：P0 红灯且无上游依赖，先修复 `search_file` 路径契约回归。 |
+| CLM-20260304-AG10 | T0-6 | lang | done | 2026-03-04 | 2026-03-11 | `—` | `—` | PR #181 已合入主干；`search_file` 路径契约回归已修复并补齐回归测试。 |
 | CLM-20260304-AG11 | T0-4 + T0-5 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | P0 未完成项补齐认领声明：facade 合规修复与失败映射责任化待分配。 |
 | CLM-20260304-AG12 | T1-3 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | P1 未完成项补齐认领声明：`ISecurityBoundary` 接入待分配。 |
 | CLM-20260304-AG13 | T2-1（剩余范围） + T2-2 + T5-1 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | Layer-2 策略补齐：D5 子范围已完成，剩余上下文融合/多阶段 prompt/session 补齐待分配。 |
@@ -36,15 +36,15 @@
 | CLM-20260304-AG15 | T4-2 + T4-3 |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | 运行期配置统一与默认可观测采集持久化未完成项补齐认领声明。 |
 | CLM-20260304-AG16 | T5-5（剩余范围，D7 子范围外） |  | planned | 2026-03-04 | 2026-03-11 | `pending` | `—` | D7 子范围已由 `AG3/CLM-20260302-D7` 闭环；本条仅覆盖剩余范围，暂无明细 claim。 |
 
-对账快照（2026-03-04）：
+对账快照（2026-03-11）：
 - AgentScope 聚合 claim（AG1/AG2/AG3/AG6/AG7）均可在 `agentscope_domain_execution_todos.md` 中找到明细 claim 对应。
 - 项目层独立 claim（AG8/AG9/AG10/AG11/AG12/AG13/AG14/AG15/AG16）不在 AgentScope 明细板拆分。
+- AG10（T0-6）已由 PR #181 合入主干；本表状态已回写为 `done`。
 
 ## 2. 当前基线
 
 - 测试基线（2026-03-03）：`.venv/bin/pytest -q` => `1 failed, 642 passed, 12 skipped, 1 warning`。
 - 关键问题聚类：
-  - `search_file` 输出路径契约回归：实现返回绝对路径，测试期望相对路径（`tests/unit/test_v4_file_tools.py::test_search_file_finds_matching_paths`）。
   - 全量 TODO / Claim / Feature 状态存在漂移（已 merge 或 archived 的 change 仍标记 active/draft）。
   - 若干 package `__init__.py` 不满足 facade 约束。
 - 设计已定义但实现未闭环：plan attempt 隔离（snapshot/rollback）、Context 检索融合、完整 HITL 语义、P0 conformance gate 与治理自动化门禁。
@@ -70,10 +70,10 @@
   Status: `planned`
 - [ ] T0-5 建立“失败测试 -> 责任模块 -> owner”映射并例行巡检。
   Status: `planned`
-- [ ] T0-6 修复 `search_file` 输出路径契约回归（绝对路径 vs 相对路径）。  
-  Status: `active`  
-  Evidence: `.venv/bin/pytest -q` 失败用例 `tests/unit/test_v4_file_tools.py::test_search_file_finds_matching_paths`；实现位置 `dare_framework/tool/_internal/tools/search_file.py`  
-  Last Updated: `2026-03-04`
+- [x] T0-6 修复 `search_file` 输出路径契约回归（绝对路径 vs 相对路径）。  
+  Status: `done`  
+  Evidence: PR #181；`dare_framework/tool/_internal/tools/search_file.py`、`dare_framework/tool/_internal/file_utils.py`、`tests/unit/test_v4_file_tools.py`；`.venv/bin/pytest -q tests/unit/test_v4_file_tools.py` => `19 passed`  
+  Last Updated: `2026-03-11`
 
 验收：
 
