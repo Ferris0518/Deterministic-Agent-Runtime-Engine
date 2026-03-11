@@ -35,6 +35,21 @@ def test_local_backend_build_wheel_includes_cli_sources(tmp_path: Path) -> None:
         assert any(name.endswith(".dist-info/RECORD") for name in names)
 
 
+def test_local_backend_wheel_metadata_includes_markdown_readme(tmp_path: Path) -> None:
+    backend = importlib.import_module("_local_backend")
+    wheel_name = backend.build_wheel(str(tmp_path))
+    wheel_path = tmp_path / wheel_name
+
+    with zipfile.ZipFile(wheel_path, "r") as archive:
+        metadata_name = next(
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = archive.read(metadata_name).decode("utf-8")
+
+    assert "Description-Content-Type: text/markdown" in metadata
+    assert "## 本地安装" in metadata
+
+
 def test_local_backend_build_sdist_includes_core_sources(tmp_path: Path) -> None:
     backend = importlib.import_module("_local_backend")
     sdist_name = backend.build_sdist(str(tmp_path))
@@ -44,11 +59,13 @@ def test_local_backend_build_sdist_includes_core_sources(tmp_path: Path) -> None
 
     with tarfile.open(sdist_path, "r:gz") as archive:
         names = set(archive.getnames())
+        root_dir = next(name.split("/", 1)[0] for name in names if name.endswith("/PKG-INFO"))
         assert any(name.endswith("/pyproject.toml") for name in names)
         assert any(name.endswith("/_local_backend.py") for name in names)
         assert any(name.endswith("/client/main.py") for name in names)
         assert any(name.endswith("/dare_framework/__init__.py") for name in names)
         assert any(name.endswith("/PKG-INFO") for name in names)
+        assert f"{root_dir}/README.md" in names
 
 
 def test_local_backend_reports_no_extra_requirements_for_build_sdist() -> None:

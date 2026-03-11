@@ -61,6 +61,40 @@ def _sdist_filename(project: dict) -> str:
     return f"{_sdist_root_dir(project)}.tar.gz"
 
 
+def _infer_readme_content_type(path: Path) -> str:
+    if path.suffix.lower() == ".md":
+        return "text/markdown"
+    if path.suffix.lower() == ".rst":
+        return "text/x-rst"
+    return "text/plain"
+
+
+def _readme_payload(project: dict) -> tuple[str, str] | None:
+    readme = project.get("readme")
+    if isinstance(readme, str):
+        path = _project_root() / readme
+        return path.read_text(encoding="utf-8"), _infer_readme_content_type(path)
+    if isinstance(readme, dict):
+        content_type = str(readme.get("content-type") or "text/plain")
+        if "file" in readme:
+            path = _project_root() / str(readme["file"])
+            if "content-type" not in readme:
+                content_type = _infer_readme_content_type(path)
+            return path.read_text(encoding="utf-8"), content_type
+        if "text" in readme:
+            return str(readme["text"]), content_type
+    return None
+
+
+def _readme_file(project: dict) -> Path | None:
+    readme = project.get("readme")
+    if isinstance(readme, str):
+        return _project_root() / readme
+    if isinstance(readme, dict) and "file" in readme:
+        return _project_root() / str(readme["file"])
+    return None
+
+
 def _metadata_text(project: dict) -> str:
     lines = [
         "Metadata-Version: 2.1",
@@ -75,7 +109,12 @@ def _metadata_text(project: dict) -> str:
         lines.append(f"Requires-Python: {requires_python}")
     for dep in project.get("dependencies", []):
         lines.append(f"Requires-Dist: {dep}")
-    return "\n".join(lines) + "\n"
+    readme_payload = _readme_payload(project)
+    if readme_payload is None:
+        return "\n".join(lines) + "\n"
+    readme_text, content_type = readme_payload
+    lines.append(f"Description-Content-Type: {content_type}")
+    return "\n".join(lines) + "\n\n" + readme_text.rstrip() + "\n"
 
 
 def _wheel_text() -> str:
@@ -128,6 +167,10 @@ def _sdist_files() -> Iterable[Path]:
         root / "client" / "README.md",
     ):
         yield from _yield(candidate)
+
+    readme_file = _readme_file(_load_project_metadata())
+    if readme_file is not None:
+        yield from _yield(readme_file)
 
     for file_path in _package_files():
         if file_path not in seen:
