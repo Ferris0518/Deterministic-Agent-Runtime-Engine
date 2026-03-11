@@ -352,12 +352,15 @@ async def run_tool_loop(
                 tool_success = False
             evidence_collected = bool(getattr(result, "evidence", []))
             denied_output = getattr(result, "output", {})
-            # Derive "approved" from the policy decision, not from the tool
-            # output status string.  The policy decision was computed before
-            # tool invocation and is the authoritative source for whether the
-            # tool was allowed to run.  Tool-level failures (infra errors,
-            # business logic failures) do NOT change the policy approval status.
+            # Derive "approved" from both the pre-invocation policy decision
+            # AND the runtime approval outcome.  When policy_decision is
+            # "approve_required", the GovernedToolGateway may still deny at
+            # runtime (returning output.status="not_allow"), so we must also
+            # check the tool result for an explicit denial signal.
             approved = policy_decision != PolicyDecision.DENY.value
+            if not tool_success and isinstance(denied_output, dict):
+                if denied_output.get("status") == "not_allow":
+                    approved = False
             await agent._emit_hook(
                 HookPhase.AFTER_TOOL,
                 {
