@@ -367,6 +367,11 @@ OWNERSHIP_MAP: dict[str, dict[str, str]] = {
         "owner": "lang",
         "tier": "unit",
     },
+    "tests/unit/test_conftest_ownership_markers.py": {
+        "module": "tests",
+        "owner": "lang",
+        "tier": "unit",
+    },
     "tests/unit/test_main_guard.py": {
         "module": "scripts/ci",
         "owner": "lang",

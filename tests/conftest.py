@@ -19,6 +19,11 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "owner(name): responsible owner/team handle")
 
 
+def _normalize_ownership_relpath(path: Path) -> str:
+    """Normalize repo-relative test paths into OWNERSHIP_MAP key format."""
+    return path.as_posix()
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Inject ``@pytest.mark.module`` / ``@pytest.mark.owner`` from the ownership map."""
     import warnings
@@ -26,7 +31,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     from scripts.ci.test_ownership_map import OWNERSHIP_MAP
 
     for item in items:
-        rel = str(Path(item.fspath).relative_to(ROOT))
+        rel = _normalize_ownership_relpath(Path(item.fspath).relative_to(ROOT))
         entry = OWNERSHIP_MAP.get(rel)
         if entry:
             item.add_marker(pytest.mark.module(entry["module"]))
@@ -34,7 +39,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
                 item.add_marker(pytest.mark.owner(entry["owner"]))
 
     # Warn about test files missing from OWNERSHIP_MAP (soft guard)
-    collected_files = {str(Path(item.fspath).relative_to(ROOT)) for item in items}
+    collected_files = {_normalize_ownership_relpath(Path(item.fspath).relative_to(ROOT)) for item in items}
     test_files = {f for f in collected_files if Path(f).name.startswith("test_")}
     unmapped = test_files - set(OWNERSHIP_MAP.keys())
     if unmapped:

@@ -188,6 +188,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.report:
         raw = args.report.read_text(encoding="utf-8")
         pytest_returncode = None
+        if not raw.strip():
+            print("No pytest output found in report file.", file=sys.stderr)
+            return 1
     else:
         completed = _run_pytest()
         raw = _format_completed_output(completed)

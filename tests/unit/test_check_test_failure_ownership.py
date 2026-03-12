@@ -101,6 +101,20 @@ def test_main_report_mode_returns_nonzero_for_usage_errors_without_failed_nodeid
     assert "No test failures detected." not in captured.out
 
 
+def test_main_report_mode_returns_nonzero_for_empty_report_file(
+    tmp_path, capsys
+) -> None:
+    report_path = tmp_path / "pytest-output.txt"
+    report_path.write_text("", encoding="utf-8")
+
+    exit_code = module.main(["--report", str(report_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "No pytest output found in report file." in captured.err
+    assert "No test failures detected." not in captured.out
+
+
 def test_main_stdin_mode_returns_nonzero_for_keyboard_interrupt(
     monkeypatch, capsys
 ) -> None:

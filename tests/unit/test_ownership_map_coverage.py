@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 def test_all_test_files_have_ownership_entry():
     """Every test_*.py must be present in OWNERSHIP_MAP."""
     actual = sorted(
-        str(p.relative_to(REPO_ROOT))
+        p.relative_to(REPO_ROOT).as_posix()
         for p in REPO_ROOT.joinpath("tests").rglob("test_*.py")
     )
     mapped = set(OWNERSHIP_MAP.keys())
@@ -20,7 +20,7 @@ def test_all_test_files_have_ownership_entry():
 def test_no_stale_ownership_entries():
     """Every OWNERSHIP_MAP entry must correspond to an existing test file."""
     actual = set(
-        str(p.relative_to(REPO_ROOT))
+        p.relative_to(REPO_ROOT).as_posix()
         for p in REPO_ROOT.joinpath("tests").rglob("test_*.py")
     )
     stale = sorted(k for k in OWNERSHIP_MAP if k not in actual)
