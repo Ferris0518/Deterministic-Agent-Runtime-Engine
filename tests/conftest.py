@@ -28,7 +28,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Inject ``@pytest.mark.module`` / ``@pytest.mark.owner`` from the ownership map."""
     import warnings
 
-    from scripts.ci.test_ownership_map import OWNERSHIP_MAP
+    from scripts.ci.test_ownership_map import OWNERSHIP_MAP, is_pytest_discovery_file
 
     for item in items:
         rel = _normalize_ownership_relpath(Path(item.fspath).relative_to(ROOT))
@@ -40,7 +40,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
     # Warn about test files missing from OWNERSHIP_MAP (soft guard)
     collected_files = {_normalize_ownership_relpath(Path(item.fspath).relative_to(ROOT)) for item in items}
-    test_files = {f for f in collected_files if Path(f).name.startswith("test_")}
+    test_files = {f for f in collected_files if is_pytest_discovery_file(f)}
     unmapped = test_files - set(OWNERSHIP_MAP.keys())
     if unmapped:
         warnings.warn(

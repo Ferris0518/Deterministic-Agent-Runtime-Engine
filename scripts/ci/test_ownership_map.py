@@ -7,6 +7,14 @@ Canonical source for test failure attribution. Used by:
 
 from __future__ import annotations
 
+from pathlib import Path, PurePath
+
+
+def is_pytest_discovery_file(path: str | Path | PurePath) -> bool:
+    """Match pytest's default module filename patterns used by this repo."""
+    name = PurePath(path).name
+    return name.startswith("test_") or name.endswith("_test.py")
+
 # Each entry: test_path (relative to repo root) -> { module, owner, tier }
 # owner: responsible individual or team handle
 OWNERSHIP_MAP: dict[str, dict[str, str]] = {
