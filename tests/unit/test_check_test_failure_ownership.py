@@ -67,6 +67,35 @@ def test_main_propagates_pytest_file_level_errors_without_pseudo_nodeid(
     assert "FAILED tests/unit/test_tmp_collection_error.py" not in captured.out
 
 
+def test_main_preserves_unattributed_pytest_errors_alongside_failed_nodeids(
+    monkeypatch, capsys
+) -> None:
+    def _fake_run(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["pytest"],
+            returncode=2,
+            stdout="\n".join(
+                [
+                    "FAILED tests/unit/test_check_test_failure_ownership.py::test_parse_failed_lines_preserves_parametrized_nodeids_with_spaces - AssertionError: boom",
+                    "ERROR collecting tests/unit/test_tmp_collection_error.py",
+                ]
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", _fake_run)
+
+    exit_code = module.main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "ERROR collecting tests/unit/test_tmp_collection_error.py" in captured.err
+    assert (
+        "FAILED tests/unit/test_check_test_failure_ownership.py::"
+        "test_parse_failed_lines_preserves_parametrized_nodeids_with_spaces"
+    ) in captured.out
+
+
 def test_main_stdin_mode_returns_nonzero_for_collection_errors_without_failed_nodeids(
     monkeypatch, capsys
 ) -> None:

@@ -197,18 +197,21 @@ def main(argv: list[str] | None = None) -> int:
         pytest_returncode = completed.returncode
 
     failed = _parse_failed_lines(raw)
+    has_unattributed_error = _has_unattributed_pytest_error(raw)
     fallback_exit_code = pytest_returncode
-    if fallback_exit_code is None and not failed and _has_unattributed_pytest_error(raw):
+    if fallback_exit_code is None and has_unattributed_error:
         fallback_exit_code = 1
-    if fallback_exit_code and not failed:
-        if raw:
-            print(raw, file=sys.stderr)
+    if has_unattributed_error and raw:
+        print(raw, file=sys.stderr)
+    if not failed and fallback_exit_code:
         return fallback_exit_code
 
     report = _build_report(failed)
     print(report)
 
-    return 1 if failed else 0
+    if failed:
+        return fallback_exit_code or 1
+    return 0
 
 
 if __name__ == "__main__":
