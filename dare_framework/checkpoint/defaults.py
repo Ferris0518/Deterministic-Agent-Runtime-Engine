@@ -133,11 +133,12 @@ class StmContributor:
         for item in payload or []:
             if not isinstance(item, dict):
                 continue
+            restored_text = item["text"] if "text" in item else item.get("content", "")
             context.stm_add(
                 Message(
                     role=item.get("role", "user"),
                     kind=item.get("kind", "chat"),
-                    text=item.get("text") or item.get("content", ""),
+                    text=restored_text,
                     attachments=_clone_payload(item.get("attachments")) or [],
                     data=_clone_payload(item.get("data")),
                     name=item.get("name"),

@@ -155,6 +155,34 @@ def test_stm_contributor_roundtrip_preserves_typed_message_payloads() -> None:
     assert restored_messages[1].id == "assistant-1"
 
 
+def test_stm_contributor_roundtrip_preserves_null_text_payloads() -> None:
+    defaults = importlib.import_module("dare_framework.checkpoint.defaults")
+    contributor = defaults.StmContributor()
+
+    source_context = Context(config=Config())
+    source_context.stm_add(
+        Message(
+            role="tool",
+            kind=MessageKind.TOOL_RESULT,
+            text=None,
+            data={"tool_call_id": "tc_1", "output": {"ok": True}},
+            id="tool-1",
+        )
+    )
+    source_ctx = type("Ctx", (), {"context": source_context})()
+
+    payload = contributor.serialize(source_ctx)
+
+    restored_context = Context(config=Config())
+    restored_ctx = type("Ctx", (), {"context": restored_context})()
+    contributor.deserialize_and_apply(payload, restored_ctx)
+
+    restored_messages = restored_context.stm_get()
+    assert len(restored_messages) == 1
+    assert restored_messages[0].text is None
+    assert restored_messages[0].data == {"tool_call_id": "tc_1", "output": {"ok": True}}
+
+
 def test_checkpoint_save_snapshot_deep_copies_nested_message_metadata() -> None:
     defaults = importlib.import_module("dare_framework.checkpoint.defaults")
     store = defaults.MemoryCheckpointStore()
