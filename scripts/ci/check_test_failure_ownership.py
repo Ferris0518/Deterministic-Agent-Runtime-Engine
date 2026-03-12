@@ -31,6 +31,7 @@ if _REPO_ROOT not in sys.path:
 
 FAILED_PREFIX = "FAILED "
 ERROR_PREFIX = "ERROR "
+SUMMARY_HEADER = "short test summary info"
 
 
 def _looks_like_test_nodeid(token: str) -> bool:
@@ -61,10 +62,19 @@ def _summary_nodeid(line: str, prefix: str) -> str | None:
     return remainder
 
 
+def _candidate_summary_lines(text: str) -> list[str]:
+    """Prefer the pytest short-summary section when the full report is available."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if SUMMARY_HEADER in line.lower():
+            return lines[index + 1 :]
+    return lines
+
+
 def _parse_failed_lines(text: str) -> list[str]:
     """Extract ``FAILED``/``ERROR`` test node IDs from raw pytest output."""
     results: list[str] = []
-    for line in text.splitlines():
+    for line in _candidate_summary_lines(text):
         stripped = line.strip()
         failed_nodeid = _summary_nodeid(stripped, FAILED_PREFIX)
         if failed_nodeid is not None and _looks_like_test_nodeid(failed_nodeid):

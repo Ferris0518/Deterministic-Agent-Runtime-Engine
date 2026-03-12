@@ -228,3 +228,17 @@ def test_parse_failed_lines_ignores_non_node_failed_output() -> None:
     assert module._parse_failed_lines(raw) == [
         "tests/unit/test_demo.py::test_case",
     ]
+
+
+def test_parse_failed_lines_ignores_failed_like_log_lines_before_summary() -> None:
+    raw = "\n".join(
+        [
+            "FAILED tests/unit/test_other.py::test_noise - user log line",
+            "=========================== short test summary info ============================",
+            "FAILED tests/unit/test_demo.py::test_case - AssertionError: boom",
+        ]
+    )
+
+    assert module._parse_failed_lines(raw) == [
+        "tests/unit/test_demo.py::test_case",
+    ]
