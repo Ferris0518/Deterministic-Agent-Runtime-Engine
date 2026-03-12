@@ -189,6 +189,31 @@ def test_main_report_mode_returns_nonzero_when_no_tests_are_collected(
     assert "No test failures detected." not in captured.out
 
 
+def test_main_report_mode_returns_nonzero_for_strict_xpass_summary(
+    tmp_path, capsys
+) -> None:
+    report_path = tmp_path / "pytest-output.txt"
+    report_path.write_text(
+        "\n".join(
+            [
+                "=========================== short test summary info ============================",
+                "XPASS tests/unit/test_check_test_failure_ownership.py::test_parse_failed_lines_ignores_non_node_failed_output - unexpectedly passed",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = module.main(["--report", str(report_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert (
+        "FAILED tests/unit/test_check_test_failure_ownership.py::"
+        "test_parse_failed_lines_ignores_non_node_failed_output"
+    ) in captured.out
+    assert "No test failures detected." not in captured.out
+
+
 def test_parse_failed_lines_preserves_parametrized_nodeids_with_spaces() -> None:
     raw = "\n".join(
         [

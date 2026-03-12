@@ -31,6 +31,7 @@ if _REPO_ROOT not in sys.path:
 
 FAILED_PREFIX = "FAILED "
 ERROR_PREFIX = "ERROR "
+XPASS_PREFIX = "XPASS "
 SUMMARY_HEADER = "short test summary info"
 
 
@@ -72,17 +73,15 @@ def _candidate_summary_lines(text: str) -> list[str]:
 
 
 def _parse_failed_lines(text: str) -> list[str]:
-    """Extract ``FAILED``/``ERROR`` test node IDs from raw pytest output."""
+    """Extract pytest failure-like summary node IDs from raw pytest output."""
     results: list[str] = []
     for line in _candidate_summary_lines(text):
         stripped = line.strip()
-        failed_nodeid = _summary_nodeid(stripped, FAILED_PREFIX)
-        if failed_nodeid is not None and _looks_like_test_nodeid(failed_nodeid):
-            results.append(failed_nodeid)
-            continue
-        error_nodeid = _summary_nodeid(stripped, ERROR_PREFIX)
-        if error_nodeid is not None and _looks_like_test_nodeid(error_nodeid):
-            results.append(error_nodeid)
+        for prefix in (FAILED_PREFIX, ERROR_PREFIX, XPASS_PREFIX):
+            nodeid = _summary_nodeid(stripped, prefix)
+            if nodeid is not None and _looks_like_test_nodeid(nodeid):
+                results.append(nodeid)
+                break
     return results
 
 
