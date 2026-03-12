@@ -67,7 +67,7 @@ def _parse_failed_lines(text: str) -> list[str]:
     for line in text.splitlines():
         stripped = line.strip()
         failed_nodeid = _summary_nodeid(stripped, FAILED_PREFIX)
-        if failed_nodeid is not None:
+        if failed_nodeid is not None and _looks_like_test_nodeid(failed_nodeid):
             results.append(failed_nodeid)
             continue
         error_nodeid = _summary_nodeid(stripped, ERROR_PREFIX)

@@ -215,3 +215,16 @@ def test_parse_failed_lines_preserves_nodeids_containing_dash_delimiters() -> No
         "tests/unit/test_demo.py::test_case[hello - world]",
         "tests/unit/test_demo.py::test_setup[hello - world]",
     ]
+
+
+def test_parse_failed_lines_ignores_non_node_failed_output() -> None:
+    raw = "\n".join(
+        [
+            "FAILED not-a-nodeid",
+            "FAILED tests/unit/test_demo.py::test_case - AssertionError: boom",
+        ]
+    )
+
+    assert module._parse_failed_lines(raw) == [
+        "tests/unit/test_demo.py::test_case",
+    ]
