@@ -30,7 +30,8 @@ _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-FAILED_TEST_RE = re.compile(r"^FAILED\s+([^\s]+)")
+FAILED_TEST_RE = re.compile(r"^FAILED\s+(.+?)(?=\s+-\s+|$)")
+ERROR_TEST_RE = re.compile(r"^ERROR\s+(.+?)(?=\s+-\s+|$)")
 
 
 def _looks_like_test_nodeid(token: str) -> bool:
@@ -40,21 +41,41 @@ def _looks_like_test_nodeid(token: str) -> bool:
     return ".py::" in token
 
 
+def _summary_nodeid(line: str, pattern: re.Pattern[str]) -> str | None:
+    """Extract the pytest summary nodeid portion from a FAILED/ERROR line."""
+    match = pattern.match(line)
+    if match is None:
+        return None
+    return match.group(1)
+
+
 def _parse_failed_lines(text: str) -> list[str]:
     """Extract ``FAILED``/``ERROR`` test node IDs from raw pytest output."""
     results: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
-        m = FAILED_TEST_RE.match(stripped)
-        if m:
-            results.append(m.group(1))
+        failed_nodeid = _summary_nodeid(stripped, FAILED_TEST_RE)
+        if failed_nodeid is not None:
+            results.append(failed_nodeid)
             continue
-        if not stripped.startswith("ERROR "):
-            continue
-        parts = stripped.split(maxsplit=2)
-        if len(parts) >= 2 and _looks_like_test_nodeid(parts[1]):
-            results.append(parts[1])
+        error_nodeid = _summary_nodeid(stripped, ERROR_TEST_RE)
+        if error_nodeid is not None and _looks_like_test_nodeid(error_nodeid):
+            results.append(error_nodeid)
     return results
+
+
+def _has_unattributed_pytest_error(text: str) -> bool:
+    """Detect pytest process/collection failures that did not yield test node IDs."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("ERROR:", "ERROR collecting ", "INTERNALERROR>")):
+            return True
+        error_nodeid = _summary_nodeid(stripped, ERROR_TEST_RE)
+        if error_nodeid is not None and not _looks_like_test_nodeid(error_nodeid):
+            return True
+    return False
 
 
 def _test_path_from_nodeid(nodeid: str) -> str:
@@ -151,10 +172,13 @@ def main(argv: list[str] | None = None) -> int:
         pytest_returncode = completed.returncode
 
     failed = _parse_failed_lines(raw)
-    if pytest_returncode and not failed:
+    fallback_exit_code = pytest_returncode
+    if fallback_exit_code is None and not failed and _has_unattributed_pytest_error(raw):
+        fallback_exit_code = 1
+    if fallback_exit_code and not failed:
         if raw:
             print(raw, file=sys.stderr)
-        return pytest_returncode
+        return fallback_exit_code
 
     report = _build_report(failed)
     print(report)
