@@ -167,9 +167,9 @@ export OPENROUTER_API_KEY=sk-or-...
 ### `llm` 字段说明
 
 - `adapter`：模型适配器，当前支持 `openai`、`openrouter`、`anthropic`、`huawei-modelarts`。不写时默认是 `openai`。
-- `model`：模型名，例如 `gpt-4o-mini`、`gpt-4.1`、`qwen/qwen3-coder:free`、`modelarts-pro`。
+- `model`：模型名，例如 `gpt-4o-mini`、`gpt-4.1`、`qwen/qwen3-coder:free`。
 - `api_key`：模型服务密钥。也可以通过环境变量提供。
-- `endpoint`：自定义 provider base URL。对 `openrouter`/`anthropic`/`huawei-modelarts` 来说分别映射到各自 SDK 的 `base_url`。
+- `endpoint`：自定义 provider base URL。对 `openrouter`/`anthropic` 来说分别映射到各自 SDK 的 `base_url`。
 - `proxy`：代理配置，支持 `http`、`https`、`no_proxy`、`use_system_proxy`、`disabled`。
 - 其他未显式声明的字段会进入 `llm.extra`，并透传给 adapter；例如可以直接写 `temperature`、`max_tokens`。
 
@@ -289,7 +289,7 @@ Huawei ModelArts：
 {
   "llm": {
     "adapter": "huawei-modelarts",
-    "model": "modelarts-pro"
+    "model": "glm-5"
   }
 }
 ```
